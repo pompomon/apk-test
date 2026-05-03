@@ -7,7 +7,7 @@ A simple Android "Hello World" application demonstrating a minimal Android proje
 - **Hello World screen** – displays a centered "Hello World!" message
 - **Unit tests** – run locally with `./gradlew testDebugUnitTest`
 - **Instrumented tests** – run on a device/emulator with `./gradlew connectedDebugAndroidTest`
-- **CI pipeline** – GitHub Actions workflow that builds an unsigned debug APK on every push/PR
+- **CI pipeline** – GitHub Actions workflow that runs unit tests, instrumented tests, and builds an unsigned release APK on every push/PR
 
 ## Prerequisites
 
@@ -20,15 +20,21 @@ A simple Android "Hello World" application demonstrating a minimal Android proje
 # Run unit tests
 ./gradlew testDebugUnitTest
 
-# Build debug APK
-./gradlew assembleDebug
+# Build unsigned release APK
+./gradlew assembleRelease
 ```
 
-The unsigned debug APK is output to `app/build/outputs/apk/debug/app-debug.apk`.
+The unsigned release APK is output to `app/build/outputs/apk/release/app-release-unsigned.apk`.
 
 ## CI / Build Pipeline
 
-Every push and pull request to `main` triggers the [Android CI](.github/workflows/build.yml) workflow which:
-1. Runs unit tests
-2. Builds the debug APK
-3. Uploads the APK as a downloadable GitHub Actions artifact
+Every push and pull request to `main` triggers the [Android CI](.github/workflows/build.yml) workflow which runs two parallel jobs:
+
+**unit-test-and-build**
+1. Runs unit tests (`testDebugUnitTest`)
+2. Builds the unsigned release APK (`assembleRelease`)
+3. Uploads `app-release-unsigned.apk` as a downloadable GitHub Actions artifact
+
+**instrumented-test**
+1. Boots an Android emulator (API 29, x86_64)
+2. Runs the instrumented test suite (`connectedDebugAndroidTest`)
