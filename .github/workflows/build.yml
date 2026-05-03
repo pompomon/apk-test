@@ -27,7 +27,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Install Android SDK components
-        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
       - name: Run unit tests and build unsigned release APK
         run: ./gradlew testDebugUnitTest assembleRelease
@@ -65,7 +65,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Install Android SDK components
-        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
       - name: Run instrumented tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
