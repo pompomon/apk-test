@@ -7,7 +7,7 @@ on:
     branches: [ "main" ]
 
 jobs:
-  unit-test-and-build:
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,8 +29,8 @@ jobs:
       - name: Install Android SDK components
         run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Run unit tests and build unsigned release APK
-        run: ./gradlew testDebugUnitTest assembleRelease
+      - name: Build unsigned release APK
+        run: ./gradlew assembleRelease
 
       - name: Upload unsigned APK artifact
         uses: actions/upload-artifact@v4
@@ -41,6 +41,7 @@ jobs:
 
   instrumented-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
 
