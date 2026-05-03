@@ -6,7 +6,7 @@ A simple Android "Hello World" application demonstrating a minimal Android proje
 
 - **Hello World screen** – displays a centered "Hello World!" message
 - **Instrumented tests** – run on a device/emulator with `./gradlew connectedDebugAndroidTest`
-- **CI pipeline** – GitHub Actions workflow that runs instrumented tests and builds an unsigned release APK on every push/PR
+- **CI pipeline** – GitHub Actions workflow that runs instrumented tests and builds an unsigned release APK on every push/PR to `main`
 
 ## Prerequisites
 
