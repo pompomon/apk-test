@@ -1,6 +1,6 @@
 # apk-test
 
-A simple Android "Hello World" application demonstrating a minimal Android project with tests and a CI/CD build pipeline.
+A simple Android "Hello World" application demonstrating a minimal Android project with tests and a CI build pipeline.
 
 ## Features
 
@@ -13,6 +13,7 @@ A simple Android "Hello World" application demonstrating a minimal Android proje
 
 - JDK 17
 - Android SDK (API 34)
+- Android emulator or physical device (required for `connectedDebugAndroidTest`)
 
 ## Building
 
