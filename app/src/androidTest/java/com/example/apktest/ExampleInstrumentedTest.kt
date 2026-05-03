@@ -24,7 +24,7 @@ class ExampleInstrumentedTest {
     fun mainActivity_displaysHelloWorld() {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withId(R.id.textViewHello))
-                .check(matches(withText(Greeting.MESSAGE)))
+                .check(matches(withText(R.string.hello_world)))
         }
     }
 }
