@@ -7,6 +7,7 @@ import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.apktest.BuildConfig
 
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -17,7 +18,7 @@ class ExampleInstrumentedTest {
     @Test
     fun useAppContext() {
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
-        assertEquals("com.example.apktest", appContext.packageName)
+        assertEquals(BuildConfig.APPLICATION_ID, appContext.packageName)
     }
 
     @Test
