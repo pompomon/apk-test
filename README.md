@@ -6,7 +6,7 @@ A simple Android "Hello World" application demonstrating a minimal Android proje
 
 - **Hello World screen** – displays a centered "Hello World!" message
 - **Instrumented tests** – run on a device/emulator with `./gradlew connectedDebugAndroidTest`
-- **CI pipeline** – GitHub Actions workflow that runs instrumented tests and builds an unsigned release APK on every push/PR to `main`
+- **CI pipeline** – GitHub Actions workflow that runs instrumented tests and builds an installable debug APK on every push/PR to `main`
 
 ## Prerequisites
 
@@ -17,11 +17,11 @@ A simple Android "Hello World" application demonstrating a minimal Android proje
 ## Building
 
 ```bash
-# Build unsigned release APK
-./gradlew assembleRelease
+# Build installable debug APK (signed with the auto-generated debug keystore)
+./gradlew assembleDebug
 ```
 
-The unsigned release APK is output to `app/build/outputs/apk/release/app-release-unsigned.apk`.
+The debug APK is output to `app/build/outputs/apk/debug/app-debug.apk` and can be installed on a device or emulator with `adb install`.
 
 ## CI / Build Pipeline
 
@@ -32,5 +32,5 @@ Every push and pull request to `main` triggers the [Android CI](.github/workflow
 2. Runs the instrumented test suite (`connectedDebugAndroidTest`)
 
 **build** (runs only after `instrumented-test` succeeds)
-1. Builds the unsigned release APK (`assembleRelease`)
-2. Uploads `app-release-unsigned.apk` as a downloadable GitHub Actions artifact
+1. Builds the installable debug APK (`assembleDebug`)
+2. Uploads `app-debug.apk` as a downloadable GitHub Actions artifact
