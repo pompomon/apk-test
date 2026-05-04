@@ -24,6 +24,9 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
@@ -57,6 +60,9 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
@@ -70,7 +76,7 @@ jobs:
         run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
       - name: Run instrumented tests on emulator
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@e89f39f1abbbd05b1113a29cf4db69e7540cae5a # v2.37.0
         with:
           api-level: 29
           arch: x86_64
