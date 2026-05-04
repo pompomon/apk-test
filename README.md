@@ -25,12 +25,12 @@ The unsigned release APK is output to `app/build/outputs/apk/release/app-release
 
 ## CI / Build Pipeline
 
-Every push and pull request to `main` triggers the [Android CI](.github/workflows/build.yml) workflow which runs two parallel jobs:
+Every push and pull request to `main` triggers the [Android CI](.github/workflows/build.yml) workflow which runs two sequential jobs:
 
-**build**
-1. Builds the unsigned release APK (`assembleRelease`)
-2. Uploads `app-release-unsigned.apk` as a downloadable GitHub Actions artifact
-
-**instrumented-test**
+**instrumented-test** (runs first)
 1. Boots an Android emulator (API 29, x86_64)
 2. Runs the instrumented test suite (`connectedDebugAndroidTest`)
+
+**build** (runs only after `instrumented-test` succeeds)
+1. Builds the unsigned release APK (`assembleRelease`)
+2. Uploads `app-release-unsigned.apk` as a downloadable GitHub Actions artifact
