@@ -1,7 +1,6 @@
 package com.example.apktest.game.core
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -86,13 +85,13 @@ class GameEngineTest {
     }
 
     @Test
-    fun restart_withDifferentSeed_changesLayout() {
+    fun restart_withDifferentSeed_matchesExpectedDeterministicState() {
         val engine = GameEngine(DifficultyPresets.EASY, seed)
-        val originalNpcs = engine.npcs.map { it.position }
+        val expected = GameEngine(DifficultyPresets.EASY, seed + 1)
 
         engine.restart(seed + 1)
 
-        // Highly unlikely both NPC sets match for different seeds on the same preset grid.
-        assertNotEquals(originalNpcs, engine.npcs.map { it.position })
+        assertEquals(expected.maze.copyCells().toList(), engine.maze.copyCells().toList())
+        assertEquals(expected.npcs.map { it.position }, engine.npcs.map { it.position })
     }
 }
