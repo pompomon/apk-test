@@ -130,7 +130,7 @@ class PatrolGuardPolicy : NpcPolicy {
         if (playerDistance <= context.visionRange) {
             npc.state = NpcState.CHASE
             npc.lastKnownPlayerPos = context.player.position
-            npc.searchTicksRemaining = DEFAULT_SEARCH_BUDGET
+            npc.searchTicksRemaining = DEFAULT_SEARCH_TICKS
         }
 
         return when (npc.state) {
@@ -139,7 +139,7 @@ class PatrolGuardPolicy : NpcPolicy {
                 val path = context.navigator.aStarPath(npc.position, target)
                 if (path.isEmpty() || npc.position == target) {
                     npc.state = NpcState.SEARCH
-                    npc.searchTicksRemaining = DEFAULT_SEARCH_BUDGET
+                    npc.searchTicksRemaining = DEFAULT_SEARCH_TICKS
                     null
                 } else {
                     nextDirection(npc.position, path)
@@ -179,7 +179,7 @@ class PatrolGuardPolicy : NpcPolicy {
     }
 
     companion object {
-        private const val DEFAULT_SEARCH_BUDGET = 5
+        private const val DEFAULT_SEARCH_TICKS = 5
     }
 }
 

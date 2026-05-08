@@ -199,10 +199,10 @@ class GameEngine(
     private fun patrolRouteFrom(origin: GridPos): List<GridPos> {
         val neighbors = maze.neighbors(origin)
         if (neighbors.isEmpty()) return listOf(origin)
-        return listOf(origin) + neighbors.take(MAX_PATROL_WAYPOINTS)
+        return listOf(origin) + neighbors.take(MAX_EXTRA_PATROL_WAYPOINTS)
     }
 
     companion object {
-        private const val MAX_PATROL_WAYPOINTS = 2
+        private const val MAX_EXTRA_PATROL_WAYPOINTS = 2
     }
 }

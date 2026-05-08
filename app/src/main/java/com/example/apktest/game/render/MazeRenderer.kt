@@ -122,7 +122,7 @@ class MazeRenderer {
         font.draw(batch, "Difficulty: ${hud.difficultyName}", 3.8f, yTop)
         font.draw(batch, "Player: ${hud.playerPolicyLabel}", 8.6f, yTop)
         font.draw(batch, "NPC: ${hud.npcPolicyLabel}", 13.7f, yTop)
-        font.draw(batch, "Time: ${TIME_FORMAT_PATTERN.format(hud.elapsedSeconds)}s", 0.3f, yTop - 0.55f)
+        font.draw(batch, "Time: ${TIME_FORMAT_SPEC.format(hud.elapsedSeconds)}s", 0.3f, yTop - 0.55f)
         font.draw(batch, "Steps: ${hud.steps}", 3.2f, yTop - 0.55f)
         font.draw(batch, "Spd P:${hud.playerSpeed} N:${hud.npcSpeed}", 5.8f, yTop - 0.55f)
 
@@ -131,6 +131,6 @@ class MazeRenderer {
 
     companion object {
         private const val HUD_HEIGHT = 2f
-        private const val TIME_FORMAT_PATTERN = "%.1f"
+        private const val TIME_FORMAT_SPEC = "%.1f"
     }
 }
