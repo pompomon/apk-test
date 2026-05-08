@@ -1,36 +1,44 @@
 # apk-test
 
-A simple Android "Hello World" application demonstrating a minimal Android project with instrumented tests and a CI build pipeline.
+A lightweight Android 2D top-down maze game using libGDX rendering.
 
 ## Features
 
-- **Hello World screen** – displays a centered "Hello World!" message
-- **Instrumented tests** – run on a device/emulator with `./gradlew connectedDebugAndroidTest`
-- **CI pipeline** – GitHub Actions workflow that runs instrumented tests and builds an installable debug APK on every push/PR to `main`
+- Full-screen responsive maze renderer (libGDX + Android host UI overlay)
+- Random solvable maze generation with deterministic seed support in core logic
+- Player control modes:
+  - Manual movement
+  - Random walk with memory
+  - Wall follower (left/right)
+  - BFS exit solver
+  - A* exit solver
+- NPC behavior modes:
+  - Direct chase
+  - Predictive chase
+  - Patrol/guard with alert-search transitions
+- Difficulty presets that scale maze size, NPC count, and movement speed
+- Unit tests for maze generation/pathfinding/policies
+- Instrumented UI smoke test for game host and controls
 
 ## Prerequisites
 
 - JDK 17
 - Android SDK (API 34)
-- Android emulator or physical device (required for `connectedDebugAndroidTest`)
+- Android emulator or physical device for instrumented tests
 
-## Building
+## Build and test
 
 ```bash
-# Build installable debug APK (signed with the auto-generated debug keystore)
+# JVM unit tests
+./gradlew testDebugUnitTest
+
+# Build debug APK
 ./gradlew assembleDebug
+
+# Instrumented tests (requires emulator/device)
+./gradlew connectedDebugAndroidTest
 ```
 
-The debug APK is output to `app/build/outputs/apk/debug/app-debug.apk` and can be installed on a device or emulator with `adb install`.
+Debug APK output:
 
-## CI / Build Pipeline
-
-Every push and pull request to `main` triggers the [Android CI](.github/workflows/build.yml) workflow which runs two sequential jobs:
-
-**instrumented-test** (runs first)
-1. Boots an Android emulator (API 29, x86_64)
-2. Runs the instrumented test suite (`connectedDebugAndroidTest`)
-
-**build** (runs only after `instrumented-test` succeeds)
-1. Builds the installable debug APK (`assembleDebug`)
-2. Uploads `app-debug.apk` as a downloadable GitHub Actions artifact
+`app/build/outputs/apk/debug/app-debug.apk`
