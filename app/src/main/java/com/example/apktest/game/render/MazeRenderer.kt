@@ -95,6 +95,7 @@ class MazeRenderer {
         shapes.end()
     }
 
+    @Synchronized
     private fun ensureShapes(): ShapeRenderer {
         val existing = shapes
         if (existing != null) return existing
