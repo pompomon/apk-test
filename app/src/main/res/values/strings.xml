@@ -16,8 +16,8 @@
     <string name="status_paused">Paused</string>
     <string name="status_win">You Win</string>
     <string name="status_lose">Caught</string>
-    <string name="status_default">Status: Running | Steps: 0 | Time: 0.0s</string>
-    <string name="speed_default">Player speed: 4.5 | NPC speed: 2.8</string>
+    <string name="status_default">Status: —</string>
+    <string name="speed_default">Player speed: — | NPC speed: —</string>
     <string name="status_template">Status: %1$s | Steps: %2$d | Time: %3$.1fs</string>
     <string name="speed_detail_template">Player speed: %1$.1f | NPC speed: %2$.1f | P:%3$s | N:%4$s</string>
     <string name="spinner_player_policy_description">Player policy</string>

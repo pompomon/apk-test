@@ -1,6 +1,8 @@
 package com.example.apktest
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.Spinner
@@ -20,6 +22,14 @@ import com.example.apktest.game.core.PlayerPolicyType
 class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private lateinit var statusText: TextView
     private lateinit var speedText: TextView
+
+    private val hudHandler = Handler(Looper.getMainLooper())
+    private val hudRefreshRunnable = object : Runnable {
+        override fun run() {
+            refreshHudSnapshot()
+            hudHandler.postDelayed(this, HUD_REFRESH_INTERVAL_MS)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,6 +62,13 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     override fun onResume() {
         super.onResume()
         refreshHudSnapshot()
+        hudHandler.removeCallbacks(hudRefreshRunnable)
+        hudHandler.postDelayed(hudRefreshRunnable, HUD_REFRESH_INTERVAL_MS)
+    }
+
+    override fun onPause() {
+        hudHandler.removeCallbacks(hudRefreshRunnable)
+        super.onPause()
     }
 
     private fun setupControls() {
@@ -61,22 +78,22 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
         playerSpinner.adapter = ArrayAdapter(
             this,
-            android.R.layout.simple_spinner_dropdown_item,
+            android.R.layout.simple_spinner_item,
             PlayerPolicyType.entries.map { it.label }
-        )
+        ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
         npcSpinner.adapter = ArrayAdapter(
             this,
-            android.R.layout.simple_spinner_dropdown_item,
+            android.R.layout.simple_spinner_item,
             NpcPolicyType.entries.map { it.label }
-        )
+        ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
         val difficulties = DifficultyPresets.all.map { it.name }
         difficultySpinner.adapter = ArrayAdapter(
             this,
-            android.R.layout.simple_spinner_dropdown_item,
+            android.R.layout.simple_spinner_item,
             difficulties
-        )
+        ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
         val defaultDifficultyIndex = difficulties.indexOf(DifficultyPresets.MEDIUM.name)
             .takeIf { it >= 0 }
             ?: 0
@@ -141,5 +158,9 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         GameStatus.PAUSED -> getString(R.string.status_paused)
         GameStatus.WIN -> getString(R.string.status_win)
         GameStatus.LOSE -> getString(R.string.status_lose)
+    }
+
+    companion object {
+        private const val HUD_REFRESH_INTERVAL_MS = 250L
     }
 }

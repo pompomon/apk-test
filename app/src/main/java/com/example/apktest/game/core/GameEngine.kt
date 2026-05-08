@@ -90,6 +90,10 @@ class GameEngine(
     }
 
     fun queueManualMove(direction: Direction) {
+        if (playerPolicyType != PlayerPolicyType.MANUAL) return
+        if (manualQueue.size >= MAX_MANUAL_QUEUE) {
+            manualQueue.removeFirst()
+        }
         manualQueue.addLast(direction)
     }
 
@@ -184,14 +188,18 @@ class GameEngine(
     }
 
     private fun spawnNpcs() {
-        val occupied = mutableSetOf(maze.start, maze.exit)
-        repeat(difficulty.npcCount) { index ->
-            var candidate = randomCell()
-            while (candidate in occupied) {
-                candidate = randomCell()
+        val reserved = setOf(maze.start, maze.exit)
+        val candidates = ArrayList<GridPos>(maze.width * maze.height - reserved.size)
+        for (y in 0 until maze.height) {
+            for (x in 0 until maze.width) {
+                val pos = GridPos(x, y)
+                if (pos !in reserved) candidates += pos
             }
-            occupied += candidate
-
+        }
+        candidates.shuffle(random)
+        val spawnCount = difficulty.npcCount.coerceAtMost(candidates.size)
+        repeat(spawnCount) { index ->
+            val candidate = candidates[index]
             val route = patrolRouteFrom(candidate)
             npcs += Npc(
                 id = index,
@@ -199,13 +207,6 @@ class GameEngine(
                 patrolRoute = route
             )
         }
-    }
-
-    private fun randomCell(): GridPos {
-        return GridPos(
-            x = random.nextInt(maze.width),
-            y = random.nextInt(maze.height)
-        )
     }
 
     private fun patrolRouteFrom(origin: GridPos): List<GridPos> {
@@ -216,5 +217,6 @@ class GameEngine(
 
     companion object {
         private const val MAX_EXTRA_PATROL_WAYPOINTS = 2
+        private const val MAX_MANUAL_QUEUE = 8
     }
 }

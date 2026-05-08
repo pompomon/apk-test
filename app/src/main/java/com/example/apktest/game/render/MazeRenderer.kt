@@ -62,18 +62,21 @@ class MazeRenderer {
         shapes.begin(ShapeRenderer.ShapeType.Line)
         shapes.color = Color.WHITE
 
+        // Walls are shared between adjacent cells; only render NORTH+WEST per cell
+        // and add the matching outer SOUTH/EAST boundary segments to avoid drawing
+        // each shared edge twice per frame.
         for (y in 0 until maze.height) {
             for (x in 0 until maze.width) {
                 if (maze.hasWall(x, y, Direction.NORTH)) {
                     shapes.line(x.toFloat(), (y + 1).toFloat(), (x + 1).toFloat(), (y + 1).toFloat())
                 }
-                if (maze.hasWall(x, y, Direction.SOUTH)) {
-                    shapes.line(x.toFloat(), y.toFloat(), (x + 1).toFloat(), y.toFloat())
-                }
                 if (maze.hasWall(x, y, Direction.WEST)) {
                     shapes.line(x.toFloat(), y.toFloat(), x.toFloat(), (y + 1).toFloat())
                 }
-                if (maze.hasWall(x, y, Direction.EAST)) {
+                if (y == 0 && maze.hasWall(x, y, Direction.SOUTH)) {
+                    shapes.line(x.toFloat(), 0f, (x + 1).toFloat(), 0f)
+                }
+                if (x == maze.width - 1 && maze.hasWall(x, y, Direction.EAST)) {
                     shapes.line((x + 1).toFloat(), y.toFloat(), (x + 1).toFloat(), (y + 1).toFloat())
                 }
             }
