@@ -125,7 +125,7 @@ class PredictiveChasePolicy : NpcPolicy {
 
 class PatrolGuardPolicy : NpcPolicy {
     override fun nextMove(npc: Npc, context: NpcPolicyContext): Direction? {
-        val playerDistance = manhattan(npc.position, context.player.position)
+        val playerDistance = manhattanDistance(npc.position, context.player.position)
 
         if (playerDistance <= context.visionRange) {
             npc.state = NpcState.CHASE
@@ -206,4 +206,4 @@ private fun nextDirection(from: GridPos, path: List<GridPos>): Direction? {
     return Direction.fromDelta(step.x - from.x, step.y - from.y)
 }
 
-private fun manhattan(a: GridPos, b: GridPos): Int = abs(a.x - b.x) + abs(a.y - b.y)
+private fun manhattanDistance(a: GridPos, b: GridPos): Int = abs(a.x - b.x) + abs(a.y - b.y)

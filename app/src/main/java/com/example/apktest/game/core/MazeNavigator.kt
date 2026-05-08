@@ -47,7 +47,7 @@ class MazeNavigator(private val maze: Maze) {
                 val nextCost = cost.getValue(current) + 1
                 if (nextCost < cost.getOrDefault(neighbor, Int.MAX_VALUE)) {
                     cost[neighbor] = nextCost
-                    val priority = nextCost + heuristic(neighbor, goal)
+                    val priority = nextCost + manhattanDistance(neighbor, goal)
                     frontier.add(neighbor to priority)
                     cameFrom[neighbor] = current
                 }
@@ -74,5 +74,5 @@ class MazeNavigator(private val maze: Maze) {
         return path.asReversed().takeIf { it.firstOrNull() == start } ?: emptyList()
     }
 
-    private fun heuristic(a: GridPos, b: GridPos): Int = abs(a.x - b.x) + abs(a.y - b.y)
+    private fun manhattanDistance(a: GridPos, b: GridPos): Int = abs(a.x - b.x) + abs(a.y - b.y)
 }
