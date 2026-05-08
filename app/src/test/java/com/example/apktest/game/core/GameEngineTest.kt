@@ -91,7 +91,7 @@ class GameEngineTest {
 
         engine.restart(seed + 1)
 
-        assertEquals(expected.maze.copyCells().toList(), engine.maze.copyCells().toList())
+        assertTrue(expected.maze.copyCells().contentEquals(engine.maze.copyCells()))
         assertEquals(expected.npcs.map { it.position }, engine.npcs.map { it.position })
     }
 }

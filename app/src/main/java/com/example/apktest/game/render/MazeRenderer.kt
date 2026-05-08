@@ -52,10 +52,10 @@ class MazeRenderer {
         val maze = engine.maze
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
-        shapes.color = MAZE_BACKGROUND_COLOR
+        shapes.color.set(0.12f, 0.12f, 0.16f, 1f)
         shapes.rect(0f, 0f, maze.width.toFloat(), maze.height.toFloat())
 
-        shapes.color = EXIT_COLOR
+        shapes.color.set(0.2f, 0.8f, 0.3f, 1f)
         shapes.rect(maze.exit.x + 0.2f, maze.exit.y + 0.2f, 0.6f, 0.6f)
         shapes.end()
 
@@ -88,21 +88,14 @@ class MazeRenderer {
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
         val player = engine.player
-        shapes.color = PLAYER_COLOR
+        shapes.color.set(0.25f, 0.5f, 1f, 1f)
         shapes.circle(player.position.x + 0.5f, player.position.y + 0.5f, 0.28f, 24)
 
-        shapes.color = NPC_COLOR
+        shapes.color.set(0.9f, 0.25f, 0.25f, 1f)
         engine.npcs.forEach { npc ->
             shapes.circle(npc.position.x + 0.5f, npc.position.y + 0.5f, 0.24f, 20)
         }
 
         shapes.end()
-    }
-
-    companion object {
-        private val MAZE_BACKGROUND_COLOR = Color(0.12f, 0.12f, 0.16f, 1f)
-        private val EXIT_COLOR = Color(0.2f, 0.8f, 0.3f, 1f)
-        private val PLAYER_COLOR = Color(0.25f, 0.5f, 1f, 1f)
-        private val NPC_COLOR = Color(0.9f, 0.25f, 0.25f, 1f)
     }
 }
