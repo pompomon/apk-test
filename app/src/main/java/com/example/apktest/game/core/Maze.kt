@@ -20,6 +20,7 @@ class Maze(
     }
 
     fun hasWall(x: Int, y: Int, direction: Direction): Boolean {
+        require(x in 0 until width && y in 0 until height)
         val mask = WALL_MASKS.getValue(direction)
         return cells[y * width + x] and mask != 0
     }
