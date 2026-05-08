@@ -4,7 +4,7 @@
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#101218">
+    android:background="@color/maze_root_background">
 
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/fragmentGameHost"
@@ -19,7 +19,7 @@
         android:id="@+id/topOverlay"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:background="#AA121826"
+        android:background="@color/maze_top_overlay_background"
         android:orientation="vertical"
         android:padding="8dp"
         app:layout_constraintEnd_toEndOf="parent"
@@ -85,7 +85,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
             android:text="@string/status_default"
-            android:textColor="#FFFFFF"
+            android:textColor="@color/maze_status_text"
             android:textSize="13sp" />
 
         <TextView
@@ -93,7 +93,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/speed_default"
-            android:textColor="#D0D7E2"
+            android:textColor="@color/maze_speed_text"
             android:textSize="12sp" />
     </LinearLayout>
 
@@ -102,7 +102,7 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_margin="8dp"
-        android:background="#99121826"
+        android:background="@color/maze_bottom_overlay_background"
         android:gravity="center"
         android:orientation="vertical"
         android:padding="8dp"

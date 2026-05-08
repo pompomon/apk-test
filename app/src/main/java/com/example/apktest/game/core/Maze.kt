@@ -15,6 +15,9 @@ class Maze(
     fun inBounds(pos: GridPos): Boolean = pos.x in 0 until width && pos.y in 0 until height
 
     fun hasWall(pos: GridPos, direction: Direction): Boolean {
+        require(inBounds(pos)) {
+            "Position (${pos.x}, ${pos.y}) is out of maze bounds (${width}x${height})"
+        }
         val mask = WALL_MASKS.getValue(direction)
         return cells[indexOf(pos)] and mask != 0
     }

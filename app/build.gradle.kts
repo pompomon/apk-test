@@ -39,6 +39,36 @@ android {
     buildFeatures {
         buildConfig = true
     }
+
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDir(layout.buildDirectory.dir("nativeLibs"))
+        }
+    }
+}
+
+val gdxNatives: Configuration by configurations.creating
+
+tasks.register<Copy>("copyAndroidNatives") {
+    val outDir = layout.buildDirectory.dir("nativeLibs")
+    into(outDir)
+    gdxNatives.resolve().forEach { jar ->
+        val abi = when {
+            jar.name.endsWith("natives-arm64-v8a.jar") -> "arm64-v8a"
+            jar.name.endsWith("natives-armeabi-v7a.jar") -> "armeabi-v7a"
+            jar.name.endsWith("natives-x86_64.jar") -> "x86_64"
+            jar.name.endsWith("natives-x86.jar") -> "x86"
+            else -> return@forEach
+        }
+        from(zipTree(jar)) {
+            include("*.so")
+            into(abi)
+        }
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn("copyAndroidNatives")
 }
 
 dependencies {
@@ -49,10 +79,10 @@ dependencies {
 
     implementation("com.badlogicgames.gdx:gdx:1.13.1")
     implementation("com.badlogicgames.gdx:gdx-backend-android:1.13.1")
-    runtimeOnly("com.badlogicgames.gdx:gdx-platform:1.13.1:natives-arm64-v8a")
-    runtimeOnly("com.badlogicgames.gdx:gdx-platform:1.13.1:natives-armeabi-v7a")
-    runtimeOnly("com.badlogicgames.gdx:gdx-platform:1.13.1:natives-x86")
-    runtimeOnly("com.badlogicgames.gdx:gdx-platform:1.13.1:natives-x86_64")
+    gdxNatives("com.badlogicgames.gdx:gdx-platform:1.13.1:natives-arm64-v8a")
+    gdxNatives("com.badlogicgames.gdx:gdx-platform:1.13.1:natives-armeabi-v7a")
+    gdxNatives("com.badlogicgames.gdx:gdx-platform:1.13.1:natives-x86")
+    gdxNatives("com.badlogicgames.gdx:gdx-platform:1.13.1:natives-x86_64")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:core:1.6.1")
