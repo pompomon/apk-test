@@ -52,16 +52,13 @@ val gdxNatives: Configuration by configurations.creating
 tasks.register<Copy>("copyAndroidNatives") {
     val outDir = layout.buildDirectory.dir("nativeLibs")
     into(outDir)
-    gdxNatives.resolve().forEach { jar ->
-        val abi = when {
-            jar.name.endsWith("natives-arm64-v8a.jar") -> "arm64-v8a"
-            jar.name.endsWith("natives-armeabi-v7a.jar") -> "armeabi-v7a"
-            jar.name.endsWith("natives-x86_64.jar") -> "x86_64"
-            jar.name.endsWith("natives-x86.jar") -> "x86"
-            else -> return@forEach
-        }
-        from(zipTree(jar)) {
-            include("*.so")
+    inputs.files(gdxNatives).withPropertyName("gdxNatives")
+    listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86").forEach { abi ->
+        from({
+            gdxNatives.files
+                .filter { it.name.endsWith("natives-$abi.jar") }
+                .map { zipTree(it).matching { include("*.so") } }
+        }) {
             into(abi)
         }
     }

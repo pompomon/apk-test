@@ -36,19 +36,22 @@
                 android:id="@+id/spinnerPlayerPolicy"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1" />
+                android:layout_weight="1"
+                android:contentDescription="@string/spinner_player_policy_description" />
 
             <Spinner
                 android:id="@+id/spinnerNpcPolicy"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1" />
+                android:layout_weight="1"
+                android:contentDescription="@string/spinner_npc_policy_description" />
 
             <Spinner
                 android:id="@+id/spinnerDifficulty"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1" />
+                android:layout_weight="1"
+                android:contentDescription="@string/spinner_difficulty_description" />
         </LinearLayout>
 
         <LinearLayout
