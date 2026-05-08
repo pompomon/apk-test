@@ -60,7 +60,7 @@ class RandomWalkMemoryPolicy(private val random: Random = Random.Default) : Play
             val destination = context.player.position.moved(direction)
             visitCounts.getOrDefault(destination, 0)
         }
-        val minVisits = scored.keys.minOrNull() ?: return options.random(random)
+        val minVisits = requireNotNull(scored.keys.minOrNull())
         val bestOptions = scored[minVisits].orEmpty()
         return bestOptions[random.nextInt(bestOptions.size)]
     }

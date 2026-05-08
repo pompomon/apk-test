@@ -5,7 +5,7 @@
     <string name="apply">Apply</string>
     <string name="pause_resume">Pause/Resume</string>
     <string name="restart">Restart</string>
-    <string name="status_default">Status: RUNNING | Steps: 0 | Time: 0.0s</string>
+    <string name="status_default">Status: Running | Steps: 0 | Time: 0.0s</string>
     <string name="speed_default">Player speed: 4.5 | NPC speed: 2.8</string>
     <string name="status_template">Status: %1$s | Steps: %2$d | Time: %3$.1fs</string>
     <string name="speed_template">Difficulty: %1$s</string>
