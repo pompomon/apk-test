@@ -19,6 +19,11 @@ class Maze(
         return cells[indexOf(pos)] and mask != 0
     }
 
+    fun hasWall(x: Int, y: Int, direction: Direction): Boolean {
+        val mask = WALL_MASKS.getValue(direction)
+        return cells[y * width + x] and mask != 0
+    }
+
     fun canMove(pos: GridPos, direction: Direction): Boolean {
         val next = pos.moved(direction)
         return inBounds(next) && !hasWall(pos, direction)

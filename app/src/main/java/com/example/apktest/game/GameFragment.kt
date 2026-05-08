@@ -39,6 +39,11 @@ class GameFragment : AndroidFragmentApplication() {
         return initializeForView(gameInstance, config)
     }
 
+    override fun onDestroyView() {
+        game = null
+        super.onDestroyView()
+    }
+
     fun setPlayerPolicy(type: PlayerPolicyType) {
         pendingPlayerPolicy = type
         game?.setPlayerPolicy(type)

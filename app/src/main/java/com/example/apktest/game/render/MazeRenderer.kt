@@ -3,21 +3,17 @@ package com.example.apktest.game.render
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.OrthographicCamera
-import com.badlogic.gdx.graphics.g2d.BitmapFont
-import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.utils.ScreenUtils
 import com.badlogic.gdx.utils.viewport.ExtendViewport
+import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameEngine
-import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.Maze
 
 class MazeRenderer {
     private val camera = OrthographicCamera()
     private var viewport = ExtendViewport(20f, 30f, camera)
     private val shapes = ShapeRenderer()
-    private val batch = SpriteBatch()
-    private val font = BitmapFont()
 
     private var cachedWidth = -1
     private var cachedHeight = -1
@@ -35,21 +31,17 @@ class MazeRenderer {
 
         drawMaze(engine)
         drawEntities(engine)
-
-        drawHud(engine)
     }
 
     fun dispose() {
         shapes.dispose()
-        batch.dispose()
-        font.dispose()
     }
 
     private fun updateViewportForMaze(maze: Maze) {
         if (maze.width == cachedWidth && maze.height == cachedHeight) return
         cachedWidth = maze.width
         cachedHeight = maze.height
-        viewport = ExtendViewport(maze.width.toFloat(), maze.height.toFloat() + HUD_HEIGHT, camera)
+        viewport = ExtendViewport(maze.width.toFloat(), maze.height.toFloat(), camera)
         viewport.update(Gdx.graphics.width, Gdx.graphics.height, true)
     }
 
@@ -69,17 +61,16 @@ class MazeRenderer {
 
         for (y in 0 until maze.height) {
             for (x in 0 until maze.width) {
-                val pos = com.example.apktest.game.core.GridPos(x, y)
-                if (maze.hasWall(pos, com.example.apktest.game.core.Direction.NORTH)) {
+                if (maze.hasWall(x, y, Direction.NORTH)) {
                     shapes.line(x.toFloat(), (y + 1).toFloat(), (x + 1).toFloat(), (y + 1).toFloat())
                 }
-                if (maze.hasWall(pos, com.example.apktest.game.core.Direction.SOUTH)) {
+                if (maze.hasWall(x, y, Direction.SOUTH)) {
                     shapes.line(x.toFloat(), y.toFloat(), (x + 1).toFloat(), y.toFloat())
                 }
-                if (maze.hasWall(pos, com.example.apktest.game.core.Direction.WEST)) {
+                if (maze.hasWall(x, y, Direction.WEST)) {
                     shapes.line(x.toFloat(), y.toFloat(), x.toFloat(), (y + 1).toFloat())
                 }
-                if (maze.hasWall(pos, com.example.apktest.game.core.Direction.EAST)) {
+                if (maze.hasWall(x, y, Direction.EAST)) {
                     shapes.line((x + 1).toFloat(), y.toFloat(), (x + 1).toFloat(), (y + 1).toFloat())
                 }
             }
@@ -100,36 +91,5 @@ class MazeRenderer {
         }
 
         shapes.end()
-    }
-
-    private fun drawHud(engine: GameEngine) {
-        val hud = engine.hudState()
-
-        batch.projectionMatrix = camera.combined
-        batch.begin()
-        font.color = Color.WHITE
-
-        val status = when (hud.status) {
-            GameStatus.RUNNING -> "Running"
-            GameStatus.PAUSED -> "Paused"
-            GameStatus.WIN -> "You Win"
-            GameStatus.LOSE -> "Caught"
-        }
-
-        val yTop = engine.maze.height + HUD_HEIGHT - 0.35f
-        font.draw(batch, "Status: $status", 0.3f, yTop)
-        font.draw(batch, "Difficulty: ${hud.difficultyName}", 3.8f, yTop)
-        font.draw(batch, "Player: ${hud.playerPolicyLabel}", 8.6f, yTop)
-        font.draw(batch, "NPC: ${hud.npcPolicyLabel}", 13.7f, yTop)
-        font.draw(batch, "Time: ${TIME_FORMAT_STRING.format(hud.elapsedSeconds)}s", 0.3f, yTop - 0.55f)
-        font.draw(batch, "Steps: ${hud.steps}", 3.2f, yTop - 0.55f)
-        font.draw(batch, "Spd P:${hud.playerSpeed} N:${hud.npcSpeed}", 5.8f, yTop - 0.55f)
-
-        batch.end()
-    }
-
-    companion object {
-        private const val HUD_HEIGHT = 2f
-        private const val TIME_FORMAT_STRING = "%.1f"
     }
 }

@@ -9,9 +9,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.fragment.app.commit
 import com.badlogic.gdx.backends.android.AndroidFragmentApplication
 import com.example.apktest.game.GameFragment
+import com.example.apktest.game.core.DifficultyPresets
 import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.NpcPolicyType
@@ -37,9 +37,9 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         speedText = findViewById(R.id.textSpeed)
 
         if (savedInstanceState == null) {
-            supportFragmentManager.commit {
-                replace(R.id.fragmentGameHost, GameFragment())
-            }
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.fragmentGameHost, GameFragment())
+                .commit()
         }
 
         setupControls()
@@ -71,7 +71,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             NpcPolicyType.entries.map { it.label }
         )
 
-        val difficulties = listOf("Easy", "Medium", "Hard")
+        val difficulties = DifficultyPresets.all.map { it.name }
         difficultySpinner.adapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_dropdown_item,
