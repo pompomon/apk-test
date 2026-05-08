@@ -119,7 +119,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             R.string.status_template,
             hud.status.name,
             hud.steps,
-            String.format("%.1f", hud.elapsedSeconds)
+            hud.elapsedSeconds
         )
         speedText.text = getString(
             R.string.speed_detail_template,

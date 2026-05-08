@@ -7,7 +7,7 @@
     <string name="restart">Restart</string>
     <string name="status_default">Status: RUNNING | Steps: 0 | Time: 0.0s</string>
     <string name="speed_default">Player speed: 4.5 | NPC speed: 2.8</string>
-    <string name="status_template">Status: %1$s | Steps: %2$d | Time: %3$ss</string>
+    <string name="status_template">Status: %1$s | Steps: %2$d | Time: %3$.1fs</string>
     <string name="speed_template">Difficulty: %1$s</string>
     <string name="speed_detail_template">Player speed: %1$.1f | NPC speed: %2$.1f | P:%3$s | N:%4$s</string>
 </resources>

@@ -106,7 +106,7 @@ class DirectChasePolicy : NpcPolicy {
 class PredictiveChasePolicy : NpcPolicy {
     override fun nextMove(npc: Npc, context: NpcPolicyContext): Direction? {
         var projected = context.player.position
-        repeat(2) {
+        repeat(PREDICTION_STEPS) {
             val next = projected.moved(context.player.facing)
             if (context.maze.inBounds(next) && context.maze.canMove(projected, context.player.facing)) {
                 projected = next
@@ -116,6 +116,10 @@ class PredictiveChasePolicy : NpcPolicy {
         val path = context.navigator.aStarPath(npc.position, projected)
         return nextDirection(npc.position, path)
             ?: nextDirection(npc.position, context.navigator.bfsPath(npc.position, context.player.position))
+    }
+
+    companion object {
+        private const val PREDICTION_STEPS = 2
     }
 }
 
