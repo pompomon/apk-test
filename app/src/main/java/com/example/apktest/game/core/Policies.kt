@@ -124,15 +124,13 @@ class PredictiveChasePolicy : NpcPolicy {
 }
 
 class PatrolGuardPolicy : NpcPolicy {
-    private val searchBudget = DEFAULT_SEARCH_BUDGET
-
     override fun nextMove(npc: Npc, context: NpcPolicyContext): Direction? {
         val playerDistance = manhattan(npc.position, context.player.position)
 
         if (playerDistance <= context.visionRange) {
             npc.state = NpcState.CHASE
             npc.lastKnownPlayerPos = context.player.position
-            npc.searchTicksRemaining = searchBudget
+            npc.searchTicksRemaining = DEFAULT_SEARCH_BUDGET
         }
 
         return when (npc.state) {
@@ -141,7 +139,7 @@ class PatrolGuardPolicy : NpcPolicy {
                 val path = context.navigator.aStarPath(npc.position, target)
                 if (path.isEmpty() || npc.position == target) {
                     npc.state = NpcState.SEARCH
-                    npc.searchTicksRemaining = searchBudget
+                    npc.searchTicksRemaining = DEFAULT_SEARCH_BUDGET
                     null
                 } else {
                     nextDirection(npc.position, path)
