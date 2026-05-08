@@ -73,10 +73,20 @@ class GameEngine(
         playerPolicy.reset()
     }
 
+    private fun resetNpcPolicyState() {
+        npcs.forEach { npc ->
+            npc.state = NpcState.PATROL
+            npc.lastKnownPlayerPos = null
+            npc.searchTicksRemaining = 0
+            npc.patrolIndex = 0
+        }
+    }
+
     fun setNpcPolicy(type: NpcPolicyType) {
         npcPolicyType = type
         npcPolicy = PolicyFactory.npc(type)
         npcPolicy.reset()
+        resetNpcPolicyState()
     }
 
     fun queueManualMove(direction: Direction) {
