@@ -91,6 +91,8 @@ class GameEngine(
 
     fun queueManualMove(direction: Direction) {
         if (playerPolicyType != PlayerPolicyType.MANUAL) return
+        // FIFO overflow: drop the oldest queued direction so the most recent
+        // user input always wins instead of being silently rejected.
         if (manualQueue.size >= MAX_MANUAL_QUEUE) {
             manualQueue.removeFirst()
         }

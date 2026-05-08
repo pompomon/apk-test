@@ -92,7 +92,7 @@ class GameEngineTest {
 
         engine.restart(seed + 1)
 
-        // Highly unlikely both NPC sets match for different seeds on a 14x20 grid.
+        // Highly unlikely both NPC sets match for different seeds on the same preset grid.
         assertNotEquals(originalNpcs, engine.npcs.map { it.position })
     }
 }
