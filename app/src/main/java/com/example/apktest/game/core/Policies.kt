@@ -120,7 +120,7 @@ class PredictiveChasePolicy : NpcPolicy {
 }
 
 class PatrolGuardPolicy : NpcPolicy {
-    private val searchBudget = 5
+    private val searchBudget = DEFAULT_SEARCH_BUDGET
 
     override fun nextMove(npc: Npc, context: NpcPolicyContext): Direction? {
         val playerDistance = manhattan(npc.position, context.player.position)
@@ -174,6 +174,10 @@ class PatrolGuardPolicy : NpcPolicy {
 
         val nextTarget = npc.patrolRoute[npc.patrolIndex % npc.patrolRoute.size]
         return nextDirection(npc.position, context.navigator.bfsPath(npc.position, nextTarget))
+    }
+
+    companion object {
+        private const val DEFAULT_SEARCH_BUDGET = 5
     }
 }
 

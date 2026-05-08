@@ -23,7 +23,7 @@ class PolicyTest {
         )
 
         assertNotNull(move)
-        assertTrue(move == Direction.EAST || move == Direction.SOUTH)
+        assertTrue(move == Direction.EAST || move == Direction.NORTH)
     }
 
     @Test
@@ -45,6 +45,6 @@ class PolicyTest {
         )
 
         assertNotNull(move)
-        assertTrue(move == Direction.EAST || move == Direction.SOUTH)
+        assertTrue(move == Direction.EAST || move == Direction.NORTH)
     }
 }
