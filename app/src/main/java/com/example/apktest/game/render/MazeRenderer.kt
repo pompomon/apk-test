@@ -11,7 +11,6 @@ import com.badlogic.gdx.utils.viewport.ExtendViewport
 import com.example.apktest.game.core.GameEngine
 import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.Maze
-import com.example.apktest.game.core.Maze.Companion.WALL_MASKS
 
 class MazeRenderer {
     private val camera = OrthographicCamera()

@@ -32,7 +32,7 @@ class GameEngine(
     var npcs: MutableList<Npc> = mutableListOf()
         private set
 
-    private val random = Random(seed)
+    private var random = Random(seed)
     private var playerPolicy: PlayerPolicy = PolicyFactory.player(playerPolicyType)
     private var npcPolicy: NpcPolicy = PolicyFactory.npc(npcPolicyType)
 
@@ -49,6 +49,7 @@ class GameEngine(
         navigator = MazeNavigator(maze)
         player = Player(maze.start)
         npcs = mutableListOf()
+        random = Random(seed)
         status = GameStatus.RUNNING
         elapsedSeconds = 0f
         steps = 0

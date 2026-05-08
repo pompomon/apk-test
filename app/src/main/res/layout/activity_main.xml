@@ -114,7 +114,7 @@
             android:id="@+id/buttonUp"
             android:layout_width="72dp"
             android:layout_height="48dp"
-            android:text="↑" />
+            android:text="@string/move_up" />
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -126,21 +126,21 @@
                 android:id="@+id/buttonLeft"
                 android:layout_width="72dp"
                 android:layout_height="48dp"
-                android:text="←" />
+                android:text="@string/move_left" />
 
             <Button
                 android:id="@+id/buttonDown"
                 android:layout_width="72dp"
                 android:layout_height="48dp"
                 android:layout_marginStart="8dp"
-                android:text="↓" />
+                android:text="@string/move_down" />
 
             <Button
                 android:id="@+id/buttonRight"
                 android:layout_width="72dp"
                 android:layout_height="48dp"
                 android:layout_marginStart="8dp"
-                android:text="→" />
+                android:text="@string/move_right" />
         </LinearLayout>
     </LinearLayout>
 

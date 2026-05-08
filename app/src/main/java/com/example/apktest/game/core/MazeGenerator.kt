@@ -8,6 +8,7 @@ object MazeGenerator {
         val cells = IntArray(width * height) { Maze.ALL_WALLS }
 
         val start = GridPos(0, 0)
+        val maze = Maze(width, height, cells, start, start)
         val visited = Array(height) { BooleanArray(width) }
         val stack = ArrayDeque<GridPos>()
 
@@ -26,14 +27,12 @@ object MazeGenerator {
             }
 
             val (direction, next) = candidates[random.nextInt(candidates.size)]
-            val maze = Maze(width, height, cells, start, start)
             maze.removeWall(current, direction)
             visited[next.y][next.x] = true
             stack.add(next)
         }
 
-        val tempMaze = Maze(width, height, cells, start, start)
-        val farthest = farthestNode(tempMaze, start)
+        val farthest = farthestNode(maze, start)
         return Maze(width, height, cells, start, farthest)
     }
 

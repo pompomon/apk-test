@@ -49,6 +49,10 @@ dependencies {
 
     implementation("com.badlogicgames.gdx:gdx:1.13.1")
     implementation("com.badlogicgames.gdx:gdx-backend-android:1.13.1")
+    runtimeOnly("com.badlogicgames.gdx:gdx-platform:1.13.1:natives-arm64-v8a")
+    runtimeOnly("com.badlogicgames.gdx:gdx-platform:1.13.1:natives-armeabi-v7a")
+    runtimeOnly("com.badlogicgames.gdx:gdx-platform:1.13.1:natives-x86")
+    runtimeOnly("com.badlogicgames.gdx:gdx-platform:1.13.1:natives-x86_64")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:core:1.6.1")

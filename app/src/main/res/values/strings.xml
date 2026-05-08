@@ -5,6 +5,14 @@
     <string name="apply">Apply</string>
     <string name="pause_resume">Pause/Resume</string>
     <string name="restart">Restart</string>
+    <string name="move_up">↑</string>
+    <string name="move_left">←</string>
+    <string name="move_down">↓</string>
+    <string name="move_right">→</string>
+    <string name="status_running">Running</string>
+    <string name="status_paused">Paused</string>
+    <string name="status_win">You Win</string>
+    <string name="status_lose">Caught</string>
     <string name="status_default">Status: Running | Steps: 0 | Time: 0.0s</string>
     <string name="speed_default">Player speed: 4.5 | NPC speed: 2.8</string>
     <string name="status_template">Status: %1$s | Steps: %2$d | Time: %3$.1fs</string>

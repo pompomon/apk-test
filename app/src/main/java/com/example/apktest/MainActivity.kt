@@ -13,6 +13,7 @@ import androidx.fragment.app.commit
 import com.badlogic.gdx.backends.android.AndroidFragmentApplication
 import com.example.apktest.game.GameFragment
 import com.example.apktest.game.core.Direction
+import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
 
@@ -87,8 +88,6 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             fragment.setPlayerPolicy(selectedPlayer)
             fragment.setNpcPolicy(selectedNpc)
             fragment.setDifficulty(selectedDifficulty)
-
-            speedText.text = getString(R.string.speed_template, selectedDifficulty)
             refreshHudSnapshot()
         }
 
@@ -117,7 +116,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         val hud = gameFragment()?.hudState() ?: return
         statusText.text = getString(
             R.string.status_template,
-            hud.status.name,
+            displayStatus(hud.status),
             hud.steps,
             hud.elapsedSeconds
         )
@@ -132,5 +131,12 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     private fun gameFragment(): GameFragment? {
         return supportFragmentManager.findFragmentById(R.id.fragmentGameHost) as? GameFragment
+    }
+
+    private fun displayStatus(status: GameStatus): String = when (status) {
+        GameStatus.RUNNING -> getString(R.string.status_running)
+        GameStatus.PAUSED -> getString(R.string.status_paused)
+        GameStatus.WIN -> getString(R.string.status_win)
+        GameStatus.LOSE -> getString(R.string.status_lose)
     }
 }
