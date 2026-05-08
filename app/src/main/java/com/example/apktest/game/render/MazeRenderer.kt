@@ -13,7 +13,8 @@ import com.example.apktest.game.core.Maze
 class MazeRenderer {
     private val camera = OrthographicCamera()
     private var viewport = ExtendViewport(20f, 30f, camera)
-    private var shapes: ShapeRenderer? = null
+    private val shapesDelegate = lazy(LazyThreadSafetyMode.NONE) { ShapeRenderer() }
+    private val shapes: ShapeRenderer by shapesDelegate
 
     private var cachedWidth = -1
     private var cachedHeight = -1
@@ -23,20 +24,20 @@ class MazeRenderer {
     }
 
     fun render(engine: GameEngine) {
-        val shapeRenderer = ensureShapes()
         updateViewportForMaze(engine.maze)
 
         ScreenUtils.clear(0.08f, 0.08f, 0.1f, 1f)
         viewport.apply(true)
-        shapeRenderer.projectionMatrix = camera.combined
+        shapes.projectionMatrix = camera.combined
 
-        drawMaze(engine, shapeRenderer)
-        drawEntities(engine, shapeRenderer)
+        drawMaze(engine)
+        drawEntities(engine)
     }
 
     fun dispose() {
-        shapes?.dispose()
-        shapes = null
+        if (shapesDelegate.isInitialized()) {
+            shapes.dispose()
+        }
     }
 
     private fun updateViewportForMaze(maze: Maze) {
@@ -47,7 +48,7 @@ class MazeRenderer {
         viewport.update(Gdx.graphics.width, Gdx.graphics.height, true)
     }
 
-    private fun drawMaze(engine: GameEngine, shapes: ShapeRenderer) {
+    private fun drawMaze(engine: GameEngine) {
         val maze = engine.maze
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
@@ -80,7 +81,7 @@ class MazeRenderer {
         shapes.end()
     }
 
-    private fun drawEntities(engine: GameEngine, shapes: ShapeRenderer) {
+    private fun drawEntities(engine: GameEngine) {
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
         val player = engine.player
@@ -93,12 +94,5 @@ class MazeRenderer {
         }
 
         shapes.end()
-    }
-
-    @Synchronized
-    private fun ensureShapes(): ShapeRenderer {
-        val existing = shapes
-        if (existing != null) return existing
-        return ShapeRenderer().also { shapes = it }
     }
 }

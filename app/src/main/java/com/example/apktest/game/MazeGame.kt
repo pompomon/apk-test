@@ -63,11 +63,12 @@ class MazeGame : ApplicationAdapter() {
     }
 
     private fun drainCommands() {
-        val dequeuedCommands = ArrayDeque<(GameEngine) -> Unit>()
-        synchronized(commands) {
+        val dequeuedCommands = synchronized(commands) {
+            val queue = ArrayDeque<(GameEngine) -> Unit>(commands.size)
             while (commands.isNotEmpty()) {
-                dequeuedCommands.add(commands.removeFirst())
+                queue.add(commands.removeFirst())
             }
+            queue
         }
         while (dequeuedCommands.isNotEmpty()) {
             dequeuedCommands.removeFirst().invoke(engine)
