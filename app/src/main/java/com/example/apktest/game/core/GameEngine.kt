@@ -69,6 +69,7 @@ class GameEngine(
     fun setPlayerPolicy(type: PlayerPolicyType) {
         playerPolicyType = type
         playerPolicy = PolicyFactory.player(type)
+        manualQueue.clear()
         playerPolicy.reset()
     }
 

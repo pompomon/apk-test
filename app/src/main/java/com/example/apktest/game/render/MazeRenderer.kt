@@ -13,7 +13,7 @@ import com.example.apktest.game.core.Maze
 class MazeRenderer {
     private val camera = OrthographicCamera()
     private var viewport = ExtendViewport(20f, 30f, camera)
-    private val shapes = ShapeRenderer()
+    private var shapes: ShapeRenderer? = null
 
     private var cachedWidth = -1
     private var cachedHeight = -1
@@ -23,18 +23,20 @@ class MazeRenderer {
     }
 
     fun render(engine: GameEngine) {
+        val shapeRenderer = ensureShapes()
         updateViewportForMaze(engine.maze)
 
         ScreenUtils.clear(0.08f, 0.08f, 0.1f, 1f)
         viewport.apply(true)
-        shapes.projectionMatrix = camera.combined
+        shapeRenderer.projectionMatrix = camera.combined
 
-        drawMaze(engine)
-        drawEntities(engine)
+        drawMaze(engine, shapeRenderer)
+        drawEntities(engine, shapeRenderer)
     }
 
     fun dispose() {
-        shapes.dispose()
+        shapes?.dispose()
+        shapes = null
     }
 
     private fun updateViewportForMaze(maze: Maze) {
@@ -45,7 +47,7 @@ class MazeRenderer {
         viewport.update(Gdx.graphics.width, Gdx.graphics.height, true)
     }
 
-    private fun drawMaze(engine: GameEngine) {
+    private fun drawMaze(engine: GameEngine, shapes: ShapeRenderer) {
         val maze = engine.maze
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
@@ -78,7 +80,7 @@ class MazeRenderer {
         shapes.end()
     }
 
-    private fun drawEntities(engine: GameEngine) {
+    private fun drawEntities(engine: GameEngine, shapes: ShapeRenderer) {
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
         val player = engine.player
@@ -91,5 +93,11 @@ class MazeRenderer {
         }
 
         shapes.end()
+    }
+
+    private fun ensureShapes(): ShapeRenderer {
+        val existing = shapes
+        if (existing != null) return existing
+        return ShapeRenderer().also { shapes = it }
     }
 }

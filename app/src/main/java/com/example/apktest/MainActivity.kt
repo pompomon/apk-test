@@ -77,7 +77,10 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             android.R.layout.simple_spinner_dropdown_item,
             difficulties
         )
-        difficultySpinner.setSelection(difficulties.indexOf("Medium"))
+        val defaultDifficultyIndex = difficulties.indexOf(DifficultyPresets.MEDIUM.name)
+            .takeIf { it >= 0 }
+            ?: 0
+        difficultySpinner.setSelection(defaultDifficultyIndex)
 
         findViewById<Button>(R.id.buttonApply).setOnClickListener {
             val fragment = gameFragment() ?: return@setOnClickListener

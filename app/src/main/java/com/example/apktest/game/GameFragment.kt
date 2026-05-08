@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import com.badlogic.gdx.backends.android.AndroidApplicationConfiguration
 import com.badlogic.gdx.backends.android.AndroidFragmentApplication
+import com.example.apktest.game.core.DifficultyPresets
 import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
@@ -16,7 +17,7 @@ class GameFragment : AndroidFragmentApplication() {
 
     private var pendingPlayerPolicy: PlayerPolicyType = PlayerPolicyType.MANUAL
     private var pendingNpcPolicy: NpcPolicyType = NpcPolicyType.DIRECT_CHASE
-    private var pendingDifficulty: String = "Medium"
+    private var pendingDifficulty: String = DifficultyPresets.MEDIUM.name
 
     override fun onCreateView(
         inflater: LayoutInflater,
