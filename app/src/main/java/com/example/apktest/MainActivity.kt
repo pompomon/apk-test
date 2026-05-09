@@ -172,10 +172,12 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
         gameHost.setOnTouchListener { view, event ->
             val handled = detector.onTouchEvent(event)
-            if (event.actionMasked == MotionEvent.ACTION_UP) {
+            val clickHandled = if (event.actionMasked == MotionEvent.ACTION_UP) {
                 view.performClick()
+            } else {
+                false
             }
-            handled
+            handled || clickHandled
         }
     }
 

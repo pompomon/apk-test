@@ -14,7 +14,10 @@ object SwipeDirectionResolver {
     ): Direction? {
         val absX = abs(deltaX)
         val absY = abs(deltaY)
-        if (abs(absX - absY) <= DIAGONAL_TIE_EPSILON) return null
+        val dominantDelta = maxOf(absX, absY)
+        if (dominantDelta == 0f) return null
+        val axisDifferenceRatio = abs(absX - absY) / dominantDelta
+        if (axisDifferenceRatio <= DIAGONAL_TIE_RATIO_THRESHOLD) return null
         if (absX > absY) {
             if (absX < minDistance || abs(velocityX) < minVelocity) return null
             return if (deltaX < 0f) Direction.WEST else Direction.EAST
@@ -23,6 +26,6 @@ object SwipeDirectionResolver {
         return if (deltaY < 0f) Direction.NORTH else Direction.SOUTH
     }
 
-    // Treat near-equal axis deltas as diagonal ambiguity to avoid accidental direction picks.
-    private const val DIAGONAL_TIE_EPSILON = 0.01f
+    // Reject swipes when x/y deltas are within 10% of each other (diagonal ambiguity).
+    private const val DIAGONAL_TIE_RATIO_THRESHOLD = 0.10f
 }
