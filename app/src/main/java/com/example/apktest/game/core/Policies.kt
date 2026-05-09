@@ -30,7 +30,9 @@ data class NpcPolicyContext(
     val maze: Maze,
     val navigator: MazeNavigator,
     val player: Player,
-    val visionRange: Int
+    val visionRange: Int,
+    val playerVisible: Boolean,
+    val npcsFrozen: Boolean
 )
 
 interface PlayerPolicy {
@@ -98,6 +100,7 @@ class AStarExitPolicy : PlayerPolicy {
 
 class DirectChasePolicy : NpcPolicy {
     override fun nextMove(npc: Npc, context: NpcPolicyContext): Direction? {
+        if (!context.playerVisible || context.npcsFrozen) return null
         val path = context.navigator.bfsPath(npc.position, context.player.position)
         return nextDirection(npc.position, path)
     }
@@ -105,6 +108,7 @@ class DirectChasePolicy : NpcPolicy {
 
 class PredictiveChasePolicy : NpcPolicy {
     override fun nextMove(npc: Npc, context: NpcPolicyContext): Direction? {
+        if (!context.playerVisible || context.npcsFrozen) return null
         var projected = context.player.position
         repeat(PREDICTION_STEPS) {
             val next = projected.moved(context.player.facing)
@@ -125,9 +129,10 @@ class PredictiveChasePolicy : NpcPolicy {
 
 class PatrolGuardPolicy : NpcPolicy {
     override fun nextMove(npc: Npc, context: NpcPolicyContext): Direction? {
+        if (context.npcsFrozen) return null
         val playerDistance = manhattanDistance(npc.position, context.player.position)
 
-        if (playerDistance <= context.visionRange) {
+        if (context.playerVisible && playerDistance <= context.visionRange) {
             npc.state = NpcState.CHASE
             npc.lastKnownPlayerPos = context.player.position
             npc.searchTicksRemaining = DEFAULT_SEARCH_TICKS

@@ -18,8 +18,11 @@
     <string name="status_lose">Caught</string>
     <string name="status_default">Status: —</string>
     <string name="speed_default">Player speed: — | NPC speed: —</string>
+    <string name="powerups_default">Power-ups: —</string>
     <string name="status_template">Status: %1$s | Steps: %2$d | Time: %3$.1fs</string>
     <string name="speed_detail_template">Player speed: %1$.1f | NPC speed: %2$.1f | P:%3$s | N:%4$s</string>
+    <string name="powerups_detail_template">Power-ups: %1$s | On map: %2$d</string>
+    <string name="powerups_none">none</string>
     <string name="spinner_player_policy_description">Player policy</string>
     <string name="spinner_npc_policy_description">NPC policy</string>
     <string name="spinner_difficulty_description">Difficulty</string>

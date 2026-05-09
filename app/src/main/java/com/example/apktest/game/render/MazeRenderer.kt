@@ -9,6 +9,7 @@ import com.badlogic.gdx.utils.viewport.ExtendViewport
 import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameEngine
 import com.example.apktest.game.core.Maze
+import com.example.apktest.game.core.PowerUpType
 
 class MazeRenderer {
     private val camera = OrthographicCamera()
@@ -31,6 +32,7 @@ class MazeRenderer {
         shapes.projectionMatrix = camera.combined
 
         drawMaze(engine)
+        drawPowerUps(engine)
         drawEntities(engine)
     }
 
@@ -97,5 +99,96 @@ class MazeRenderer {
         }
 
         shapes.end()
+    }
+
+    private fun drawPowerUps(engine: GameEngine) {
+        shapes.begin(ShapeRenderer.ShapeType.Filled)
+        engine.spawnedPowerUps.forEach { pickup ->
+            PixelPowerUpIconRenderer.draw(
+                shapes = shapes,
+                type = pickup.type,
+                x = pickup.position.x + 0.5f,
+                y = pickup.position.y + 0.5f,
+                size = 0.54f
+            )
+        }
+        shapes.end()
+    }
+
+    private object PixelPowerUpIconRenderer {
+        private const val GRID_SIZE = 5
+
+        private val palettes = mapOf(
+            PowerUpType.INVISIBILITY to Color(0.68f, 0.5f, 0.96f, 1f),
+            PowerUpType.TELEPORT to Color(0.25f, 0.86f, 0.96f, 1f),
+            PowerUpType.SPEED_UP to Color(1f, 0.91f, 0.3f, 1f),
+            PowerUpType.FREEZE to Color(0.63f, 0.9f, 1f, 1f),
+            PowerUpType.BLAST to Color(1f, 0.45f, 0.2f, 1f)
+        )
+
+        private val darkOutline = Color(0.05f, 0.05f, 0.08f, 1f)
+
+        private val patterns: Map<PowerUpType, List<String>> = mapOf(
+            PowerUpType.INVISIBILITY to listOf(
+                "00100",
+                "01110",
+                "11111",
+                "01110",
+                "00100"
+            ),
+            PowerUpType.TELEPORT to listOf(
+                "11111",
+                "10001",
+                "10101",
+                "10001",
+                "11111"
+            ),
+            PowerUpType.SPEED_UP to listOf(
+                "00110",
+                "01110",
+                "11111",
+                "01110",
+                "00110"
+            ),
+            PowerUpType.FREEZE to listOf(
+                "10001",
+                "01110",
+                "11111",
+                "01110",
+                "10001"
+            ),
+            PowerUpType.BLAST to listOf(
+                "10101",
+                "11011",
+                "11111",
+                "11011",
+                "10101"
+            )
+        )
+
+        fun draw(shapes: ShapeRenderer, type: PowerUpType, x: Float, y: Float, size: Float) {
+            val pattern = patterns.getValue(type)
+            val color = palettes.getValue(type)
+            val pixelSize = size / GRID_SIZE
+            val originX = x - size / 2f
+            val originY = y - size / 2f
+
+            shapes.color = darkOutline
+            shapes.rect(originX - pixelSize * 0.5f, originY - pixelSize * 0.5f, size + pixelSize, size + pixelSize)
+
+            for (row in 0 until GRID_SIZE) {
+                for (col in 0 until GRID_SIZE) {
+                    if (pattern[row][col] == '1') {
+                        shapes.color = color
+                        shapes.rect(
+                            originX + col * pixelSize,
+                            originY + (GRID_SIZE - row - 1) * pixelSize,
+                            pixelSize,
+                            pixelSize
+                        )
+                    }
+                }
+            }
+        }
     }
 }

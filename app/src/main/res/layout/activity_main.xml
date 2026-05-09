@@ -98,6 +98,14 @@
             android:text="@string/speed_default"
             android:textColor="@color/maze_speed_text"
             android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/textPowerUps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/powerups_default"
+            android:textColor="@color/maze_speed_text"
+            android:textSize="12sp" />
     </LinearLayout>
 
     <LinearLayout
