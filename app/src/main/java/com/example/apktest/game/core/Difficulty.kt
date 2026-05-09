@@ -8,7 +8,10 @@ data class DifficultyPreset(
     val playerMovesPerSecond: Float,
     val npcMovesPerSecond: Float,
     val npcVisionRange: Int,
-    val balanceRule: NpcSpeedBalanceRule = NpcSpeedBalanceRule.NONE
+    val balanceRule: NpcSpeedBalanceRule = NpcSpeedBalanceRule.NONE,
+    val powerUpPickupLifetimeSeconds: Float = 10f,
+    val powerUpRespawnIntervalSeconds: Float? = null,
+    val initialPowerUpTypes: List<PowerUpType> = PowerUpType.entries
 ) {
     init {
         if (balanceRule == NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER) {
@@ -33,7 +36,9 @@ object DifficultyPresets {
         playerMovesPerSecond = 4f,
         npcMovesPerSecond = 2.5f,
         npcVisionRange = 4,
-        balanceRule = NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER
+        balanceRule = NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER,
+        powerUpPickupLifetimeSeconds = 0f,
+        powerUpRespawnIntervalSeconds = 15f
     )
 
     val MEDIUM = DifficultyPreset(
@@ -44,7 +49,9 @@ object DifficultyPresets {
         playerMovesPerSecond = 4.5f,
         npcMovesPerSecond = 3.3f,
         npcVisionRange = 5,
-        balanceRule = NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER
+        balanceRule = NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER,
+        powerUpPickupLifetimeSeconds = 10f,
+        powerUpRespawnIntervalSeconds = null
     )
 
     val HARD = DifficultyPreset(
@@ -55,7 +62,9 @@ object DifficultyPresets {
         playerMovesPerSecond = 5f,
         npcMovesPerSecond = 3.6f,
         npcVisionRange = 6,
-        balanceRule = NpcSpeedBalanceRule.NONE
+        balanceRule = NpcSpeedBalanceRule.NONE,
+        powerUpPickupLifetimeSeconds = 5f,
+        powerUpRespawnIntervalSeconds = null
     )
 
     val all = listOf(EASY, MEDIUM, HARD)

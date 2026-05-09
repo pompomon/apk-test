@@ -42,7 +42,9 @@ class PolicyTest {
                 maze = maze,
                 navigator = navigator,
                 player = player,
-                visionRange = 5
+                visionRange = 5,
+                playerVisible = true,
+                npcsFrozen = false
             )
         )
 
@@ -60,7 +62,14 @@ class PolicyTest {
 
         val move = policy.nextMove(
             npc,
-            NpcPolicyContext(maze = maze, navigator = navigator, player = player, visionRange = 5)
+            NpcPolicyContext(
+                maze = maze,
+                navigator = navigator,
+                player = player,
+                visionRange = 5,
+                playerVisible = true,
+                npcsFrozen = false
+            )
         )
 
         assertNotNull(move)
@@ -90,7 +99,14 @@ class PolicyTest {
         // is also unreachable, so policy must return null without crashing.
         val move = policy.nextMove(
             npc,
-            NpcPolicyContext(maze = maze, navigator = navigator, player = player, visionRange = 1)
+            NpcPolicyContext(
+                maze = maze,
+                navigator = navigator,
+                player = player,
+                visionRange = 1,
+                playerVisible = true,
+                npcsFrozen = false
+            )
         )
         assertNull(move)
     }
@@ -105,7 +121,14 @@ class PolicyTest {
 
         policy.nextMove(
             npc,
-            NpcPolicyContext(maze = maze, navigator = navigator, player = player, visionRange = 3)
+            NpcPolicyContext(
+                maze = maze,
+                navigator = navigator,
+                player = player,
+                visionRange = 3,
+                playerVisible = true,
+                npcsFrozen = false
+            )
         )
 
         assertEquals(NpcState.CHASE, npc.state)
@@ -130,7 +153,14 @@ class PolicyTest {
 
         policy.nextMove(
             npc,
-            NpcPolicyContext(maze = maze, navigator = navigator, player = player, visionRange = 1)
+            NpcPolicyContext(
+                maze = maze,
+                navigator = navigator,
+                player = player,
+                visionRange = 1,
+                playerVisible = true,
+                npcsFrozen = false
+            )
         )
 
         assertEquals(NpcState.SEARCH, npc.state)
@@ -149,10 +179,41 @@ class PolicyTest {
             searchTicksRemaining = 1
         )
         val player = Player(position = GridPos(4, 4), facing = Direction.WEST)
-        val context = NpcPolicyContext(maze = maze, navigator = navigator, player = player, visionRange = 1)
+        val context = NpcPolicyContext(
+            maze = maze,
+            navigator = navigator,
+            player = player,
+            visionRange = 1,
+            playerVisible = true,
+            npcsFrozen = false
+        )
 
         // Single tick brings searchTicksRemaining to 0 and transitions to PATROL.
         policy.nextMove(npc, context)
+
+        assertEquals(NpcState.PATROL, npc.state)
+        assertNull(npc.lastKnownPlayerPos)
+    }
+
+    @Test
+    fun patrolGuardPolicy_ignoresPlayerWhenInvisible() {
+        val maze = Maze.openGrid(5, 5)
+        val navigator = MazeNavigator(maze)
+        val policy = PatrolGuardPolicy()
+        val player = Player(position = GridPos(2, 0), facing = Direction.WEST)
+        val npc = Npc(id = 1, position = GridPos(0, 0))
+
+        policy.nextMove(
+            npc,
+            NpcPolicyContext(
+                maze = maze,
+                navigator = navigator,
+                player = player,
+                visionRange = 3,
+                playerVisible = false,
+                npcsFrozen = false
+            )
+        )
 
         assertEquals(NpcState.PATROL, npc.state)
         assertNull(npc.lastKnownPlayerPos)

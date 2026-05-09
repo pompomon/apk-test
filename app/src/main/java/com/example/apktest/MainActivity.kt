@@ -22,6 +22,7 @@ import com.example.apktest.game.core.PlayerPolicyType
 class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private lateinit var statusText: TextView
     private lateinit var speedText: TextView
+    private lateinit var powerUpText: TextView
 
     private val hudHandler = Handler(Looper.getMainLooper())
     private val hudRefreshRunnable = object : Runnable {
@@ -45,6 +46,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
         statusText = findViewById(R.id.textStatus)
         speedText = findViewById(R.id.textSpeed)
+        powerUpText = findViewById(R.id.textPowerUps)
 
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
@@ -146,6 +148,11 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             hud.npcSpeed,
             hud.playerPolicyLabel,
             hud.npcPolicyLabel
+        )
+        powerUpText.text = getString(
+            R.string.powerups_detail_template,
+            hud.activePowerUps.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: getString(R.string.powerups_none),
+            hud.powerUpsOnMap
         )
     }
 

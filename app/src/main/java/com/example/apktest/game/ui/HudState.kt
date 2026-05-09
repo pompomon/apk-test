@@ -10,5 +10,7 @@ data class HudState(
     val playerPolicyLabel: String,
     val npcPolicyLabel: String,
     val playerSpeed: Float,
-    val npcSpeed: Float
+    val npcSpeed: Float,
+    val activePowerUps: List<String>,
+    val powerUpsOnMap: Int
 )
