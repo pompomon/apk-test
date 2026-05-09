@@ -1,5 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">apk-test</string>
-    <string name="hello_world">Hello World!</string>
+    <string name="app_name">Maze Escape</string>
+    <string name="apply">Apply</string>
+    <string name="pause_resume">Pause/Resume</string>
+    <string name="restart">Restart</string>
+    <string name="move_up">↑</string>
+    <string name="move_up_description">Move up</string>
+    <string name="move_left">←</string>
+    <string name="move_left_description">Move left</string>
+    <string name="move_down">↓</string>
+    <string name="move_down_description">Move down</string>
+    <string name="move_right">→</string>
+    <string name="move_right_description">Move right</string>
+    <string name="status_running">Running</string>
+    <string name="status_paused">Paused</string>
+    <string name="status_win">You Win</string>
+    <string name="status_lose">Caught</string>
+    <string name="status_default">Status: —</string>
+    <string name="speed_default">Player speed: — | NPC speed: —</string>
+    <string name="status_template">Status: %1$s | Steps: %2$d | Time: %3$.1fs</string>
+    <string name="speed_detail_template">Player speed: %1$.1f | NPC speed: %2$.1f | P:%3$s | N:%4$s</string>
+    <string name="spinner_player_policy_description">Player policy</string>
+    <string name="spinner_npc_policy_description">NPC policy</string>
+    <string name="spinner_difficulty_description">Difficulty</string>
 </resources>
