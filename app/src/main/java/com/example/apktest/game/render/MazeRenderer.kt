@@ -118,57 +118,59 @@ class MazeRenderer {
     private object PixelPowerUpIconRenderer {
         private const val GRID_SIZE = 5
 
-        private val palettes = mapOf(
-            PowerUpType.INVISIBILITY to Color(0.68f, 0.5f, 0.96f, 1f),
-            PowerUpType.TELEPORT to Color(0.25f, 0.86f, 0.96f, 1f),
-            PowerUpType.SPEED_UP to Color(1f, 0.91f, 0.3f, 1f),
-            PowerUpType.FREEZE to Color(0.63f, 0.9f, 1f, 1f),
-            PowerUpType.BLAST to Color(1f, 0.45f, 0.2f, 1f)
-        )
-
         private val darkOutline = Color(0.05f, 0.05f, 0.08f, 1f)
 
-        private val patterns: Map<PowerUpType, List<String>> = mapOf(
-            PowerUpType.INVISIBILITY to listOf(
+        // Exhaustive when() ensures the compiler enforces updates whenever a
+        // new PowerUpType is introduced, instead of failing at runtime.
+        private fun paletteFor(type: PowerUpType): Color = when (type) {
+            PowerUpType.INVISIBILITY -> Color(0.68f, 0.5f, 0.96f, 1f)
+            PowerUpType.TELEPORT -> Color(0.25f, 0.86f, 0.96f, 1f)
+            PowerUpType.SPEED_UP -> Color(1f, 0.91f, 0.3f, 1f)
+            PowerUpType.FREEZE -> Color(0.63f, 0.9f, 1f, 1f)
+            PowerUpType.BLAST -> Color(1f, 0.45f, 0.2f, 1f)
+        }
+
+        private fun patternFor(type: PowerUpType): List<String> = when (type) {
+            PowerUpType.INVISIBILITY -> listOf(
                 "00100",
                 "01110",
                 "11111",
                 "01110",
                 "00100"
-            ),
-            PowerUpType.TELEPORT to listOf(
+            )
+            PowerUpType.TELEPORT -> listOf(
                 "11111",
                 "10001",
                 "10101",
                 "10001",
                 "11111"
-            ),
-            PowerUpType.SPEED_UP to listOf(
+            )
+            PowerUpType.SPEED_UP -> listOf(
                 "00110",
                 "01110",
                 "11111",
                 "01110",
                 "00110"
-            ),
-            PowerUpType.FREEZE to listOf(
+            )
+            PowerUpType.FREEZE -> listOf(
                 "10001",
                 "01110",
                 "11111",
                 "01110",
                 "10001"
-            ),
-            PowerUpType.BLAST to listOf(
+            )
+            PowerUpType.BLAST -> listOf(
                 "10101",
                 "11011",
                 "11111",
                 "11011",
                 "10101"
             )
-        )
+        }
 
         fun draw(shapes: ShapeRenderer, type: PowerUpType, x: Float, y: Float, size: Float) {
-            val pattern = patterns.getValue(type)
-            val color = palettes.getValue(type)
+            val pattern = patternFor(type)
+            val color = paletteFor(type)
             val pixelSize = size / GRID_SIZE
             val originX = x - size / 2f
             val originY = y - size / 2f

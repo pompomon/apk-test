@@ -124,7 +124,13 @@ class GameEngine(
 
         elapsedSeconds += deltaSeconds
         playerAccumulator += deltaSeconds
-        npcAccumulator += deltaSeconds
+        // Only accumulate NPC time while NPCs are not frozen so freeze fully pauses
+        // NPC movement instead of producing a catch-up burst when freeze expires.
+        if (!isEffectActive(PowerUpType.FREEZE)) {
+            npcAccumulator += deltaSeconds
+        } else {
+            npcAccumulator = 0f
+        }
 
         processPowerUpLifecycles(deltaSeconds)
 
