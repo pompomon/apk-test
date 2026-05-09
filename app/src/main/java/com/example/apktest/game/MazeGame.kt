@@ -20,7 +20,7 @@ class MazeGame : ApplicationAdapter() {
     private var accumulator = 0f
 
     override fun render() {
-        drainCommands()
+        val ranCommand = drainCommands()
 
         val frameTime = com.badlogic.gdx.Gdx.graphics.deltaTime.coerceAtMost(0.25f)
         accumulator += frameTime
@@ -33,7 +33,7 @@ class MazeGame : ApplicationAdapter() {
         }
 
         renderer.render(engine)
-        if (stepped) {
+        if (stepped || ranCommand) {
             lastHudState = engine.hudState()
         }
     }
@@ -66,9 +66,9 @@ class MazeGame : ApplicationAdapter() {
         }
     }
 
-    private fun drainCommands() {
+    private fun drainCommands(): Boolean {
         val dequeuedCommands = synchronized(commands) {
-            if (commands.isEmpty()) return
+            if (commands.isEmpty()) return false
             val queue = ArrayDeque<(GameEngine) -> Unit>(commands.size)
             while (commands.isNotEmpty()) {
                 queue.add(commands.removeFirst())
@@ -78,6 +78,7 @@ class MazeGame : ApplicationAdapter() {
         while (dequeuedCommands.isNotEmpty()) {
             dequeuedCommands.removeFirst().invoke(engine)
         }
+        return true
     }
 
     companion object {
