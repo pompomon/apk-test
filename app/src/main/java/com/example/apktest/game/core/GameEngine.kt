@@ -156,7 +156,7 @@ class GameEngine(
         npcSpeed = difficulty.npcMovesPerSecond,
         activePowerUps = activePowerUpSnapshots().map { snapshot ->
             val remaining = snapshot.remainingSeconds?.coerceAtLeast(0f)
-            if (remaining == null) snapshot.type.label else "${snapshot.type.label} ${"%.1f".format(remaining)}s"
+            if (remaining == null) snapshot.type.label else "${snapshot.type.label} %.1fs".format(remaining)
         },
         powerUpsOnMap = powerUpsByCell.size
     )
@@ -326,8 +326,8 @@ class GameEngine(
     }
 
     private fun collectPowerUpAtPlayer() {
-        val pickup = powerUpsByCell.remove(player.position) ?: return
-        when (pickup.type) {
+        val powerUp = powerUpsByCell.remove(player.position) ?: return
+        when (powerUp.type) {
             PowerUpType.INVISIBILITY -> activateTimedEffect(PowerUpType.INVISIBILITY)
             PowerUpType.TELEPORT -> applyTeleport()
             PowerUpType.SPEED_UP -> activateTimedEffect(PowerUpType.SPEED_UP)
@@ -386,12 +386,13 @@ class GameEngine(
     }
 
     private fun effectivePlayerMovesPerSecond(): Float {
-        val speedMultiplier = if (isEffectActive(PowerUpType.SPEED_UP)) 2f else 1f
+        val speedMultiplier = if (isEffectActive(PowerUpType.SPEED_UP)) SPEED_UP_MULTIPLIER else 1f
         return difficulty.playerMovesPerSecond * speedMultiplier
     }
 
     companion object {
         private const val MAX_EXTRA_PATROL_WAYPOINTS = 2
         private const val MAX_MANUAL_QUEUE = 8
+        private const val SPEED_UP_MULTIPLIER = 2f
     }
 }

@@ -174,7 +174,13 @@ class MazeRenderer {
             val originY = y - size / 2f
 
             shapes.color = darkOutline
-            shapes.rect(originX - pixelSize * 0.5f, originY - pixelSize * 0.5f, size + pixelSize, size + pixelSize)
+            val outlinePadding = pixelSize * OUTLINE_PADDING_FACTOR
+            shapes.rect(
+                originX - outlinePadding,
+                originY - outlinePadding,
+                size + 2f * outlinePadding,
+                size + 2f * outlinePadding
+            )
 
             for (row in 0 until GRID_SIZE) {
                 for (col in 0 until GRID_SIZE) {
@@ -190,5 +196,7 @@ class MazeRenderer {
                 }
             }
         }
+
+        private const val OUTLINE_PADDING_FACTOR = 0.5f
     }
 }
