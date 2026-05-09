@@ -12,10 +12,10 @@ object SwipeDirectionResolver {
         minDistance: Float,
         minVelocity: Float
     ): Direction? {
+        if (deltaX == 0f && deltaY == 0f) return null
         val absX = abs(deltaX)
         val absY = abs(deltaY)
         val dominantDelta = maxOf(absX, absY)
-        if (dominantDelta == 0f) return null
         val axisDifferenceRatio = abs(absX - absY) / dominantDelta
         if (axisDifferenceRatio <= DIAGONAL_TIE_RATIO_THRESHOLD) return null
         if (absX > absY) {
