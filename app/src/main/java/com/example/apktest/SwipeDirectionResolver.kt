@@ -14,7 +14,7 @@ object SwipeDirectionResolver {
     ): Direction? {
         val absX = abs(deltaX)
         val absY = abs(deltaY)
-        if (absX == absY) return null
+        if (abs(absX - absY) <= DIAGONAL_TIE_EPSILON) return null
         if (absX > absY) {
             if (absX < minDistance || abs(velocityX) < minVelocity) return null
             return if (deltaX < 0f) Direction.WEST else Direction.EAST
@@ -22,4 +22,6 @@ object SwipeDirectionResolver {
         if (absY < minDistance || abs(velocityY) < minVelocity) return null
         return if (deltaY < 0f) Direction.NORTH else Direction.SOUTH
     }
+
+    private const val DIAGONAL_TIE_EPSILON = 0.01f
 }
