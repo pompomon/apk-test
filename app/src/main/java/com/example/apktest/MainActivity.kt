@@ -3,6 +3,10 @@ package com.example.apktest
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.GestureDetector
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewConfiguration
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.Spinner
@@ -37,7 +41,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
 
-        val root = findViewById<android.view.View>(R.id.root)
+        val root = findViewById<View>(R.id.root)
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
@@ -55,6 +59,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         }
 
         setupControls()
+        setupSwipeControls()
     }
 
     override fun exit() {
@@ -132,6 +137,46 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private fun move(direction: Direction) {
         gameFragment()?.queueManualMove(direction)
         refreshHudSnapshot()
+    }
+
+    private fun setupSwipeControls() {
+        val gameHost = findViewById<View>(R.id.fragmentGameHost)
+        val viewConfig = ViewConfiguration.get(this)
+        val minDistance = (viewConfig.scaledTouchSlop * 4).toFloat()
+        val minVelocity = viewConfig.scaledMinimumFlingVelocity.toFloat()
+        val detector = GestureDetector(
+            this,
+            object : GestureDetector.SimpleOnGestureListener() {
+                override fun onDown(e: MotionEvent): Boolean = true
+
+                override fun onFling(
+                    e1: MotionEvent?,
+                    e2: MotionEvent,
+                    velocityX: Float,
+                    velocityY: Float
+                ): Boolean {
+                    val start = e1 ?: return false
+                    val direction = SwipeDirectionResolver.resolve(
+                        deltaX = e2.x - start.x,
+                        deltaY = e2.y - start.y,
+                        velocityX = velocityX,
+                        velocityY = velocityY,
+                        minDistance = minDistance,
+                        minVelocity = minVelocity
+                    ) ?: return false
+                    move(direction)
+                    return true
+                }
+            }
+        )
+
+        gameHost.setOnTouchListener { view, event ->
+            detector.onTouchEvent(event)
+            if (event.actionMasked == MotionEvent.ACTION_UP) {
+                view.performClick()
+            }
+            false
+        }
     }
 
     private fun refreshHudSnapshot() {
