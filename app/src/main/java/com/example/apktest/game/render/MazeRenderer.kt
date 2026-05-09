@@ -103,7 +103,7 @@ class MazeRenderer {
 
     private fun drawPowerUps(engine: GameEngine) {
         shapes.begin(ShapeRenderer.ShapeType.Filled)
-        engine.spawnedPowerUps.forEach { pickup ->
+        engine.spawnedPowerUpsView.forEach { pickup ->
             PixelPowerUpIconRenderer.draw(
                 shapes = shapes,
                 type = pickup.type,
@@ -120,9 +120,19 @@ class MazeRenderer {
 
         private val darkOutline = Color(0.05f, 0.05f, 0.08f, 1f)
 
-        // Exhaustive when() ensures the compiler enforces updates whenever a
-        // new PowerUpType is introduced, instead of failing at runtime.
-        private fun paletteFor(type: PowerUpType): Color = when (type) {
+        // Palettes and patterns are pre-built once per type (indexed by ordinal)
+        // so the per-frame draw path performs no Color/List allocations.
+        // The exhaustive when() during initialization still forces the compiler
+        // to flag any newly added PowerUpType.
+        private val palettes: Array<Color> = Array(PowerUpType.entries.size) { i ->
+            colorFor(PowerUpType.entries[i])
+        }
+
+        private val patterns: Array<Array<String>> = Array(PowerUpType.entries.size) { i ->
+            patternRowsFor(PowerUpType.entries[i])
+        }
+
+        private fun colorFor(type: PowerUpType): Color = when (type) {
             PowerUpType.INVISIBILITY -> Color(0.68f, 0.5f, 0.96f, 1f)
             PowerUpType.TELEPORT -> Color(0.25f, 0.86f, 0.96f, 1f)
             PowerUpType.SPEED_UP -> Color(1f, 0.91f, 0.3f, 1f)
@@ -130,36 +140,36 @@ class MazeRenderer {
             PowerUpType.BLAST -> Color(1f, 0.45f, 0.2f, 1f)
         }
 
-        private fun patternFor(type: PowerUpType): List<String> = when (type) {
-            PowerUpType.INVISIBILITY -> listOf(
+        private fun patternRowsFor(type: PowerUpType): Array<String> = when (type) {
+            PowerUpType.INVISIBILITY -> arrayOf(
                 "00100",
                 "01110",
                 "11111",
                 "01110",
                 "00100"
             )
-            PowerUpType.TELEPORT -> listOf(
+            PowerUpType.TELEPORT -> arrayOf(
                 "11111",
                 "10001",
                 "10101",
                 "10001",
                 "11111"
             )
-            PowerUpType.SPEED_UP -> listOf(
+            PowerUpType.SPEED_UP -> arrayOf(
                 "00110",
                 "01110",
                 "11111",
                 "01110",
                 "00110"
             )
-            PowerUpType.FREEZE -> listOf(
+            PowerUpType.FREEZE -> arrayOf(
                 "10001",
                 "01110",
                 "11111",
                 "01110",
                 "10001"
             )
-            PowerUpType.BLAST -> listOf(
+            PowerUpType.BLAST -> arrayOf(
                 "10101",
                 "11011",
                 "11111",
@@ -169,8 +179,8 @@ class MazeRenderer {
         }
 
         fun draw(shapes: ShapeRenderer, type: PowerUpType, x: Float, y: Float, size: Float) {
-            val pattern = patternFor(type)
-            val color = paletteFor(type)
+            val pattern = patterns[type.ordinal]
+            val color = palettes[type.ordinal]
             val pixelSize = size / GRID_SIZE
             val originX = x - size / 2f
             val originY = y - size / 2f
@@ -185,8 +195,9 @@ class MazeRenderer {
             )
 
             for (row in 0 until GRID_SIZE) {
+                val rowPattern = pattern[row]
                 for (col in 0 until GRID_SIZE) {
-                    if (pattern[row][col] == '1') {
+                    if (rowPattern[col] == '1') {
                         shapes.color = color
                         shapes.rect(
                             originX + col * pixelSize,

@@ -34,6 +34,9 @@ class GameEngine(
 
     val spawnedPowerUps: List<SpawnedPowerUp>
         get() = powerUpsByCell.values.sortedBy { it.position.y * maze.width + it.position.x }
+    /** Live, unsorted view used by the render loop to avoid per-frame allocation/sorting. */
+    val spawnedPowerUpsView: Collection<SpawnedPowerUp>
+        get() = powerUpsByCell.values
     val activePowerUps: List<ActivePowerUpEffect>
         get() = activeEffectsByType.values.sortedBy { it.type.ordinal }
 

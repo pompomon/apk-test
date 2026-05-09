@@ -249,7 +249,7 @@ class GameEngineTest {
         mazeWidth: Int = 14,
         mazeHeight: Int = 20,
         npcCount: Int = 0,
-        powerUpPickupLifetimeSeconds: Float = 10f,
+        powerUpPickupLifetimeSeconds: Float = 600f,
         powerUpRespawnIntervalSeconds: Float? = null,
         initialPowerUpTypes: List<PowerUpType> = PowerUpType.entries
     ): DifficultyPreset {
