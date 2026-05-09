@@ -7,8 +7,22 @@ data class DifficultyPreset(
     val npcCount: Int,
     val playerMovesPerSecond: Float,
     val npcMovesPerSecond: Float,
-    val npcVisionRange: Int
-)
+    val npcVisionRange: Int,
+    val balanceRule: NpcSpeedBalanceRule = NpcSpeedBalanceRule.NONE
+) {
+    init {
+        if (balanceRule == NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER) {
+            require(npcMovesPerSecond < playerMovesPerSecond) {
+                "NPC speed ($npcMovesPerSecond) must be lower than player speed ($playerMovesPerSecond) for $name."
+            }
+        }
+    }
+}
+
+enum class NpcSpeedBalanceRule {
+    NONE,
+    NPC_MUST_BE_SLOWER_THAN_PLAYER
+}
 
 object DifficultyPresets {
     val EASY = DifficultyPreset(
@@ -17,8 +31,9 @@ object DifficultyPresets {
         mazeHeight = 20,
         npcCount = 1,
         playerMovesPerSecond = 4f,
-        npcMovesPerSecond = 2.2f,
-        npcVisionRange = 4
+        npcMovesPerSecond = 2.5f,
+        npcVisionRange = 4,
+        balanceRule = NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER
     )
 
     val MEDIUM = DifficultyPreset(
@@ -27,8 +42,9 @@ object DifficultyPresets {
         mazeHeight = 28,
         npcCount = 2,
         playerMovesPerSecond = 4.5f,
-        npcMovesPerSecond = 2.8f,
-        npcVisionRange = 5
+        npcMovesPerSecond = 3.3f,
+        npcVisionRange = 5,
+        balanceRule = NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER
     )
 
     val HARD = DifficultyPreset(
@@ -38,7 +54,8 @@ object DifficultyPresets {
         npcCount = 3,
         playerMovesPerSecond = 5f,
         npcMovesPerSecond = 3.6f,
-        npcVisionRange = 6
+        npcVisionRange = 6,
+        balanceRule = NpcSpeedBalanceRule.NONE
     )
 
     val all = listOf(EASY, MEDIUM, HARD)
