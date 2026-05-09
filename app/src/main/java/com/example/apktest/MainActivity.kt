@@ -216,7 +216,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     companion object {
         private const val HUD_REFRESH_INTERVAL_MS = 250L
-        // Require a deliberate drag beyond tap jitter before enqueuing a move.
+        // 4x touch slop requires a deliberate drag, reducing accidental move input from taps/jitter.
         private const val SWIPE_DISTANCE_TOUCH_SLOP_MULTIPLIER = 4
     }
 }
