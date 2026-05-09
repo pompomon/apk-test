@@ -8,7 +8,10 @@ object MazeGenerator {
         val cells = IntArray(width * height) { Maze.ALL_WALLS }
 
         val start = GridPos(0, 0)
-        val maze = Maze(width, height, cells, start, start)
+        // The exit is computed before widening so the widening pass can explicitly
+        // protect it. Once chosen, the exit is kept fixed even if widening adds
+        // new edges, to keep the protection contract meaningful.
+        val perfectMaze = Maze(width, height, cells, start, start)
         val visited = Array(height) { BooleanArray(width) }
         val stack = ArrayDeque<GridPos>()
 
@@ -27,17 +30,18 @@ object MazeGenerator {
             }
 
             val (direction, next) = candidates[random.nextInt(candidates.size)]
-            maze.removeWall(current, direction)
+            perfectMaze.removeWall(current, direction)
             visited[next.y][next.x] = true
             stack.add(next)
         }
 
-        applyWideCorridorWidening(maze, random)
-        val farthest = farthestNode(maze, start)
-        return Maze(width, height, cells, start, farthest)
+        val exit = farthestNode(perfectMaze, start)
+        val maze = Maze(width, height, cells, start, exit)
+        applyWideCorridorWidening(maze, random, start, exit)
+        return maze
     }
 
-    private fun applyWideCorridorWidening(maze: Maze, random: Random) {
+    private fun applyWideCorridorWidening(maze: Maze, random: Random, start: GridPos, exit: GridPos) {
         val area = maze.width * maze.height
         if (maze.width < MIN_WIDENING_DIMENSION || maze.height < MIN_WIDENING_DIMENSION || area < MIN_WIDENING_AREA) {
             return
@@ -73,8 +77,8 @@ object MazeGenerator {
             if (!maze.inBounds(sideOrigin) || !maze.inBounds(sideForward)) return@repeat
 
             val widenedBlock = setOf(origin, forward, sideOrigin, sideForward)
-            if (widenedBlock.any { it == maze.start || it == maze.exit }) return@repeat
-            if (widenedBlock.any { manhattanDistance(it, maze.start) <= 1 || manhattanDistance(it, maze.exit) <= 1 }) {
+            if (widenedBlock.any { it == start || it == exit }) return@repeat
+            if (widenedBlock.any { manhattanDistance(it, start) <= 1 || manhattanDistance(it, exit) <= 1 }) {
                 return@repeat
             }
 
