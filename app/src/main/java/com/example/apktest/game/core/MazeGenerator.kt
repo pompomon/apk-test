@@ -56,10 +56,9 @@ object MazeGenerator {
                 x = random.nextInt(maze.width),
                 y = random.nextInt(maze.height)
             )
-            val primaryDirection = Direction.entries
-                .shuffled(random)
-                .firstOrNull { maze.canMove(origin, it) }
-                ?: return@repeat
+            val validDirections = Direction.entries.filter { maze.canMove(origin, it) }
+            if (validDirections.isEmpty()) return@repeat
+            val primaryDirection = validDirections[random.nextInt(validDirections.size)]
             val forward = origin.moved(primaryDirection)
 
             val sideOptions = if (primaryDirection == Direction.NORTH || primaryDirection == Direction.SOUTH) {

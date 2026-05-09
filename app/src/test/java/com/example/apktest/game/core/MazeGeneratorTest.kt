@@ -1,6 +1,7 @@
 package com.example.apktest.game.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -27,6 +28,14 @@ class MazeGeneratorTest {
         assertTrue(first.copyCells().contentEquals(second.copyCells()))
         assertEquals(first.start, second.start)
         assertEquals(first.exit, second.exit)
+    }
+
+    @Test
+    fun generatedMaze_differentSeedsProduceDifferentLayouts() {
+        val first = MazeGenerator.generate(width = 12, height = 16, seed = 42L)
+        val second = MazeGenerator.generate(width = 12, height = 16, seed = 43L)
+
+        assertFalse(first.copyCells().contentEquals(second.copyCells()))
     }
 
     @Test
