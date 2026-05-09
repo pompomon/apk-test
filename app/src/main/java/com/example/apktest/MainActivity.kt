@@ -142,7 +142,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private fun setupSwipeControls() {
         val gameHost = findViewById<View>(R.id.fragmentGameHost)
         val viewConfig = ViewConfiguration.get(this)
-        val minDistance = (viewConfig.scaledTouchSlop * 4).toFloat()
+        val minDistance = (viewConfig.scaledTouchSlop * SWIPE_DISTANCE_TOUCH_SLOP_MULTIPLIER).toFloat()
         val minVelocity = viewConfig.scaledMinimumFlingVelocity.toFloat()
         val detector = GestureDetector(
             this,
@@ -214,5 +214,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     companion object {
         private const val HUD_REFRESH_INTERVAL_MS = 250L
+        // Require a deliberate drag beyond tap jitter before enqueuing a move.
+        private const val SWIPE_DISTANCE_TOUCH_SLOP_MULTIPLIER = 4
     }
 }

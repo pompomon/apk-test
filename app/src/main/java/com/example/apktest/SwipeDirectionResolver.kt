@@ -23,5 +23,6 @@ object SwipeDirectionResolver {
         return if (deltaY < 0f) Direction.NORTH else Direction.SOUTH
     }
 
+    // Treat near-equal axis deltas as diagonal ambiguity to avoid accidental direction picks.
     private const val DIAGONAL_TIE_EPSILON = 0.01f
 }
