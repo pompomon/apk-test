@@ -124,12 +124,12 @@ class GameEngine(
 
         elapsedSeconds += deltaSeconds
         playerAccumulator += deltaSeconds
-        // Only accumulate NPC time while NPCs are not frozen so freeze fully pauses
-        // NPC movement instead of producing a catch-up burst when freeze expires.
+        // Pause NPC time accumulation while FREEZE is active so freezing truly
+        // pauses NPC movement. Preserve the existing accumulator value so any
+        // partial progress made before FREEZE started is not discarded
+        // (avoids forcing an extra full interval after FREEZE expires).
         if (!isEffectActive(PowerUpType.FREEZE)) {
             npcAccumulator += deltaSeconds
-        } else {
-            npcAccumulator = 0f
         }
 
         processPowerUpLifecycles(deltaSeconds)
@@ -370,6 +370,10 @@ class GameEngine(
         }
         if (candidates.isEmpty()) return
         player.position = candidates[random.nextInt(candidates.size)]
+        // If the teleport destination contains a spawned power-up, collect it
+        // immediately so the pickup is not left "under" the player (which
+        // otherwise would only collect on the next manual movement step).
+        collectPowerUpAtPlayer()
     }
 
     private fun applyBlast() {

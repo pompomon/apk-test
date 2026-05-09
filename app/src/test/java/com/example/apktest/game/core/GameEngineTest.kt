@@ -201,36 +201,48 @@ class GameEngineTest {
 
     private fun movePlayerTo(engine: GameEngine, target: GridPos) {
         engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
-        val path = engine.navigator.bfsPath(engine.player.position, target)
-        require(path.isNotEmpty()) { "No path from ${engine.player.position} to $target" }
         // Use a small timestep tied to the player move interval so navigation
         // does not unintentionally elapse enough simulated time to trigger
         // unrelated time-based mechanics (despawn/effect expiry/respawn).
-        val moveInterval = 1f / engine.hudState().playerSpeed
+        val moveInterval = 1f / engine.difficulty.playerMovesPerSecond
         val tickStep = moveInterval / 4f
-        for (index in 1 until path.size) {
-            val from = path[index - 1]
-            val to = path[index]
-            val direction = Direction.fromDelta(to.x - from.x, to.y - from.y)
+        var totalTicks = 0
+        // Re-plan a fresh BFS each step so picking up effects mid-walk
+        // (e.g. TELEPORT relocating the player) does not strand the helper.
+        while (engine.player.position != target && totalTicks < MAX_TOTAL_TICKS) {
+            val path = engine.navigator.bfsPath(engine.player.position, target)
+            require(path.isNotEmpty()) {
+                "No path from ${engine.player.position} to $target"
+            }
+            val next = path[1]
+            val direction = Direction.fromDelta(
+                next.x - engine.player.position.x,
+                next.y - engine.player.position.y
+            )
             requireNotNull(direction)
             engine.queueManualMove(direction)
-            // Advance until the queued move is consumed or the player has reached `to`.
-            var safety = 0
-            while (engine.player.position != to && safety < MAX_TICKS_PER_STEP) {
+            val before = engine.player.position
+            var stepTicks = 0
+            while (engine.player.position == before && stepTicks < MAX_TICKS_PER_STEP) {
                 engine.update(tickStep)
                 if (engine.status != GameStatus.RUNNING) {
                     throw IllegalStateException("Engine left RUNNING while navigating to target.")
                 }
-                safety += 1
+                stepTicks += 1
             }
-            check(engine.player.position == to) {
-                "Failed to advance player from $from to $to within $MAX_TICKS_PER_STEP ticks."
+            check(engine.player.position != before) {
+                "Player did not move from $before within $MAX_TICKS_PER_STEP ticks."
             }
+            totalTicks += stepTicks
+        }
+        check(engine.player.position == target) {
+            "Failed to reach $target within $MAX_TOTAL_TICKS ticks."
         }
     }
 
     private companion object {
         private const val MAX_TICKS_PER_STEP = 64
+        private const val MAX_TOTAL_TICKS = 4096
     }
 
     private fun testPreset(
