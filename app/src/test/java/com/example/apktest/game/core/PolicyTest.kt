@@ -73,8 +73,8 @@ class PolicyTest {
         // Wall the player into a single cell so projection cannot advance.
         val maze = Maze(
             width = 3,
-            height = 1,
-            cells = IntArray(3) { Maze.ALL_WALLS },
+            height = 2,
+            cells = IntArray(6) { Maze.ALL_WALLS },
             start = GridPos(0, 0),
             exit = GridPos(2, 0)
         )
