@@ -234,7 +234,15 @@ class GameEngineTest {
             val before = engine.player.position
             var stepTicks = 0
             while (engine.player.position == before && stepTicks < MAX_TICKS_PER_STEP) {
+                // Pin NPCs in place around the engine update so navigation to a
+                // target cell is not interrupted by NPC-induced LOSE conditions.
+                // This isolates the helper from NPC behaviour driven by maze
+                // layout/seed variations (e.g. the start corner randomization).
+                val npcPositions = engine.npcs.map { it.position }
                 engine.update(tickStep)
+                engine.npcs.forEachIndexed { index, npc ->
+                    npc.position = npcPositions[index]
+                }
                 if (engine.status != GameStatus.RUNNING) {
                     throw IllegalStateException("Engine left RUNNING while navigating to target.")
                 }

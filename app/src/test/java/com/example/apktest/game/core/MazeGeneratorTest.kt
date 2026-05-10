@@ -41,9 +41,11 @@ class MazeGeneratorTest {
 
     @Test
     fun generatedMaze_startAlternatesBetweenTopCornersAcrossSeeds() {
-        val starts = (1L..64L)
-            .map { seed -> MazeGenerator.generate(width = 12, height = 16, seed = seed).start }
-            .toSet()
+        val mazes = (1L..64L).map { seed ->
+            MazeGenerator.generate(width = 12, height = 16, seed = seed)
+        }
+        mazes.forEach { assertStartIsTopCorner(it) }
+        val starts = mazes.map { it.start }.toSet()
         assertTrue(starts.contains(GridPos(0, 0)))
         assertTrue(starts.contains(GridPos(11, 0)))
     }
