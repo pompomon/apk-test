@@ -93,7 +93,7 @@ class ExampleInstrumentedTest {
         activity.supportFragmentManager.executePendingTransactions()
         val fragment = activity.supportFragmentManager.findFragmentById(R.id.fragmentGameHost) as? GameFragment
         assertNotNull("Game fragment should be attached", fragment)
-        return fragment as GameFragment
+        return fragment ?: throw AssertionError("Game fragment should be attached")
     }
 
     private fun pollHudSteps(
