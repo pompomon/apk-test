@@ -100,13 +100,16 @@ class ExampleInstrumentedTest {
         initialSteps: Int
     ): Int {
         var steps = initialSteps
-        repeat(MAX_STEP_POLL_ATTEMPTS) {
+        var attempts = 0
+        while (attempts < MAX_STEP_POLL_ATTEMPTS && steps <= initialSteps) {
+            if (attempts > 0) {
+                InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            }
             scenario.onActivity { activity ->
                 val fragment = activity.supportFragmentManager.findFragmentById(R.id.fragmentGameHost) as? GameFragment
                 steps = fragment?.hudState()?.steps ?: steps
             }
-            if (steps > initialSteps) return steps
-            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            attempts += 1
         }
         return steps
     }
