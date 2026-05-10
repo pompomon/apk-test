@@ -116,20 +116,20 @@
         android:background="@color/maze_bottom_overlay_background"
         android:gravity="center"
         android:orientation="vertical"
-        android:padding="10dp"
+        android:padding="@dimen/maze_dpad_container_padding"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
         <Button
             android:id="@+id/buttonUp"
-            android:layout_width="112dp"
-            android:layout_height="72dp"
+            android:layout_width="@dimen/maze_dpad_button_width"
+            android:layout_height="@dimen/maze_dpad_button_height"
             android:backgroundTint="@color/maze_dpad_button_background"
             android:contentDescription="@string/move_up_description"
             android:text="@string/move_up"
             android:textColor="@color/maze_dpad_button_text"
-            android:textSize="30sp" />
+            android:textSize="@dimen/maze_dpad_button_text_size" />
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -139,35 +139,35 @@
 
             <Button
                 android:id="@+id/buttonLeft"
-                android:layout_width="112dp"
-                android:layout_height="72dp"
+                android:layout_width="@dimen/maze_dpad_button_width"
+                android:layout_height="@dimen/maze_dpad_button_height"
                 android:backgroundTint="@color/maze_dpad_button_background"
                 android:contentDescription="@string/move_left_description"
                 android:text="@string/move_left"
                 android:textColor="@color/maze_dpad_button_text"
-                android:textSize="30sp" />
+                android:textSize="@dimen/maze_dpad_button_text_size" />
 
             <Button
                 android:id="@+id/buttonDown"
-                android:layout_width="112dp"
-                android:layout_height="72dp"
-                android:layout_marginStart="8dp"
+                android:layout_width="@dimen/maze_dpad_button_width"
+                android:layout_height="@dimen/maze_dpad_button_height"
+                android:layout_marginStart="@dimen/maze_dpad_button_gap"
                 android:backgroundTint="@color/maze_dpad_button_background"
                 android:contentDescription="@string/move_down_description"
                 android:text="@string/move_down"
                 android:textColor="@color/maze_dpad_button_text"
-                android:textSize="30sp" />
+                android:textSize="@dimen/maze_dpad_button_text_size" />
 
             <Button
                 android:id="@+id/buttonRight"
-                android:layout_width="112dp"
-                android:layout_height="72dp"
-                android:layout_marginStart="8dp"
+                android:layout_width="@dimen/maze_dpad_button_width"
+                android:layout_height="@dimen/maze_dpad_button_height"
+                android:layout_marginStart="@dimen/maze_dpad_button_gap"
                 android:backgroundTint="@color/maze_dpad_button_background"
                 android:contentDescription="@string/move_right_description"
                 android:text="@string/move_right"
                 android:textColor="@color/maze_dpad_button_text"
-                android:textSize="30sp" />
+                android:textSize="@dimen/maze_dpad_button_text_size" />
         </LinearLayout>
     </LinearLayout>
 
