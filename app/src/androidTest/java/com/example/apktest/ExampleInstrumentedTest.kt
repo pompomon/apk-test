@@ -112,6 +112,52 @@ class ExampleInstrumentedTest {
         }
     }
 
+    @Test
+    fun mainActivity_swipeOnOverlayDoesNotTriggerMovement() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            waitForGameHostLaidOut(scenario)
+            val baseline = AtomicInteger(0)
+            scenario.onActivity { activity ->
+                attachedGameFragment(activity)
+                baseline.set(activity.resolvedSwipeCount)
+                // Dispatch swipes that start inside the top and bottom overlay regions; these
+                // sit on top of fragmentGameHost in the layout, so without overlay-aware hit
+                // testing they would otherwise be forwarded to the swipe gesture detector.
+                dispatchSwipeInsideView(activity, R.id.topOverlay)
+                dispatchSwipeInsideView(activity, R.id.bottomControls)
+            }
+            // Give the gesture detector a chance to (incorrectly) resolve swipes; if the
+            // hit-test exclusion is correct, resolvedSwipeCount must remain unchanged.
+            SystemClock.sleep(STEP_POLL_INTERVAL_MS * 4)
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            scenario.onActivity { activity ->
+                assertEquals(
+                    "Swipes starting on overlay UI must not trigger player moves",
+                    baseline.get(),
+                    activity.resolvedSwipeCount
+                )
+            }
+        }
+    }
+
+    private fun dispatchSwipeInsideView(activity: MainActivity, viewId: Int) {
+        val view = activity.findViewById<android.view.View>(viewId) ?: return
+        if (view.width <= 0 || view.height <= 0) return
+        val location = IntArray(2)
+        view.getLocationInWindow(location)
+        val originX = location[0].toFloat()
+        val originY = location[1].toFloat()
+        val width = view.width.toFloat()
+        val height = view.height.toFloat()
+        val centerX = originX + width / 2f
+        val centerY = originY + height / 2f
+        // Use a smaller span clamped to the overlay's size so the entire swipe stays inside
+        // the overlay region.
+        val span = minOf(width, height) * 0.4f
+        dispatchSwipe(activity, centerX - span / 2f, centerY, centerX + span / 2f, centerY)
+        dispatchSwipe(activity, centerX, centerY - span / 2f, centerX, centerY + span / 2f)
+    }
+
     private fun attachedGameFragment(activity: MainActivity): GameFragment {
         activity.supportFragmentManager.executePendingTransactions()
         val fragment = activity.supportFragmentManager.findFragmentById(R.id.fragmentGameHost) as? GameFragment
