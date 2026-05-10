@@ -3,10 +3,15 @@ package com.example.apktest
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.GestureDetector
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewConfiguration
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.Spinner
 import android.widget.TextView
+import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -24,6 +29,16 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private lateinit var speedText: TextView
     private lateinit var powerUpText: TextView
 
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal var resolvedSwipeCount: Int = 0
+        private set
+
+    private var swipeGestureDetector: GestureDetector? = null
+    private var swipeGestureActive: Boolean = false
+    private val gameHostWindowRect = android.graphics.Rect()
+    private val overlayWindowRect = android.graphics.Rect()
+    private val viewWindowLocation = IntArray(2)
+
     private val hudHandler = Handler(Looper.getMainLooper())
     private val hudRefreshRunnable = object : Runnable {
         override fun run() {
@@ -37,7 +52,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
 
-        val root = findViewById<android.view.View>(R.id.root)
+        val root = findViewById<View>(R.id.root)
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
@@ -55,6 +70,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         }
 
         setupControls()
+        setupSwipeControls()
     }
 
     override fun exit() {
@@ -134,6 +150,101 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         refreshHudSnapshot()
     }
 
+    private fun setupSwipeControls() {
+        val viewConfig = ViewConfiguration.get(this)
+        val minDistance = (viewConfig.scaledTouchSlop * SWIPE_DISTANCE_TOUCH_SLOP_MULTIPLIER).toFloat()
+        val minVelocity = viewConfig.scaledMinimumFlingVelocity.toFloat()
+        swipeGestureDetector = GestureDetector(
+            this,
+            object : GestureDetector.SimpleOnGestureListener() {
+                override fun onDown(e: MotionEvent): Boolean = true
+
+                override fun onFling(
+                    e1: MotionEvent?,
+                    e2: MotionEvent,
+                    velocityX: Float,
+                    velocityY: Float
+                ): Boolean {
+                    val start = e1 ?: return false
+                    val direction = SwipeDirectionResolver.resolve(
+                        deltaX = e2.x - start.x,
+                        deltaY = e2.y - start.y,
+                        velocityX = velocityX,
+                        velocityY = velocityY,
+                        minDistance = minDistance,
+                        minVelocity = minVelocity
+                    ) ?: return false
+                    resolvedSwipeCount++
+                    move(direction)
+                    return true
+                }
+            }
+        )
+    }
+
+    // Routes touches that begin inside the game host through the swipe detector before the
+    // regular dispatch path, so swipes are observed even when child views (e.g., the libGDX
+    // SurfaceView inside fragmentGameHost) consume the events. Touches that start on overlay
+    // UI (spinners/buttons) are NOT forwarded so scrolls/flings on controls don't trigger
+    // unintended player moves. We never consume the event here so existing dispatch behavior
+    // for child views and arrow-button controls is preserved.
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        val detector = swipeGestureDetector
+        if (detector != null) {
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    swipeGestureActive = isEventInsideGameHost(ev)
+                    if (swipeGestureActive) {
+                        detector.onTouchEvent(ev)
+                    }
+                }
+                MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
+                    if (swipeGestureActive) {
+                        detector.onTouchEvent(ev)
+                    }
+                    swipeGestureActive = false
+                }
+                else -> {
+                    if (swipeGestureActive) {
+                        detector.onTouchEvent(ev)
+                    }
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private fun isEventInsideGameHost(ev: MotionEvent): Boolean {
+        val gameHost = findViewById<View>(R.id.fragmentGameHost) ?: return false
+        if (!fillWindowRect(gameHost, gameHostWindowRect)) return false
+        // MotionEvent.x/y in Activity.dispatchTouchEvent are window/decor-relative, so compare
+        // against window-relative rects (getLocationInWindow + width/height) for consistent space.
+        val x = ev.x.toInt()
+        val y = ev.y.toInt()
+        if (!gameHostWindowRect.contains(x, y)) return false
+        // The fragment host spans the full screen and is overlapped by the top/bottom overlays;
+        // exclude touches that fall on those overlay regions so swipes/flings on spinners and
+        // arrow buttons don't trigger unintended player moves.
+        if (isInsideOverlay(R.id.topOverlay, x, y)) return false
+        if (isInsideOverlay(R.id.bottomControls, x, y)) return false
+        return true
+    }
+
+    private fun isInsideOverlay(viewId: Int, x: Int, y: Int): Boolean {
+        val overlay = findViewById<View>(viewId) ?: return false
+        if (!fillWindowRect(overlay, overlayWindowRect)) return false
+        return overlayWindowRect.contains(x, y)
+    }
+
+    private fun fillWindowRect(view: View, out: android.graphics.Rect): Boolean {
+        if (view.width <= 0 || view.height <= 0) return false
+        view.getLocationInWindow(viewWindowLocation)
+        val left = viewWindowLocation[0]
+        val top = viewWindowLocation[1]
+        out.set(left, top, left + view.width, top + view.height)
+        return true
+    }
+
     private fun refreshHudSnapshot() {
         val hud = gameFragment()?.hudState() ?: return
         statusText.text = getString(
@@ -169,5 +280,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     companion object {
         private const val HUD_REFRESH_INTERVAL_MS = 250L
+        // 4x touch slop requires a deliberate drag, reducing accidental move input from taps/jitter.
+        private const val SWIPE_DISTANCE_TOUCH_SLOP_MULTIPLIER = 4
     }
 }
