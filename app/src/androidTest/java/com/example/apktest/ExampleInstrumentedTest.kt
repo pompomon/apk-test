@@ -54,24 +54,26 @@ class ExampleInstrumentedTest {
     @Test
     fun mainActivity_fragmentHostAcceptsSwipeAndControlsRemainVisible() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            var initialSteps = 0
             scenario.onActivity { activity ->
                 val gameHost = activity.findViewById<android.view.View>(R.id.fragmentGameHost)
                 assertNotNull("Game host should be present", gameHost)
-                val fragment = activity.supportFragmentManager.findFragmentById(R.id.fragmentGameHost) as GameFragment
-                val initialSteps = fragment.hudState()?.steps ?: 0
+                val fragment = attachedGameFragment(activity)
+                initialSteps = fragment.hudState()?.steps ?: 0
 
                 dispatchSwipe(gameHost, startX = 200f, startY = 600f, endX = 200f, endY = 300f)
                 dispatchSwipe(gameHost, startX = 200f, startY = 300f, endX = 200f, endY = 600f)
                 dispatchSwipe(gameHost, startX = 300f, startY = 400f, endX = 50f, endY = 400f)
                 dispatchSwipe(gameHost, startX = 50f, startY = 400f, endX = 300f, endY = 400f)
+            }
 
-                SystemClock.sleep(300L)
-                val stepsAfterSwipes = fragment.hudState()?.steps ?: 0
-                assertTrue(
-                    "At least one swipe should enqueue and apply a manual move",
-                    stepsAfterSwipes > initialSteps
-                )
+            val stepsAfterSwipes = pollHudSteps(scenario, initialSteps)
+            assertTrue(
+                "At least one swipe should enqueue and apply a manual move",
+                stepsAfterSwipes > initialSteps
+            )
 
+            scenario.onActivity { activity ->
                 val controlIds = intArrayOf(
                     R.id.buttonUp,
                     R.id.buttonLeft,
@@ -85,6 +87,30 @@ class ExampleInstrumentedTest {
                 }
             }
         }
+    }
+
+    private fun attachedGameFragment(activity: MainActivity): GameFragment {
+        activity.supportFragmentManager.executePendingTransactions()
+        val fragment = activity.supportFragmentManager.findFragmentById(R.id.fragmentGameHost) as? GameFragment
+        assertNotNull("Game fragment should be attached", fragment)
+        return fragment as GameFragment
+    }
+
+    private fun pollHudSteps(
+        scenario: ActivityScenario<MainActivity>,
+        initialSteps: Int,
+        timeoutMs: Long = 2_000L
+    ): Int {
+        val deadline = SystemClock.uptimeMillis() + timeoutMs
+        var steps = initialSteps
+        while (SystemClock.uptimeMillis() < deadline && steps <= initialSteps) {
+            SystemClock.sleep(50L)
+            scenario.onActivity { activity ->
+                val fragment = activity.supportFragmentManager.findFragmentById(R.id.fragmentGameHost) as? GameFragment
+                steps = fragment?.hudState()?.steps ?: steps
+            }
+        }
+        return steps
     }
 
     private fun dispatchSwipe(
