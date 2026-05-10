@@ -29,11 +29,13 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private lateinit var speedText: TextView
     private lateinit var powerUpText: TextView
 
-    @VisibleForTesting
-    var resolvedSwipeCount: Int = 0
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal var resolvedSwipeCount: Int = 0
         private set
 
     private var swipeGestureDetector: GestureDetector? = null
+    private var swipeGestureActive: Boolean = false
+    private val gameHostWindowRect = android.graphics.Rect()
 
     private val hudHandler = Handler(Looper.getMainLooper())
     private val hudRefreshRunnable = object : Runnable {
@@ -178,13 +180,45 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         )
     }
 
-    // Routes every touch through the swipe detector before the regular dispatch path,
-    // so swipes are observed even when child views (e.g., the libGDX SurfaceView inside
-    // fragmentGameHost) consume the events. We never consume the event here so existing
-    // dispatch behavior for child views and arrow-button controls is preserved.
+    // Routes touches that begin inside the game host through the swipe detector before the
+    // regular dispatch path, so swipes are observed even when child views (e.g., the libGDX
+    // SurfaceView inside fragmentGameHost) consume the events. Touches that start on overlay
+    // UI (spinners/buttons) are NOT forwarded so scrolls/flings on controls don't trigger
+    // unintended player moves. We never consume the event here so existing dispatch behavior
+    // for child views and arrow-button controls is preserved.
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        swipeGestureDetector?.onTouchEvent(ev)
+        val detector = swipeGestureDetector
+        if (detector != null) {
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    swipeGestureActive = isEventInsideGameHost(ev)
+                    if (swipeGestureActive) {
+                        detector.onTouchEvent(ev)
+                    }
+                }
+                MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
+                    if (swipeGestureActive) {
+                        detector.onTouchEvent(ev)
+                    }
+                    swipeGestureActive = false
+                }
+                else -> {
+                    if (swipeGestureActive) {
+                        detector.onTouchEvent(ev)
+                    }
+                }
+            }
+        }
         return super.dispatchTouchEvent(ev)
+    }
+
+    private fun isEventInsideGameHost(ev: MotionEvent): Boolean {
+        val gameHost = findViewById<View>(R.id.fragmentGameHost) ?: return false
+        if (gameHost.width <= 0 || gameHost.height <= 0) return false
+        gameHost.getGlobalVisibleRect(gameHostWindowRect)
+        // ev coordinates from dispatchTouchEvent are in window/local-decor coords; getGlobalVisibleRect
+        // returns window-relative coords for the unobscured visible portion of the view.
+        return gameHostWindowRect.contains(ev.x.toInt(), ev.y.toInt())
     }
 
     private fun refreshHudSnapshot() {

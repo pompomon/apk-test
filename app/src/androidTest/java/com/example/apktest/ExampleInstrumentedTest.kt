@@ -56,10 +56,12 @@ class ExampleInstrumentedTest {
     fun mainActivity_fragmentHostAcceptsSwipeAndControlsRemainVisible() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             val initialSwipes = AtomicInteger(0)
+            // Wait for the game host to be laid out before dispatching swipes; on slower devices
+            // the host can be attached but not yet measured immediately after pending transactions.
+            waitForGameHostLaidOut(scenario)
             scenario.onActivity { activity ->
                 val gameHost = activity.findViewById<android.view.View>(R.id.fragmentGameHost)
                 assertNotNull("Game host should be present", gameHost)
-                // Ensure the game fragment is attached so its host has been measured/laid out.
                 attachedGameFragment(activity)
                 assertTrue(
                     "Game host should be laid out before dispatching swipes",
@@ -114,6 +116,27 @@ class ExampleInstrumentedTest {
         activity.supportFragmentManager.executePendingTransactions()
         val fragment = activity.supportFragmentManager.findFragmentById(R.id.fragmentGameHost) as? GameFragment
         return requireNotNull(fragment) { "Game fragment should be attached" }
+    }
+
+    private fun waitForGameHostLaidOut(scenario: ActivityScenario<MainActivity>) {
+        var laidOut = false
+        var attempts = 0
+        while (attempts < MAX_LAYOUT_POLL_ATTEMPTS && !laidOut) {
+            scenario.onActivity { activity ->
+                activity.supportFragmentManager.executePendingTransactions()
+                val gameHost = activity.findViewById<android.view.View>(R.id.fragmentGameHost)
+                laidOut = gameHost != null &&
+                    androidx.core.view.ViewCompat.isLaidOut(gameHost) &&
+                    gameHost.width > 0 &&
+                    gameHost.height > 0
+            }
+            if (!laidOut) {
+                SystemClock.sleep(LAYOUT_POLL_INTERVAL_MS)
+                InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            }
+            attempts++
+        }
+        assertTrue("Game host should be laid out within timeout", laidOut)
     }
 
     private fun pollResolvedSwipes(
@@ -178,5 +201,7 @@ class ExampleInstrumentedTest {
         private const val STEP_POLL_INTERVAL_MS = 50L
         // Swipe spans 60% of the host's measured dimension along the swipe axis.
         private const val SWIPE_REL_SPAN = 0.6f
+        private const val MAX_LAYOUT_POLL_ATTEMPTS = 40
+        private const val LAYOUT_POLL_INTERVAL_MS = 50L
     }
 }
