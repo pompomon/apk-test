@@ -19,6 +19,7 @@ class MazeRenderer {
 
     private var cachedWidth = -1
     private var cachedHeight = -1
+    private var mazeOriginX = 0f
 
     fun resize(width: Int, height: Int) {
         viewport.update(width, height, true)
@@ -26,6 +27,7 @@ class MazeRenderer {
 
     fun render(engine: GameEngine) {
         updateViewportForMaze(engine.maze)
+        mazeOriginX = (viewport.worldWidth - engine.maze.width.toFloat()) / 2f
 
         ScreenUtils.clear(0.08f, 0.08f, 0.1f, 1f)
         viewport.apply(true)
@@ -55,10 +57,10 @@ class MazeRenderer {
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
         shapes.color.set(0.12f, 0.12f, 0.16f, 1f)
-        shapes.rect(0f, 0f, maze.width.toFloat(), maze.height.toFloat())
+        shapes.rect(mazeOriginX, 0f, maze.width.toFloat(), maze.height.toFloat())
 
         shapes.color.set(0.2f, 0.8f, 0.3f, 1f)
-        shapes.rect(maze.exit.x + 0.2f, maze.exit.y + 0.2f, 0.6f, 0.6f)
+        shapes.rect(mazeOriginX + maze.exit.x + 0.2f, maze.exit.y + 0.2f, 0.6f, 0.6f)
         shapes.end()
 
         shapes.begin(ShapeRenderer.ShapeType.Line)
@@ -70,16 +72,36 @@ class MazeRenderer {
         for (y in 0 until maze.height) {
             for (x in 0 until maze.width) {
                 if (maze.hasWall(x, y, Direction.NORTH)) {
-                    shapes.line(x.toFloat(), (y + 1).toFloat(), (x + 1).toFloat(), (y + 1).toFloat())
+                    shapes.line(
+                        mazeOriginX + x.toFloat(),
+                        (y + 1).toFloat(),
+                        mazeOriginX + (x + 1).toFloat(),
+                        (y + 1).toFloat()
+                    )
                 }
                 if (maze.hasWall(x, y, Direction.WEST)) {
-                    shapes.line(x.toFloat(), y.toFloat(), x.toFloat(), (y + 1).toFloat())
+                    shapes.line(
+                        mazeOriginX + x.toFloat(),
+                        y.toFloat(),
+                        mazeOriginX + x.toFloat(),
+                        (y + 1).toFloat()
+                    )
                 }
                 if (y == 0 && maze.hasWall(x, y, Direction.SOUTH)) {
-                    shapes.line(x.toFloat(), 0f, (x + 1).toFloat(), 0f)
+                    shapes.line(
+                        mazeOriginX + x.toFloat(),
+                        0f,
+                        mazeOriginX + (x + 1).toFloat(),
+                        0f
+                    )
                 }
                 if (x == maze.width - 1 && maze.hasWall(x, y, Direction.EAST)) {
-                    shapes.line((x + 1).toFloat(), y.toFloat(), (x + 1).toFloat(), (y + 1).toFloat())
+                    shapes.line(
+                        mazeOriginX + (x + 1).toFloat(),
+                        y.toFloat(),
+                        mazeOriginX + (x + 1).toFloat(),
+                        (y + 1).toFloat()
+                    )
                 }
             }
         }
@@ -91,11 +113,11 @@ class MazeRenderer {
 
         val player = engine.player
         shapes.color.set(0.25f, 0.5f, 1f, 1f)
-        shapes.circle(player.position.x + 0.5f, player.position.y + 0.5f, 0.28f, 24)
+        shapes.circle(mazeOriginX + player.position.x + 0.5f, player.position.y + 0.5f, 0.28f, 24)
 
         shapes.color.set(0.9f, 0.25f, 0.25f, 1f)
         engine.npcs.forEach { npc ->
-            shapes.circle(npc.position.x + 0.5f, npc.position.y + 0.5f, 0.24f, 20)
+            shapes.circle(mazeOriginX + npc.position.x + 0.5f, npc.position.y + 0.5f, 0.24f, 20)
         }
 
         shapes.end()
@@ -107,7 +129,7 @@ class MazeRenderer {
             PixelPowerUpIconRenderer.draw(
                 shapes = shapes,
                 type = pickup.type,
-                x = pickup.position.x + 0.5f,
+                x = mazeOriginX + pickup.position.x + 0.5f,
                 y = pickup.position.y + 0.5f,
                 size = 0.54f
             )

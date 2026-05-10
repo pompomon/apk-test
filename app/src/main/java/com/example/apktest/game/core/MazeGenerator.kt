@@ -7,7 +7,7 @@ object MazeGenerator {
         val random = Random(seed)
         val cells = IntArray(width * height) { Maze.ALL_WALLS }
 
-        val start = GridPos(0, 0)
+        val start = if (random.nextBoolean()) GridPos(0, 0) else GridPos(width - 1, 0)
         // The exit is computed before widening so the widening pass can explicitly
         // protect it. Once chosen, the exit is kept fixed even if widening adds
         // new edges, to keep the protection contract meaningful.

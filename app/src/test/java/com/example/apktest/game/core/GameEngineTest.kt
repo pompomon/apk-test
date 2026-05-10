@@ -126,6 +126,16 @@ class GameEngineTest {
     }
 
     @Test
+    fun hudState_reflectsPresetNpcSpeedAfterDifficultyChange() {
+        val engine = GameEngine(testPreset(), seed)
+        engine.setDifficulty(DifficultyPresets.EASY)
+        assertEquals(DifficultyPresets.EASY.npcMovesPerSecond, engine.hudState().npcSpeed, 0.0001f)
+
+        engine.setDifficulty(DifficultyPresets.MEDIUM)
+        assertEquals(DifficultyPresets.MEDIUM.npcMovesPerSecond, engine.hudState().npcSpeed, 0.0001f)
+    }
+
+    @Test
     fun collectingSpeedUp_updatesHudSpeedAndExpires() {
         val engine = GameEngine(testPreset(), seed)
         val baseSpeed = engine.hudState().playerSpeed
