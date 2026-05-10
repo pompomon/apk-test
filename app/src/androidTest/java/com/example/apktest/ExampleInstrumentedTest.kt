@@ -92,23 +92,21 @@ class ExampleInstrumentedTest {
     private fun attachedGameFragment(activity: MainActivity): GameFragment {
         activity.supportFragmentManager.executePendingTransactions()
         val fragment = activity.supportFragmentManager.findFragmentById(R.id.fragmentGameHost) as? GameFragment
-        assertNotNull("Game fragment should be attached", fragment)
-        return fragment ?: throw AssertionError("Game fragment should be attached")
+        return requireNotNull(fragment) { "Game fragment should be attached" }
     }
 
     private fun pollHudSteps(
         scenario: ActivityScenario<MainActivity>,
-        initialSteps: Int,
-        timeoutMs: Long = 2_000L
+        initialSteps: Int
     ): Int {
-        val deadline = SystemClock.uptimeMillis() + timeoutMs
         var steps = initialSteps
-        while (SystemClock.uptimeMillis() < deadline && steps <= initialSteps) {
-            SystemClock.sleep(50L)
+        repeat(MAX_STEP_POLL_ATTEMPTS) {
             scenario.onActivity { activity ->
                 val fragment = activity.supportFragmentManager.findFragmentById(R.id.fragmentGameHost) as? GameFragment
                 steps = fragment?.hudState()?.steps ?: steps
             }
+            if (steps > initialSteps) return steps
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
         }
         return steps
     }
@@ -154,5 +152,9 @@ class ExampleInstrumentedTest {
             move.recycle()
             up.recycle()
         }
+    }
+
+    companion object {
+        private const val MAX_STEP_POLL_ATTEMPTS = 40
     }
 }
