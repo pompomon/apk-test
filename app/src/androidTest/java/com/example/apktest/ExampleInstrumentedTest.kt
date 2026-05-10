@@ -103,6 +103,7 @@ class ExampleInstrumentedTest {
         var attempts = 0
         while (attempts < MAX_STEP_POLL_ATTEMPTS && steps <= initialSteps) {
             if (attempts > 0) {
+                SystemClock.sleep(STEP_POLL_INTERVAL_MS)
                 InstrumentationRegistry.getInstrumentation().waitForIdleSync()
             }
             scenario.onActivity { activity ->
@@ -158,7 +159,8 @@ class ExampleInstrumentedTest {
     }
 
     companion object {
-        // 40 idle-sync polls provides a generous upper bound while keeping the test bounded.
+        // 40 attempts with up to 39 idle-sync waits provides a bounded but generous upper limit.
         private const val MAX_STEP_POLL_ATTEMPTS = 40
+        private const val STEP_POLL_INTERVAL_MS = 50L
     }
 }
