@@ -33,6 +33,8 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     var resolvedSwipeCount: Int = 0
         private set
 
+    private var swipeGestureDetector: GestureDetector? = null
+
     private val hudHandler = Handler(Looper.getMainLooper())
     private val hudRefreshRunnable = object : Runnable {
         override fun run() {
@@ -145,11 +147,10 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     }
 
     private fun setupSwipeControls() {
-        val gameHost = findViewById<View>(R.id.fragmentGameHost)
         val viewConfig = ViewConfiguration.get(this)
         val minDistance = (viewConfig.scaledTouchSlop * SWIPE_DISTANCE_TOUCH_SLOP_MULTIPLIER).toFloat()
         val minVelocity = viewConfig.scaledMinimumFlingVelocity.toFloat()
-        val detector = GestureDetector(
+        swipeGestureDetector = GestureDetector(
             this,
             object : GestureDetector.SimpleOnGestureListener() {
                 override fun onDown(e: MotionEvent): Boolean = true
@@ -175,11 +176,15 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
                 }
             }
         )
+    }
 
-        gameHost.setOnTouchListener { _, event ->
-            detector.onTouchEvent(event)
-            false
-        }
+    // Routes every touch through the swipe detector before the regular dispatch path,
+    // so swipes are observed even when child views (e.g., the libGDX SurfaceView inside
+    // fragmentGameHost) consume the events. We never consume the event here so existing
+    // dispatch behavior for child views and arrow-button controls is preserved.
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        swipeGestureDetector?.onTouchEvent(ev)
+        return super.dispatchTouchEvent(ev)
     }
 
     private fun refreshHudSnapshot() {

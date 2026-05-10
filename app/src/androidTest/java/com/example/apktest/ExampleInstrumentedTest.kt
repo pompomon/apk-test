@@ -67,19 +67,25 @@ class ExampleInstrumentedTest {
                 )
                 initialSwipes.set(activity.resolvedSwipeCount)
 
+                // Translate gameHost-relative swipe coordinates into window coordinates so
+                // dispatching through the activity hits inside the game host's bounds.
+                val location = IntArray(2)
+                gameHost.getLocationInWindow(location)
+                val originX = location[0].toFloat()
+                val originY = location[1].toFloat()
                 val width = gameHost.width.toFloat()
                 val height = gameHost.height.toFloat()
-                val centerX = width / 2f
-                val centerY = height / 2f
+                val centerX = originX + width / 2f
+                val centerY = originY + height / 2f
                 val horizontalSpan = width * SWIPE_REL_SPAN
                 val verticalSpan = height * SWIPE_REL_SPAN
 
                 // Vertical and horizontal swipes derived from the host's measured bounds so they
                 // remain inside the view across densities/orientations.
-                dispatchSwipe(gameHost, centerX, centerY + verticalSpan / 2f, centerX, centerY - verticalSpan / 2f)
-                dispatchSwipe(gameHost, centerX, centerY - verticalSpan / 2f, centerX, centerY + verticalSpan / 2f)
-                dispatchSwipe(gameHost, centerX + horizontalSpan / 2f, centerY, centerX - horizontalSpan / 2f, centerY)
-                dispatchSwipe(gameHost, centerX - horizontalSpan / 2f, centerY, centerX + horizontalSpan / 2f, centerY)
+                dispatchSwipe(activity, centerX, centerY + verticalSpan / 2f, centerX, centerY - verticalSpan / 2f)
+                dispatchSwipe(activity, centerX, centerY - verticalSpan / 2f, centerX, centerY + verticalSpan / 2f)
+                dispatchSwipe(activity, centerX + horizontalSpan / 2f, centerY, centerX - horizontalSpan / 2f, centerY)
+                dispatchSwipe(activity, centerX - horizontalSpan / 2f, centerY, centerX + horizontalSpan / 2f, centerY)
             }
 
             val finalSwipes = pollResolvedSwipes(scenario, initialSwipes.get())
@@ -130,7 +136,7 @@ class ExampleInstrumentedTest {
     }
 
     private fun dispatchSwipe(
-        target: android.view.View,
+        activity: android.app.Activity,
         startX: Float,
         startY: Float,
         endX: Float,
@@ -159,7 +165,7 @@ class ExampleInstrumentedTest {
         )
         try {
             for (event in events) {
-                target.dispatchTouchEvent(event)
+                activity.dispatchTouchEvent(event)
             }
         } finally {
             events.forEach { it.recycle() }
