@@ -155,6 +155,7 @@ class ExampleInstrumentedTest {
     }
 
     companion object {
+        // 40 idle-sync polls provides a generous upper bound while keeping the test bounded.
         private const val MAX_STEP_POLL_ATTEMPTS = 40
     }
 }
