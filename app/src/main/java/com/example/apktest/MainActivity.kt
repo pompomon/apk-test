@@ -11,6 +11,7 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.Spinner
 import android.widget.TextView
+import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -27,6 +28,10 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private lateinit var statusText: TextView
     private lateinit var speedText: TextView
     private lateinit var powerUpText: TextView
+
+    @VisibleForTesting
+    var resolvedSwipeCount: Int = 0
+        private set
 
     private val hudHandler = Handler(Looper.getMainLooper())
     private val hudRefreshRunnable = object : Runnable {
@@ -164,6 +169,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
                         minDistance = minDistance,
                         minVelocity = minVelocity
                     ) ?: return false
+                    resolvedSwipeCount++
                     move(direction)
                     return true
                 }

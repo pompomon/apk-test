@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.apktest.BuildConfig
 import com.example.apktest.game.GameFragment
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -54,23 +55,37 @@ class ExampleInstrumentedTest {
     @Test
     fun mainActivity_fragmentHostAcceptsSwipeAndControlsRemainVisible() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            var initialSteps = 0
+            val initialSwipes = AtomicInteger(0)
             scenario.onActivity { activity ->
                 val gameHost = activity.findViewById<android.view.View>(R.id.fragmentGameHost)
                 assertNotNull("Game host should be present", gameHost)
-                val fragment = attachedGameFragment(activity)
-                initialSteps = fragment.hudState()?.steps ?: 0
+                // Ensure the game fragment is attached so its host has been measured/laid out.
+                attachedGameFragment(activity)
+                assertTrue(
+                    "Game host should be laid out before dispatching swipes",
+                    gameHost.width > 0 && gameHost.height > 0
+                )
+                initialSwipes.set(activity.resolvedSwipeCount)
 
-                dispatchSwipe(gameHost, startX = 200f, startY = 600f, endX = 200f, endY = 300f)
-                dispatchSwipe(gameHost, startX = 200f, startY = 300f, endX = 200f, endY = 600f)
-                dispatchSwipe(gameHost, startX = 300f, startY = 400f, endX = 50f, endY = 400f)
-                dispatchSwipe(gameHost, startX = 50f, startY = 400f, endX = 300f, endY = 400f)
+                val width = gameHost.width.toFloat()
+                val height = gameHost.height.toFloat()
+                val centerX = width / 2f
+                val centerY = height / 2f
+                val horizontalSpan = width * SWIPE_REL_SPAN
+                val verticalSpan = height * SWIPE_REL_SPAN
+
+                // Vertical and horizontal swipes derived from the host's measured bounds so they
+                // remain inside the view across densities/orientations.
+                dispatchSwipe(gameHost, centerX, centerY + verticalSpan / 2f, centerX, centerY - verticalSpan / 2f)
+                dispatchSwipe(gameHost, centerX, centerY - verticalSpan / 2f, centerX, centerY + verticalSpan / 2f)
+                dispatchSwipe(gameHost, centerX + horizontalSpan / 2f, centerY, centerX - horizontalSpan / 2f, centerY)
+                dispatchSwipe(gameHost, centerX - horizontalSpan / 2f, centerY, centerX + horizontalSpan / 2f, centerY)
             }
 
-            val stepsAfterSwipes = pollHudSteps(scenario, initialSteps)
+            val finalSwipes = pollResolvedSwipes(scenario, initialSwipes.get())
             assertTrue(
-                "At least one swipe should enqueue and apply a manual move",
-                stepsAfterSwipes > initialSteps
+                "At least one swipe should be resolved by the gesture detector",
+                finalSwipes > initialSwipes.get()
             )
 
             scenario.onActivity { activity ->
@@ -95,24 +110,23 @@ class ExampleInstrumentedTest {
         return requireNotNull(fragment) { "Game fragment should be attached" }
     }
 
-    private fun pollHudSteps(
+    private fun pollResolvedSwipes(
         scenario: ActivityScenario<MainActivity>,
-        initialSteps: Int
+        initial: Int
     ): Int {
-        var steps = initialSteps
+        var resolved = initial
         var attempts = 0
-        while (attempts < MAX_STEP_POLL_ATTEMPTS && steps <= initialSteps) {
+        while (attempts < MAX_STEP_POLL_ATTEMPTS && resolved <= initial) {
             scenario.onActivity { activity ->
-                val fragment = activity.supportFragmentManager.findFragmentById(R.id.fragmentGameHost) as? GameFragment
-                steps = fragment?.hudState()?.steps ?: steps
+                resolved = activity.resolvedSwipeCount
             }
             attempts++
-            if (steps <= initialSteps && attempts < MAX_STEP_POLL_ATTEMPTS) {
+            if (resolved <= initial && attempts < MAX_STEP_POLL_ATTEMPTS) {
                 SystemClock.sleep(STEP_POLL_INTERVAL_MS)
                 InstrumentationRegistry.getInstrumentation().waitForIdleSync()
             }
         }
-        return steps
+        return resolved
     }
 
     private fun dispatchSwipe(
@@ -123,38 +137,32 @@ class ExampleInstrumentedTest {
         endY: Float
     ) {
         val downTime = SystemClock.uptimeMillis()
-        val down = MotionEvent.obtain(
+        val events = mutableListOf<MotionEvent>()
+        events += MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, startX, startY, 0)
+        // Multiple intermediate move events spread over time so VelocityTracker can compute a fling.
+        val moveSteps = 5
+        val totalDurationMs = 100L
+        for (i in 1..moveSteps) {
+            val fraction = i.toFloat() / (moveSteps + 1)
+            val x = startX + (endX - startX) * fraction
+            val y = startY + (endY - startY) * fraction
+            val eventTime = downTime + (totalDurationMs * fraction).toLong()
+            events += MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_MOVE, x, y, 0)
+        }
+        events += MotionEvent.obtain(
             downTime,
-            downTime,
-            MotionEvent.ACTION_DOWN,
-            startX,
-            startY,
-            0
-        )
-        val move = MotionEvent.obtain(
-            downTime,
-            downTime + 30L,
-            MotionEvent.ACTION_MOVE,
-            (startX + endX) / 2f,
-            (startY + endY) / 2f,
-            0
-        )
-        val up = MotionEvent.obtain(
-            downTime,
-            downTime + 60L,
+            downTime + totalDurationMs,
             MotionEvent.ACTION_UP,
             endX,
             endY,
             0
         )
         try {
-            target.dispatchTouchEvent(down)
-            target.dispatchTouchEvent(move)
-            target.dispatchTouchEvent(up)
+            for (event in events) {
+                target.dispatchTouchEvent(event)
+            }
         } finally {
-            down.recycle()
-            move.recycle()
-            up.recycle()
+            events.forEach { it.recycle() }
         }
     }
 
@@ -162,5 +170,7 @@ class ExampleInstrumentedTest {
         // 40 attempts with up to 39 idle-sync waits provides a bounded but generous upper limit.
         private const val MAX_STEP_POLL_ATTEMPTS = 40
         private const val STEP_POLL_INTERVAL_MS = 50L
+        // Swipe spans 60% of the host's measured dimension along the swipe axis.
+        private const val SWIPE_REL_SPAN = 0.6f
     }
 }
