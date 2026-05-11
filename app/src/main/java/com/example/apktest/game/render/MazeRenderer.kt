@@ -160,6 +160,7 @@ class MazeRenderer {
             PowerUpType.SPEED_UP -> Color(1f, 0.91f, 0.3f, 1f)
             PowerUpType.FREEZE -> Color(0.63f, 0.9f, 1f, 1f)
             PowerUpType.BLAST -> Color(1f, 0.45f, 0.2f, 1f)
+            PowerUpType.GHOST_MODE -> Color(0.82f, 0.88f, 1f, 1f)
         }
 
         private fun patternRowsFor(type: PowerUpType): Array<String> = when (type) {
@@ -196,6 +197,14 @@ class MazeRenderer {
                 "11011",
                 "11111",
                 "11011",
+                "10101"
+            )
+            // Ghost silhouette: rounded top, two eye gaps, wavy bottom.
+            PowerUpType.GHOST_MODE -> arrayOf(
+                "01110",
+                "11111",
+                "10101",
+                "11111",
                 "10101"
             )
         }

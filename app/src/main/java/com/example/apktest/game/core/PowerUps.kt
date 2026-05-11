@@ -67,6 +67,15 @@ enum class PowerUpType(
             iconId = "blast",
             stackPolicy = PowerUpStackPolicy.IGNORE_IF_ACTIVE
         )
+    ),
+    GHOST_MODE(
+        label = "Ghost Mode",
+        metadata = PowerUpMetadata(
+            kind = PowerUpEffectKind.TIMED,
+            defaultDurationSeconds = 3f,
+            iconId = "ghost_mode",
+            stackPolicy = PowerUpStackPolicy.REFRESH_DURATION
+        )
     )
 }
 

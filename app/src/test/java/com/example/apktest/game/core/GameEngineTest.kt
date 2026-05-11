@@ -204,6 +204,106 @@ class GameEngineTest {
         assertTrue(engine.navigator.bfsPath(engine.player.position, engine.maze.exit).isNotEmpty())
     }
 
+    @Test
+    fun ghostMode_activatesTimedEffectForThreeSeconds() {
+        val engine = GameEngine(testPreset(), seed)
+        collectPowerUp(engine, PowerUpType.GHOST_MODE)
+
+        val active = engine.activePowerUps.first { it.type == PowerUpType.GHOST_MODE }
+        assertEquals(
+            PowerUpType.GHOST_MODE.metadata.defaultDurationSeconds,
+            (active.endsAtSeconds ?: 0f) - active.startedAtSeconds,
+            0.0001f
+        )
+        assertEquals(3f, PowerUpType.GHOST_MODE.metadata.defaultDurationSeconds, 0.0001f)
+    }
+
+    @Test
+    fun ghostMode_letsPlayerWalkThroughWalls() {
+        val engine = GameEngine(testPreset(), seed)
+        // Find a wall adjacent to a known cell and try to move through it.
+        val origin = findCellWithAnyWall(engine.maze)
+        engine.player.position = origin
+        val blockedDirection = findBlockedDirection(engine.maze, origin)
+
+        engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        val stepsBefore = engine.steps
+
+        // Without ghost mode the move is blocked.
+        engine.queueManualMove(blockedDirection)
+        engine.update(1f / engine.difficulty.playerMovesPerSecond + 0.001f)
+        assertEquals(origin, engine.player.position)
+        assertEquals(stepsBefore, engine.steps)
+
+        // With ghost mode active, the same blocked move succeeds.
+        collectPowerUp(engine, PowerUpType.GHOST_MODE)
+        engine.player.position = origin
+        val stepsBeforeGhost = engine.steps
+        engine.queueManualMove(blockedDirection)
+        engine.update(1f / engine.difficulty.playerMovesPerSecond + 0.001f)
+        assertEquals(origin.moved(blockedDirection), engine.player.position)
+        assertTrue(engine.steps > stepsBeforeGhost)
+    }
+
+    @Test
+    fun ghostMode_expiresAfterDurationAndWallsBlockAgain() {
+        val engine = GameEngine(testPreset(), seed)
+        val origin = findCellWithAnyWall(engine.maze)
+        val blockedDirection = findBlockedDirection(engine.maze, origin)
+
+        collectPowerUp(engine, PowerUpType.GHOST_MODE)
+        engine.player.position = origin
+        engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        // Advance well past the 3-second ghost duration.
+        engine.update(PowerUpType.GHOST_MODE.metadata.defaultDurationSeconds + 0.5f)
+        engine.player.position = origin
+
+        val stepsBefore = engine.steps
+        engine.queueManualMove(blockedDirection)
+        engine.update(1f / engine.difficulty.playerMovesPerSecond + 0.001f)
+        assertEquals(origin, engine.player.position)
+        assertEquals(stepsBefore, engine.steps)
+    }
+
+    @Test
+    fun ghostMode_doesNotPreventLossOnNpcCollision() {
+        val engine = GameEngine(testPreset(npcCount = 1), seed)
+        collectPowerUp(engine, PowerUpType.GHOST_MODE)
+        engine.player.position = engine.npcs.first().position
+
+        engine.update(1f)
+
+        assertEquals(GameStatus.LOSE, engine.status)
+    }
+
+    private fun findCellWithAnyWall(maze: Maze): GridPos {
+        for (y in 0 until maze.height) {
+            for (x in 0 until maze.width) {
+                val pos = GridPos(x, y)
+                if (pos == maze.start || pos == maze.exit) continue
+                val blocked = Direction.entries.firstOrNull { direction ->
+                    val next = pos.moved(direction)
+                    maze.inBounds(next) &&
+                        next != maze.exit &&
+                        next != maze.start &&
+                        maze.hasWall(pos, direction)
+                }
+                if (blocked != null) return pos
+            }
+        }
+        throw IllegalStateException("No interior wall found in maze ${maze.width}x${maze.height}")
+    }
+
+    private fun findBlockedDirection(maze: Maze, origin: GridPos): Direction {
+        return Direction.entries.first { direction ->
+            val next = origin.moved(direction)
+            maze.inBounds(next) &&
+                next != maze.exit &&
+                next != maze.start &&
+                maze.hasWall(origin, direction)
+        }
+    }
+
     private fun collectPowerUp(engine: GameEngine, type: PowerUpType) {
         val pickup = engine.spawnedPowerUps.first { it.type == type }
         movePlayerTo(engine, pickup.position)

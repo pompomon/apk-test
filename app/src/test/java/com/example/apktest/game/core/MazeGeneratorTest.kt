@@ -36,7 +36,7 @@ class MazeGeneratorTest {
     fun generatedMaze_containsWideCorridorSegments() {
         val maze = MazeGenerator.generate(width = 14, height = 20, seed = 42L)
         assertStartIsTopCorner(maze)
-        assertTrue("Expected at least one widened corridor segment", hasWideCorridorSegment(maze))
+        assertEveryCorridorIsAtLeastTwoWide(maze)
     }
 
     @Test
@@ -69,35 +69,40 @@ class MazeGeneratorTest {
         return visited
     }
 
-    private fun hasWideCorridorSegment(maze: Maze): Boolean {
+    private fun assertEveryCorridorIsAtLeastTwoWide(maze: Maze) {
         for (y in 0 until maze.height) {
             for (x in 0 until maze.width) {
                 val origin = GridPos(x, y)
-                if (hasWideSegmentFrom(maze, origin, Direction.EAST)) return true
-                if (hasWideSegmentFrom(maze, origin, Direction.NORTH)) return true
+                assertTrue(
+                    "Cell $origin is not part of any fully-open 2x2 block",
+                    isInsideAnyOpen2x2Block(maze, origin)
+                )
             }
         }
-        return false
     }
 
-    private fun hasWideSegmentFrom(maze: Maze, origin: GridPos, primaryDirection: Direction): Boolean {
-        if (!maze.canMove(origin, primaryDirection)) return false
-        val forward = origin.moved(primaryDirection)
-        val sideOptions = if (primaryDirection == Direction.NORTH || primaryDirection == Direction.SOUTH) {
-            listOf(Direction.EAST, Direction.WEST)
-        } else {
-            listOf(Direction.NORTH, Direction.SOUTH)
-        }
+    private fun isInsideAnyOpen2x2Block(maze: Maze, cell: GridPos): Boolean {
+        // The cell can be at any of the 4 corners of a 2x2 block; check each
+        // candidate block by its south-west origin.
+        val candidates = listOf(
+            GridPos(cell.x, cell.y),
+            GridPos(cell.x - 1, cell.y),
+            GridPos(cell.x, cell.y - 1),
+            GridPos(cell.x - 1, cell.y - 1)
+        )
+        return candidates.any { isOpen2x2Block(maze, it) }
+    }
 
-        return sideOptions.any { sideDirection ->
-            val sideOrigin = origin.moved(sideDirection)
-            val sideForward = forward.moved(sideDirection)
-            maze.inBounds(sideOrigin) &&
-                maze.inBounds(sideForward) &&
-                maze.canMove(origin, sideDirection) &&
-                maze.canMove(forward, sideDirection) &&
-                maze.canMove(sideOrigin, primaryDirection)
-        }
+    private fun isOpen2x2Block(maze: Maze, sw: GridPos): Boolean {
+        val se = GridPos(sw.x + 1, sw.y)
+        val nw = GridPos(sw.x, sw.y + 1)
+        if (!maze.inBounds(sw) || !maze.inBounds(se) || !maze.inBounds(nw)) return false
+        // Block is open iff there is no wall between any pair of adjacent cells
+        // inside the 2x2 region.
+        return maze.canMove(sw, Direction.EAST) &&
+            maze.canMove(nw, Direction.EAST) &&
+            maze.canMove(sw, Direction.NORTH) &&
+            maze.canMove(se, Direction.NORTH)
     }
 
     private fun assertStartIsTopCorner(maze: Maze) {
