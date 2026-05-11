@@ -12,9 +12,11 @@ import com.example.apktest.R
 import com.example.apktest.game.core.PowerUpType
 
 /**
- * Builds and shows the power-up legend dialog. The contents are generated
- * programmatically from [PowerUpType.entries] so any new power-up added to the
- * enum automatically appears in the legend.
+ * Builds and shows the power-up legend dialog. Rows are generated from
+ * [PowerUpType.entries] and each row reads `label` and `description` directly
+ * from the enum, which is the single source of truth (shared with the HUD).
+ * Any new [PowerUpType] therefore automatically appears in the legend without
+ * additional wiring or string resources.
  */
 object LegendDialog {
     fun show(context: Context) {
@@ -51,9 +53,7 @@ object LegendDialog {
             row.addView(icon)
 
             val text = TextView(context).apply {
-                val labelRes = labelStringRes(type)
-                val descRes = descriptionStringRes(type)
-                text = context.getString(labelRes) + "\n" + context.getString(descRes)
+                text = type.label + "\n" + type.description
                 setPadding(dp(context, 12f), 0, 0, 0)
                 layoutParams = LinearLayout.LayoutParams(
                     0,
@@ -71,24 +71,6 @@ object LegendDialog {
             .setView(scroll)
             .setPositiveButton(R.string.legend_close, null)
             .show()
-    }
-
-    private fun labelStringRes(type: PowerUpType): Int = when (type) {
-        PowerUpType.INVISIBILITY -> R.string.powerup_label_invisibility
-        PowerUpType.TELEPORT -> R.string.powerup_label_teleport
-        PowerUpType.SPEED_UP -> R.string.powerup_label_speed_up
-        PowerUpType.FREEZE -> R.string.powerup_label_freeze
-        PowerUpType.BLAST -> R.string.powerup_label_blast
-        PowerUpType.GHOST_MODE -> R.string.powerup_label_ghost_mode
-    }
-
-    private fun descriptionStringRes(type: PowerUpType): Int = when (type) {
-        PowerUpType.INVISIBILITY -> R.string.powerup_desc_invisibility
-        PowerUpType.TELEPORT -> R.string.powerup_desc_teleport
-        PowerUpType.SPEED_UP -> R.string.powerup_desc_speed_up
-        PowerUpType.FREEZE -> R.string.powerup_desc_freeze
-        PowerUpType.BLAST -> R.string.powerup_desc_blast
-        PowerUpType.GHOST_MODE -> R.string.powerup_desc_ghost_mode
     }
 
     private fun dp(context: Context, value: Float): Int {

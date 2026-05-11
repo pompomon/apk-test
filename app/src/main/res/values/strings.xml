@@ -30,18 +30,6 @@
     <string name="legend">Legend</string>
     <string name="legend_title">Power-up Legend</string>
     <string name="legend_close">Close</string>
-    <string name="powerup_label_invisibility">Invisibility</string>
-    <string name="powerup_label_teleport">Teleport</string>
-    <string name="powerup_label_speed_up">Speed-up</string>
-    <string name="powerup_label_freeze">Freeze</string>
-    <string name="powerup_label_blast">Blast</string>
-    <string name="powerup_label_ghost_mode">Ghost Mode</string>
-    <string name="powerup_desc_invisibility">Hides the player from NPCs and prevents capture while active.</string>
-    <string name="powerup_desc_teleport">Instantly relocates the player to a random walkable cell that still has a path to the exit.</string>
-    <string name="powerup_desc_speed_up">Doubles the player\'s movement speed for a short duration.</string>
-    <string name="powerup_desc_freeze">Freezes all NPCs in place; the player cannot be caught while active.</string>
-    <string name="powerup_desc_blast">Instantly removes the walls around the player\'s current cell.</string>
-    <string name="powerup_desc_ghost_mode">Lets the player walk through walls for 3 seconds. Does not prevent capture.</string>
 
     <!-- Setup screen -->
     <string name="setup_title">Maze Escape — Setup</string>
