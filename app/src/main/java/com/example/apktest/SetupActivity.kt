@@ -26,13 +26,19 @@ class SetupActivity : AppCompatActivity() {
         setContentView(R.layout.activity_setup)
 
         val root = findViewById<android.view.View>(R.id.setupRoot)
+        // Capture the layout-defined padding once so the inset listener does
+        // not compound padding when re-dispatched (e.g., on config changes).
+        val initialPaddingLeft = root.paddingLeft
+        val initialPaddingTop = root.paddingTop
+        val initialPaddingRight = root.paddingRight
+        val initialPaddingBottom = root.paddingBottom
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.setPadding(
-                view.paddingLeft + bars.left,
-                view.paddingTop + bars.top,
-                view.paddingRight + bars.right,
-                view.paddingBottom + bars.bottom
+                initialPaddingLeft + bars.left,
+                initialPaddingTop + bars.top,
+                initialPaddingRight + bars.right,
+                initialPaddingBottom + bars.bottom
             )
             insets
         }

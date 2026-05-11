@@ -33,10 +33,11 @@ class MazeGeneratorTest {
     }
 
     @Test
-    fun generatedMaze_containsWideCorridorSegments() {
+    fun generatedMaze_everyCorridorIsAtLeastTwoWide() {
         val maze = MazeGenerator.generate(width = 14, height = 20, seed = 42L)
         assertStartIsTopCorner(maze)
         assertEveryCorridorIsAtLeastTwoWide(maze)
+        assertBlockBoundariesAreTwoWide(maze)
     }
 
     @Test
@@ -104,6 +105,57 @@ class MazeGeneratorTest {
             maze.canMove(nw, Direction.EAST) &&
             maze.canMove(sw, Direction.NORTH) &&
             maze.canMove(se, Direction.NORTH)
+    }
+
+    /**
+     * Verifies that every passage between two 2x2 logical blocks is itself 2
+     * cells wide. The generator lays out 2x2 blocks at even coordinates
+     * `(2*lx, 2*ly)`, so block boundaries fall between odd/even column or row
+     * pairs. For each such boundary, both parallel edges must be open or both
+     * walled — otherwise a "wide" corridor could degenerate into a 1-wide
+     * pinch and the 2-wide guarantee would be violated.
+     */
+    private fun assertBlockBoundariesAreTwoWide(maze: Maze) {
+        // Horizontal block boundaries: between x = 2*lx + 1 and x = 2*lx + 2,
+        // shared by the two rows y = 2*ly and y = 2*ly + 1.
+        var lx = 0
+        while (2 * lx + 2 < maze.width) {
+            var ly = 0
+            while (2 * ly + 1 < maze.height) {
+                val low = GridPos(2 * lx + 1, 2 * ly)
+                val high = GridPos(2 * lx + 1, 2 * ly + 1)
+                val lowOpen = maze.canMove(low, Direction.EAST)
+                val highOpen = maze.canMove(high, Direction.EAST)
+                assertEquals(
+                    "Horizontal boundary between blocks ($lx,$ly)-(${lx + 1},$ly) " +
+                        "must be both open or both walled (low=$lowOpen, high=$highOpen).",
+                    lowOpen,
+                    highOpen
+                )
+                ly += 1
+            }
+            lx += 1
+        }
+        // Vertical block boundaries: between y = 2*ly + 1 and y = 2*ly + 2,
+        // shared by the two columns x = 2*lx and x = 2*lx + 1.
+        var ly = 0
+        while (2 * ly + 2 < maze.height) {
+            var lxv = 0
+            while (2 * lxv + 1 < maze.width) {
+                val left = GridPos(2 * lxv, 2 * ly + 1)
+                val right = GridPos(2 * lxv + 1, 2 * ly + 1)
+                val leftOpen = maze.canMove(left, Direction.NORTH)
+                val rightOpen = maze.canMove(right, Direction.NORTH)
+                assertEquals(
+                    "Vertical boundary between blocks ($lxv,$ly)-($lxv,${ly + 1}) " +
+                        "must be both open or both walled (left=$leftOpen, right=$rightOpen).",
+                    leftOpen,
+                    rightOpen
+                )
+                lxv += 1
+            }
+            ly += 1
+        }
     }
 
     private fun assertStartIsTopCorner(maze: Maze) {

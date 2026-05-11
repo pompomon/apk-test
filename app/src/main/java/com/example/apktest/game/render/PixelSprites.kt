@@ -4,10 +4,11 @@ import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 
 /**
- * Renders multi-color pixel-art sprites described by a square character grid
- * and a character → [Color] palette. Each character corresponds to one pixel of
- * the sprite; `' '` (space) and `'0'` are reserved for "transparent" pixels and
- * are never drawn.
+ * Renders multi-color pixel-art sprites described by a rectangular character
+ * grid and a character → [Color] palette. Each character corresponds to one
+ * pixel of the sprite; `' '` (space) and `'0'` are reserved for "transparent"
+ * pixels and are never drawn. All rows must share the same length (enforced
+ * by [draw]); the grid does not need to be square.
  *
  * The patterns are stored as rows read top-to-bottom so they read naturally in
  * code, and the renderer flips Y when drawing because [ShapeRenderer] uses
