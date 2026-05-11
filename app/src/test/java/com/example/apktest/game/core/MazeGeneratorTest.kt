@@ -96,7 +96,8 @@ class MazeGeneratorTest {
     private fun isOpen2x2Block(maze: Maze, sw: GridPos): Boolean {
         val se = GridPos(sw.x + 1, sw.y)
         val nw = GridPos(sw.x, sw.y + 1)
-        if (!maze.inBounds(sw) || !maze.inBounds(se) || !maze.inBounds(nw)) return false
+        val ne = GridPos(sw.x + 1, sw.y + 1)
+        if (!maze.inBounds(sw) || !maze.inBounds(se) || !maze.inBounds(nw) || !maze.inBounds(ne)) return false
         // Block is open iff there is no wall between any pair of adjacent cells
         // inside the 2x2 region.
         return maze.canMove(sw, Direction.EAST) &&

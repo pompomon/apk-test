@@ -72,7 +72,7 @@ class PowerUpIconView @JvmOverloads constructor(
         fillPaint.color = PowerUpIcons.androidColorFor(type)
         for (row in 0 until rows) {
             val rowStr = pattern[row]
-            for (col in 0 until minOf(cols, rowStr.length)) {
+            for (col in 0 until cols) {
                 if (rowStr[col] != '1') continue
                 val left = originX + col * pixelW
                 // Android Canvas has Y-down; pattern rows are listed top-to-bottom

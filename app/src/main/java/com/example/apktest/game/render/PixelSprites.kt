@@ -26,6 +26,11 @@ object PixelSpriteRenderer {
         if (rows == 0) return
         val cols = pattern[0].length
         if (cols == 0) return
+        // Sprite patterns are authored as fixed-size grids; require row
+        // consistency so callers can rely on uniform pixel dimensions.
+        require(pattern.all { it.length == cols }) {
+            "All rows in a sprite pattern must have the same length ($cols)."
+        }
 
         val pixelWidth = size / cols
         val pixelHeight = size / rows
@@ -34,7 +39,7 @@ object PixelSpriteRenderer {
 
         for (row in 0 until rows) {
             val rowPattern = pattern[row]
-            for (col in 0 until cols.coerceAtMost(rowPattern.length)) {
+            for (col in 0 until cols) {
                 val ch = rowPattern[col]
                 if (ch == ' ' || ch == '0') continue
                 val color = palette[ch] ?: continue

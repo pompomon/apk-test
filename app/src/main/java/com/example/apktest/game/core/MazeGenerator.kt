@@ -84,6 +84,7 @@ object MazeGenerator {
                 val sw = GridPos(baseX, baseY)
                 val se = GridPos(baseX + 1, baseY)
                 val nw = GridPos(baseX, baseY + 1)
+                val ne = GridPos(baseX + 1, baseY + 1)
 
                 // Open the interior of the 2x2 block: remove the east wall on
                 // both rows and the north wall on both columns. removeWall is
@@ -100,11 +101,11 @@ object MazeGenerator {
                 val logicalPos = GridPos(lx, ly)
                 if (logical.canMove(logicalPos, Direction.EAST)) {
                     finalMaze.removeWall(se, Direction.EAST)
-                    finalMaze.removeWall(GridPos(baseX + 1, baseY + 1), Direction.EAST)
+                    finalMaze.removeWall(ne, Direction.EAST)
                 }
                 if (logical.canMove(logicalPos, Direction.NORTH)) {
                     finalMaze.removeWall(nw, Direction.NORTH)
-                    finalMaze.removeWall(GridPos(baseX + 1, baseY + 1), Direction.NORTH)
+                    finalMaze.removeWall(ne, Direction.NORTH)
                 }
             }
         }
