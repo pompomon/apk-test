@@ -19,6 +19,21 @@ class GameFragment : AndroidFragmentApplication() {
     private var pendingNpcPolicy: NpcPolicyType = NpcPolicyType.DIRECT_CHASE
     private var pendingDifficulty: String = DifficultyPresets.MEDIUM.name
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        arguments?.let { args ->
+            args.getString(ARG_PLAYER_POLICY)?.let { name ->
+                pendingPlayerPolicy = PlayerPolicyType.entries.firstOrNull { it.name == name }
+                    ?: pendingPlayerPolicy
+            }
+            args.getString(ARG_NPC_POLICY)?.let { name ->
+                pendingNpcPolicy = NpcPolicyType.entries.firstOrNull { it.name == name }
+                    ?: pendingNpcPolicy
+            }
+            args.getString(ARG_DIFFICULTY)?.let { pendingDifficulty = it }
+        }
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -73,4 +88,10 @@ class GameFragment : AndroidFragmentApplication() {
     }
 
     fun hudState(): HudState? = game?.hudState()
+
+    companion object {
+        const val ARG_PLAYER_POLICY = "arg_player_policy"
+        const val ARG_NPC_POLICY = "arg_npc_policy"
+        const val ARG_DIFFICULTY = "arg_difficulty"
+    }
 }

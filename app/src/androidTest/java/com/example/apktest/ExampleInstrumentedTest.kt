@@ -28,12 +28,10 @@ class ExampleInstrumentedTest {
             scenario.onActivity { activity ->
                 val viewIds = intArrayOf(
                     R.id.fragmentGameHost,
-                    R.id.spinnerPlayerPolicy,
-                    R.id.spinnerNpcPolicy,
-                    R.id.spinnerDifficulty,
-                    R.id.buttonApply,
                     R.id.buttonPause,
                     R.id.buttonRestart,
+                    R.id.buttonLegend,
+                    R.id.buttonBackToSetup,
                     R.id.buttonUp,
                     R.id.buttonLeft,
                     R.id.buttonDown,
