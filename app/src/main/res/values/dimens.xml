@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="maze_dpad_container_padding">8dp</dimen>
+    <dimen name="maze_dpad_button_width">84dp</dimen>
+    <dimen name="maze_dpad_button_height">60dp</dimen>
+    <dimen name="maze_dpad_button_gap">6dp</dimen>
+    <dimen name="maze_dpad_button_text_size">26sp</dimen>
+</resources>

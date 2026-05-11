@@ -126,6 +126,16 @@ class GameEngineTest {
     }
 
     @Test
+    fun hudState_reflectsPresetNpcSpeedAfterDifficultyChange() {
+        val engine = GameEngine(testPreset(), seed)
+        engine.setDifficulty(DifficultyPresets.EASY)
+        assertEquals(DifficultyPresets.EASY.npcMovesPerSecond, engine.hudState().npcSpeed, 0.0001f)
+
+        engine.setDifficulty(DifficultyPresets.MEDIUM)
+        assertEquals(DifficultyPresets.MEDIUM.npcMovesPerSecond, engine.hudState().npcSpeed, 0.0001f)
+    }
+
+    @Test
     fun collectingSpeedUp_updatesHudSpeedAndExpires() {
         val engine = GameEngine(testPreset(), seed)
         val baseSpeed = engine.hudState().playerSpeed
@@ -201,42 +211,54 @@ class GameEngineTest {
 
     private fun movePlayerTo(engine: GameEngine, target: GridPos) {
         engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
-        // Use a small timestep tied to the player move interval so navigation
-        // does not unintentionally elapse enough simulated time to trigger
-        // unrelated time-based mechanics (despawn/effect expiry/respawn).
-        val moveInterval = 1f / engine.difficulty.playerMovesPerSecond
-        val tickStep = moveInterval / 4f
-        var totalTicks = 0
-        // Re-plan a fresh BFS each step so picking up effects mid-walk
-        // (e.g. TELEPORT relocating the player) does not strand the helper.
-        while (engine.player.position != target && totalTicks < MAX_TOTAL_TICKS) {
-            val path = engine.navigator.bfsPath(engine.player.position, target)
-            require(path.isNotEmpty()) {
-                "No path from ${engine.player.position} to $target"
-            }
-            val next = path[1]
-            val direction = Direction.fromDelta(
-                next.x - engine.player.position.x,
-                next.y - engine.player.position.y
-            )
-            requireNotNull(direction)
-            engine.queueManualMove(direction)
-            val before = engine.player.position
-            var stepTicks = 0
-            while (engine.player.position == before && stepTicks < MAX_TICKS_PER_STEP) {
-                engine.update(tickStep)
-                if (engine.status != GameStatus.RUNNING) {
-                    throw IllegalStateException("Engine left RUNNING while navigating to target.")
+        // Temporarily remove NPCs from the engine while navigating so that
+        // GameEngine.update()'s in-loop end-condition checks cannot transition
+        // to LOSE due to NPC behaviour driven by maze layout/seed variations
+        // (e.g. start-corner randomization). NPCs are restored after navigation
+        // so subsequent assertions (collision-immunity tests) still exercise
+        // them.
+        val savedNpcs = engine.npcs.toList()
+        engine.npcs.clear()
+        try {
+            // Use a small timestep tied to the player move interval so navigation
+            // does not unintentionally elapse enough simulated time to trigger
+            // unrelated time-based mechanics (despawn/effect expiry/respawn).
+            val moveInterval = 1f / engine.difficulty.playerMovesPerSecond
+            val tickStep = moveInterval / 4f
+            var totalTicks = 0
+            // Re-plan a fresh BFS each step so picking up effects mid-walk
+            // (e.g. TELEPORT relocating the player) does not strand the helper.
+            while (engine.player.position != target && totalTicks < MAX_TOTAL_TICKS) {
+                val path = engine.navigator.bfsPath(engine.player.position, target)
+                require(path.isNotEmpty()) {
+                    "No path from ${engine.player.position} to $target"
                 }
-                stepTicks += 1
+                val next = path[1]
+                val direction = Direction.fromDelta(
+                    next.x - engine.player.position.x,
+                    next.y - engine.player.position.y
+                )
+                requireNotNull(direction)
+                engine.queueManualMove(direction)
+                val before = engine.player.position
+                var stepTicks = 0
+                while (engine.player.position == before && stepTicks < MAX_TICKS_PER_STEP) {
+                    engine.update(tickStep)
+                    if (engine.status != GameStatus.RUNNING) {
+                        throw IllegalStateException("Engine left RUNNING while navigating to target.")
+                    }
+                    stepTicks += 1
+                }
+                check(engine.player.position != before) {
+                    "Player did not move from $before within $MAX_TICKS_PER_STEP ticks."
+                }
+                totalTicks += stepTicks
             }
-            check(engine.player.position != before) {
-                "Player did not move from $before within $MAX_TICKS_PER_STEP ticks."
+            check(engine.player.position == target) {
+                "Failed to reach $target within $MAX_TOTAL_TICKS ticks."
             }
-            totalTicks += stepTicks
-        }
-        check(engine.player.position == target) {
-            "Failed to reach $target within $MAX_TOTAL_TICKS ticks."
+        } finally {
+            engine.npcs.addAll(savedNpcs)
         }
     }
 

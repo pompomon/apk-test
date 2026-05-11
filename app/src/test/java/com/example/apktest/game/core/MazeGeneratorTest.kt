@@ -9,6 +9,7 @@ class MazeGeneratorTest {
     fun generatedMaze_isFullyReachableAndHasExitPath() {
         val maze = MazeGenerator.generate(width = 12, height = 16, seed = 42L)
         val navigator = MazeNavigator(maze)
+        assertStartIsTopCorner(maze)
 
         val reachable = bfsReachable(maze, maze.start)
         assertEquals(maze.width * maze.height, reachable.size)
@@ -23,6 +24,8 @@ class MazeGeneratorTest {
     fun generatedMaze_sameSeedProducesSameLayout() {
         val first = MazeGenerator.generate(width = 12, height = 16, seed = 42L)
         val second = MazeGenerator.generate(width = 12, height = 16, seed = 42L)
+        assertStartIsTopCorner(first)
+        assertStartIsTopCorner(second)
 
         assertTrue(first.copyCells().contentEquals(second.copyCells()))
         assertEquals(first.start, second.start)
@@ -32,7 +35,20 @@ class MazeGeneratorTest {
     @Test
     fun generatedMaze_containsWideCorridorSegments() {
         val maze = MazeGenerator.generate(width = 14, height = 20, seed = 42L)
+        assertStartIsTopCorner(maze)
         assertTrue("Expected at least one widened corridor segment", hasWideCorridorSegment(maze))
+    }
+
+    @Test
+    fun generatedMaze_startIsAlwaysTopCornerAcrossSeeds() {
+        // Assert only the invariant — every generated start is one of the two
+        // top corners — so this test is robust to changes in the underlying
+        // RNG algorithm. Distribution between the corners is a property of
+        // MazeGenerator's implementation, not a contract we test here.
+        (1L..64L).forEach { seed ->
+            val maze = MazeGenerator.generate(width = 12, height = 16, seed = seed)
+            assertStartIsTopCorner(maze)
+        }
     }
 
     private fun bfsReachable(maze: Maze, start: GridPos): Set<GridPos> {
@@ -82,5 +98,14 @@ class MazeGeneratorTest {
                 maze.canMove(forward, sideDirection) &&
                 maze.canMove(sideOrigin, primaryDirection)
         }
+    }
+
+    private fun assertStartIsTopCorner(maze: Maze) {
+        val topLeft = GridPos(0, 0)
+        val topRight = GridPos(maze.width - 1, 0)
+        assertTrue(
+            "Expected maze.start to be $topLeft or $topRight but was ${maze.start}",
+            maze.start == topLeft || maze.start == topRight
+        )
     }
 }
