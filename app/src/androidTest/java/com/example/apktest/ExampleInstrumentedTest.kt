@@ -131,9 +131,10 @@ class ExampleInstrumentedTest {
         endX: Float,
         endY: Float
     ) {
-        scenario.onActivity { activity ->
-            dispatchSwipe(activity, startX, startY, endX, endY)
-        }
+        // dispatchSwipe uses Instrumentation.sendPointerSync, which blocks waiting for the
+        // main thread to drain — so it MUST be called from the test thread, not from inside
+        // scenario.onActivity (which already holds the main thread).
+        dispatchSwipe(startX, startY, endX, endY)
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
     }
 
@@ -142,15 +143,17 @@ class ExampleInstrumentedTest {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             waitForGameHostLaidOut(scenario)
             val baseline = AtomicInteger(0)
+            val topRect = IntArray(4)
+            val bottomRect = IntArray(4)
             scenario.onActivity { activity ->
                 attachedGameFragment(activity)
                 baseline.set(activity.resolvedSwipeCount)
-                // Dispatch swipes that start inside the top and bottom overlay regions; these
-                // sit on top of fragmentGameHost in the layout, so without overlay-aware hit
-                // testing they would otherwise be forwarded to the swipe gesture detector.
-                dispatchSwipeInsideView(activity, R.id.topOverlay)
-                dispatchSwipeInsideView(activity, R.id.bottomControls)
+                captureViewRect(activity, R.id.topOverlay, topRect)
+                captureViewRect(activity, R.id.bottomControls, bottomRect)
             }
+            // Dispatch overlay swipes from the test thread (sendPointerSync requirement).
+            dispatchSwipeInsideRect(topRect)
+            dispatchSwipeInsideRect(bottomRect)
             // Give the gesture detector a chance to (incorrectly) resolve swipes; if the
             // hit-test exclusion is correct, resolvedSwipeCount must remain unchanged.
             SystemClock.sleep(STEP_POLL_INTERVAL_MS * 4)
@@ -165,22 +168,33 @@ class ExampleInstrumentedTest {
         }
     }
 
-    private fun dispatchSwipeInsideView(activity: MainActivity, viewId: Int) {
-        val view = activity.findViewById<android.view.View>(viewId) ?: return
-        if (view.width <= 0 || view.height <= 0) return
+    private fun captureViewRect(activity: MainActivity, viewId: Int, out: IntArray) {
+        val view = activity.findViewById<android.view.View>(viewId)
+        if (view == null || view.width <= 0 || view.height <= 0) {
+            out[0] = 0; out[1] = 0; out[2] = 0; out[3] = 0
+            return
+        }
         val location = IntArray(2)
         view.getLocationInWindow(location)
-        val originX = location[0].toFloat()
-        val originY = location[1].toFloat()
-        val width = view.width.toFloat()
-        val height = view.height.toFloat()
+        out[0] = location[0]
+        out[1] = location[1]
+        out[2] = view.width
+        out[3] = view.height
+    }
+
+    private fun dispatchSwipeInsideRect(rect: IntArray) {
+        val width = rect[2]
+        val height = rect[3]
+        if (width <= 0 || height <= 0) return
+        val originX = rect[0].toFloat()
+        val originY = rect[1].toFloat()
         val centerX = originX + width / 2f
         val centerY = originY + height / 2f
         // Use a smaller span clamped to the overlay's size so the entire swipe stays inside
         // the overlay region.
         val span = minOf(width, height) * 0.4f
-        dispatchSwipe(activity, centerX - span / 2f, centerY, centerX + span / 2f, centerY)
-        dispatchSwipe(activity, centerX, centerY - span / 2f, centerX, centerY + span / 2f)
+        dispatchSwipe(centerX - span / 2f, centerY, centerX + span / 2f, centerY)
+        dispatchSwipe(centerX, centerY - span / 2f, centerX, centerY + span / 2f)
     }
 
     private fun attachedGameFragment(activity: MainActivity): GameFragment {
@@ -230,18 +244,22 @@ class ExampleInstrumentedTest {
     }
 
     private fun dispatchSwipe(
-        activity: android.app.Activity,
         startX: Float,
         startY: Float,
         endX: Float,
         endY: Float
     ) {
+        // Inject events through Instrumentation.sendPointerSync, which routes via the real
+        // InputDispatcher and sets InputDevice.SOURCE_TOUCHSCREEN. Going through
+        // activity.dispatchTouchEvent with raw MotionEvent.obtain (SOURCE_UNKNOWN) is
+        // unreliable on the emulator: events can be silently dropped before reaching the
+        // GestureDetector, which is why flings never resolved even with retries.
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
         val downTime = SystemClock.uptimeMillis()
+        val moveSteps = 10
+        val totalDurationMs = 120L
         val events = mutableListOf<MotionEvent>()
         events += MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, startX, startY, 0)
-        // Multiple intermediate move events spread over time so VelocityTracker can compute a fling.
-        val moveSteps = 5
-        val totalDurationMs = 100L
         for (i in 1..moveSteps) {
             val fraction = i.toFloat() / (moveSteps + 1)
             val x = startX + (endX - startX) * fraction
@@ -259,7 +277,8 @@ class ExampleInstrumentedTest {
         )
         try {
             for (event in events) {
-                activity.dispatchTouchEvent(event)
+                event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                instrumentation.sendPointerSync(event)
             }
         } finally {
             events.forEach { it.recycle() }
