@@ -57,6 +57,14 @@ class ExampleInstrumentedTest {
             // Wait for the game host to be laid out before dispatching swipes; on slower devices
             // the host can be attached but not yet measured immediately after pending transactions.
             waitForGameHostLaidOut(scenario)
+
+            // Capture host bounds once on the UI thread; then dispatch each swipe in its own
+            // onActivity block (with idle-syncs in between) so the velocity tracker sees each
+            // fling as an independent gesture even on slow emulators.
+            val centerX = AtomicInteger(0)
+            val centerY = AtomicInteger(0)
+            val horizontalSpan = AtomicInteger(0)
+            val verticalSpan = AtomicInteger(0)
             scenario.onActivity { activity ->
                 val gameHost = activity.findViewById<android.view.View>(R.id.fragmentGameHost)
                 assertNotNull("Game host should be present", gameHost)
@@ -67,26 +75,25 @@ class ExampleInstrumentedTest {
                 )
                 initialSwipes.set(activity.resolvedSwipeCount)
 
-                // Translate gameHost-relative swipe coordinates into window coordinates so
-                // dispatching through the activity hits inside the game host's bounds.
                 val location = IntArray(2)
                 gameHost.getLocationInWindow(location)
-                val originX = location[0].toFloat()
-                val originY = location[1].toFloat()
-                val width = gameHost.width.toFloat()
-                val height = gameHost.height.toFloat()
-                val centerX = originX + width / 2f
-                val centerY = originY + height / 2f
-                val horizontalSpan = width * SWIPE_REL_SPAN
-                val verticalSpan = height * SWIPE_REL_SPAN
-
-                // Vertical and horizontal swipes derived from the host's measured bounds so they
-                // remain inside the view across densities/orientations.
-                dispatchSwipe(activity, centerX, centerY + verticalSpan / 2f, centerX, centerY - verticalSpan / 2f)
-                dispatchSwipe(activity, centerX, centerY - verticalSpan / 2f, centerX, centerY + verticalSpan / 2f)
-                dispatchSwipe(activity, centerX + horizontalSpan / 2f, centerY, centerX - horizontalSpan / 2f, centerY)
-                dispatchSwipe(activity, centerX - horizontalSpan / 2f, centerY, centerX + horizontalSpan / 2f, centerY)
+                centerX.set(location[0] + gameHost.width / 2)
+                centerY.set(location[1] + gameHost.height / 2)
+                horizontalSpan.set((gameHost.width * SWIPE_REL_SPAN).toInt())
+                verticalSpan.set((gameHost.height * SWIPE_REL_SPAN).toInt())
             }
+
+            val cx = centerX.get().toFloat()
+            val cy = centerY.get().toFloat()
+            val hs = horizontalSpan.get().toFloat()
+            val vs = verticalSpan.get().toFloat()
+            // Each swipe is dispatched in its own UI-thread frame and followed by an idle-sync,
+            // so the GestureDetector / VelocityTracker can finish processing the previous fling
+            // before the next ACTION_DOWN arrives.
+            dispatchSwipeOnUiThread(scenario, cx, cy + vs / 2f, cx, cy - vs / 2f)
+            dispatchSwipeOnUiThread(scenario, cx, cy - vs / 2f, cx, cy + vs / 2f)
+            dispatchSwipeOnUiThread(scenario, cx + hs / 2f, cy, cx - hs / 2f, cy)
+            dispatchSwipeOnUiThread(scenario, cx - hs / 2f, cy, cx + hs / 2f, cy)
 
             val finalSwipes = pollResolvedSwipes(scenario, initialSwipes.get())
             assertTrue(
@@ -108,6 +115,19 @@ class ExampleInstrumentedTest {
                 }
             }
         }
+    }
+
+    private fun dispatchSwipeOnUiThread(
+        scenario: ActivityScenario<MainActivity>,
+        startX: Float,
+        startY: Float,
+        endX: Float,
+        endY: Float
+    ) {
+        scenario.onActivity { activity ->
+            dispatchSwipe(activity, startX, startY, endX, endY)
+        }
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
     }
 
     @Test

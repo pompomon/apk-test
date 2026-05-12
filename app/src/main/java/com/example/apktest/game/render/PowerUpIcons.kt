@@ -12,66 +12,60 @@ import com.example.apktest.game.core.PowerUpType
  * renderer flips Y when drawing via [PixelSpriteRenderer].
  */
 object PowerUpIcons {
-    private val patternsByType: Map<PowerUpType, Array<String>> = mapOf(
-        PowerUpType.INVISIBILITY to arrayOf(
+    fun patternFor(type: PowerUpType): Array<String> = when (type) {
+        PowerUpType.INVISIBILITY -> arrayOf(
             "00100",
             "01110",
             "11111",
             "01110",
             "00100"
-        ),
-        PowerUpType.TELEPORT to arrayOf(
+        )
+        PowerUpType.TELEPORT -> arrayOf(
             "11111",
             "10001",
             "10101",
             "10001",
             "11111"
-        ),
-        PowerUpType.SPEED_UP to arrayOf(
+        )
+        PowerUpType.SPEED_UP -> arrayOf(
             "00110",
             "01110",
             "11111",
             "01110",
             "00110"
-        ),
-        PowerUpType.FREEZE to arrayOf(
+        )
+        PowerUpType.FREEZE -> arrayOf(
             "10001",
             "01110",
             "11111",
             "01110",
             "10001"
-        ),
-        PowerUpType.BLAST to arrayOf(
+        )
+        PowerUpType.BLAST -> arrayOf(
             "10101",
             "11011",
             "11111",
             "11011",
             "10101"
-        ),
+        )
         // Ghost silhouette: rounded top, eye gaps, jagged bottom.
-        PowerUpType.GHOST_MODE to arrayOf(
+        PowerUpType.GHOST_MODE -> arrayOf(
             "01110",
             "11111",
             "10101",
             "11111",
             "10101"
         )
-    )
+    }
 
-    private val gdxColorByType: Map<PowerUpType, Color> = mapOf(
-        PowerUpType.INVISIBILITY to Color(0.68f, 0.5f, 0.96f, 1f),
-        PowerUpType.TELEPORT to Color(0.25f, 0.86f, 0.96f, 1f),
-        PowerUpType.SPEED_UP to Color(1f, 0.91f, 0.3f, 1f),
-        PowerUpType.FREEZE to Color(0.63f, 0.9f, 1f, 1f),
-        PowerUpType.BLAST to Color(1f, 0.45f, 0.2f, 1f),
-        PowerUpType.GHOST_MODE to Color(0.82f, 0.88f, 1f, 1f)
-    )
-
-    fun patternFor(type: PowerUpType): Array<String> =
-        patternsByType[type] ?: error("Missing pattern for $type")
-
-    fun gdxColorFor(type: PowerUpType): Color =
-        gdxColorByType[type] ?: error("Missing color for $type")
+    fun gdxColorFor(type: PowerUpType): Color = when (type) {
+        PowerUpType.INVISIBILITY -> Color(0.68f, 0.5f, 0.96f, 1f)
+        PowerUpType.TELEPORT -> Color(0.25f, 0.86f, 0.96f, 1f)
+        PowerUpType.SPEED_UP -> Color(1f, 0.91f, 0.3f, 1f)
+        PowerUpType.FREEZE -> Color(0.63f, 0.9f, 1f, 1f)
+        PowerUpType.BLAST -> Color(1f, 0.45f, 0.2f, 1f)
+        PowerUpType.GHOST_MODE -> Color(0.82f, 0.88f, 1f, 1f)
+    }
 
     /**
      * 0xAARRGGBB color (Android-friendly) matching [gdxColorFor]. Kept in sync

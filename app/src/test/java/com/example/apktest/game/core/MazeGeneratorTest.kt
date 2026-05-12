@@ -52,6 +52,32 @@ class MazeGeneratorTest {
         }
     }
 
+    @Test
+    fun generatedMaze_oddDimensionsAreRoundedUpToEvenAndRemainFullyReachable() {
+        // Pass odd width and height; generator must round both up to even and
+        // still produce a fully reachable maze with a valid exit path.
+        val maze = MazeGenerator.generate(width = 11, height = 17, seed = 42L)
+        assertEquals(12, maze.width)
+        assertEquals(18, maze.height)
+        assertStartIsTopCorner(maze)
+
+        val reachable = bfsReachable(maze, maze.start)
+        assertEquals(maze.width * maze.height, reachable.size)
+
+        val navigator = MazeNavigator(maze)
+        val path = navigator.bfsPath(maze.start, maze.exit)
+        assertTrue(path.isNotEmpty())
+        assertEquals(maze.start, path.first())
+        assertEquals(maze.exit, path.last())
+    }
+
+    @Test
+    fun generatedMaze_evenDimensionsArePreserved() {
+        val maze = MazeGenerator.generate(width = 12, height = 16, seed = 42L)
+        assertEquals(12, maze.width)
+        assertEquals(16, maze.height)
+    }
+
     private fun bfsReachable(maze: Maze, start: GridPos): Set<GridPos> {
         val visited = mutableSetOf<GridPos>()
         val queue = ArrayDeque<GridPos>()

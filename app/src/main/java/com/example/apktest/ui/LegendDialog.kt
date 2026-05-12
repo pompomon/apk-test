@@ -49,6 +49,10 @@ object LegendDialog {
             val icon = PowerUpIconView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
                 setPowerUpType(type)
+                // The adjacent TextView already announces the label and
+                // description, so exclude the icon from accessibility to avoid
+                // an unlabeled focusable element / duplicate announcement.
+                importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }
             row.addView(icon)
 
