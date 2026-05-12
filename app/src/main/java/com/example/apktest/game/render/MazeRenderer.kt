@@ -112,15 +112,16 @@ class MazeRenderer {
      * draw loop pays no pattern-decoding cost.
      */
     private fun rebuildWallGeometry(maze: Maze) {
-        // Upper bound: each cell can contribute up to 4 segments, each segment
-        // is rows*cols (4*8 = 32) pixels. We grow as needed to keep this tight
-        // even for sparse mazes.
-        val initialCapacity = maze.width * maze.height * 4 * WALL_PATTERN_PIXELS_PER_SEGMENT
-        val xs = FloatArray(initialCapacity)
-        val ys = FloatArray(initialCapacity)
-        val ws = FloatArray(initialCapacity)
-        val hs = FloatArray(initialCapacity)
-        val cs = arrayOfNulls<Color>(initialCapacity)
+        // Upper-bound the scratch arrays so the append loop is branch-free
+        // (each cell can contribute up to 4 segments * rows*cols pixels), then
+        // trim to the actually-used length so the steady-state cache only
+        // holds the pixels we'll iterate every frame.
+        val capacity = maze.width * maze.height * 4 * WALL_PATTERN_PIXELS_PER_SEGMENT
+        val xs = FloatArray(capacity)
+        val ys = FloatArray(capacity)
+        val ws = FloatArray(capacity)
+        val hs = FloatArray(capacity)
+        val cs = arrayOfNulls<Color>(capacity)
         var n = 0
 
         for (y in 0 until maze.height) {
@@ -156,11 +157,13 @@ class MazeRenderer {
             }
         }
 
-        wallRectX = xs
-        wallRectY = ys
-        wallRectW = ws
-        wallRectH = hs
-        wallRectColor = cs
+        // Trim to actual size so the cache doesn't permanently hold the
+        // upper-bound slack from sparse mazes.
+        wallRectX = xs.copyOf(n)
+        wallRectY = ys.copyOf(n)
+        wallRectW = ws.copyOf(n)
+        wallRectH = hs.copyOf(n)
+        wallRectColor = cs.copyOf(n)
         wallRectCount = n
     }
 
