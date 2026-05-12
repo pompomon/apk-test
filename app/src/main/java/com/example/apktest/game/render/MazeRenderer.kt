@@ -21,6 +21,19 @@ class MazeRenderer {
     private var cachedHeight = -1
     private var mazeOriginX = 0f
 
+    // Static wall geometry cache, rebuilt only when the active Maze changes.
+    // Each pixel of the brick pattern is a rect in maze-local coords (x is
+    // relative to the maze's left edge, mazeOriginX is added at draw time).
+    // This keeps per-frame work to O(wallPixels) shapes.rect calls with no
+    // map lookups, no allocations, and no character-by-character branching.
+    private var cachedWallMaze: Maze? = null
+    private var wallRectX: FloatArray = FloatArray(0)
+    private var wallRectY: FloatArray = FloatArray(0)
+    private var wallRectW: FloatArray = FloatArray(0)
+    private var wallRectH: FloatArray = FloatArray(0)
+    private var wallRectColor: Array<Color?> = emptyArray()
+    private var wallRectCount: Int = 0
+
     fun resize(width: Int, height: Int) {
         viewport.update(width, height, true)
     }
@@ -54,6 +67,11 @@ class MazeRenderer {
 
     private fun drawMaze(engine: GameEngine) {
         val maze = engine.maze
+        if (cachedWallMaze !== maze) {
+            rebuildWallGeometry(maze)
+            cachedWallMaze = maze
+        }
+
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
         // Floor — slightly darker than before so the brown/green walls pop.
@@ -70,88 +88,138 @@ class MazeRenderer {
             size = 0.9f
         )
 
-        // Walls are shared between adjacent cells; only render NORTH+WEST per cell
-        // and add the matching outer SOUTH/EAST boundary segments to avoid drawing
-        // each shared edge twice per frame. Each segment is a thin brick strip
-        // textured via WallTextures, with a deterministic moss/bush variant.
-        for (y in 0 until maze.height) {
-            for (x in 0 until maze.width) {
-                if (maze.hasWall(x, y, Direction.NORTH)) {
-                    drawHorizontalWall(x, y + 1, WallTextures.variantIndex(x, y, 0))
-                }
-                if (maze.hasWall(x, y, Direction.WEST)) {
-                    drawVerticalWall(x, y, WallTextures.variantIndex(x, y, 1))
-                }
-                if (y == 0 && maze.hasWall(x, y, Direction.SOUTH)) {
-                    drawHorizontalWall(x, 0, WallTextures.variantIndex(x, y, 2))
-                }
-                if (x == maze.width - 1 && maze.hasWall(x, y, Direction.EAST)) {
-                    drawVerticalWall(x + 1, y, WallTextures.variantIndex(x, y, 3))
-                }
-            }
+        // Walls: replay the precomputed brick rects. mazeOriginX is added on the
+        // fly because the viewport (and therefore mazeOriginX) can shift with
+        // screen size while the geometry stays valid.
+        val count = wallRectCount
+        val xs = wallRectX
+        val ys = wallRectY
+        val ws = wallRectW
+        val hs = wallRectH
+        val cs = wallRectColor
+        val ox = mazeOriginX
+        for (i in 0 until count) {
+            shapes.color = cs[i]!!
+            shapes.rect(ox + xs[i], ys[i], ws[i], hs[i])
         }
         shapes.end()
     }
 
-    private fun drawHorizontalWall(cellX: Int, wallY: Int, variantIndex: Int) {
-        // Wall runs horizontally along the bottom edge `wallY` of width 1 cell.
-        // Centered vertically on wallY with thickness WALL_THICKNESS.
-        val pattern = WallTextures.variants[variantIndex]
-        val palette = WallTextures.palette
-        val rows = pattern.size
-        val cols = pattern[0].length
-        val originX = mazeOriginX + cellX.toFloat()
+    /**
+     * Walks every wall edge and expands its brick pattern into a flat list of
+     * coloured rects, stored in maze-local coordinates. Called only when the
+     * active Maze instance changes (start of game / restart), so the per-frame
+     * draw loop pays no pattern-decoding cost.
+     */
+    private fun rebuildWallGeometry(maze: Maze) {
+        // Upper bound: each cell can contribute up to 4 segments, each segment
+        // is rows*cols (4*8 = 32) pixels. We grow as needed to keep this tight
+        // even for sparse mazes.
+        val initialCapacity = maze.width * maze.height * 4 * WALL_PATTERN_PIXELS_PER_SEGMENT
+        val xs = FloatArray(initialCapacity)
+        val ys = FloatArray(initialCapacity)
+        val ws = FloatArray(initialCapacity)
+        val hs = FloatArray(initialCapacity)
+        val cs = arrayOfNulls<Color>(initialCapacity)
+        var n = 0
+
+        for (y in 0 until maze.height) {
+            for (x in 0 until maze.width) {
+                if (maze.hasWall(x, y, Direction.NORTH)) {
+                    n = appendHorizontalWall(
+                        xs, ys, ws, hs, cs, n,
+                        cellX = x, wallY = y + 1,
+                        variantIndex = WallTextures.variantIndex(x, y, WallTextures.DIR_NORTH)
+                    )
+                }
+                if (maze.hasWall(x, y, Direction.WEST)) {
+                    n = appendVerticalWall(
+                        xs, ys, ws, hs, cs, n,
+                        wallX = x, cellY = y,
+                        variantIndex = WallTextures.variantIndex(x, y, WallTextures.DIR_WEST)
+                    )
+                }
+                if (y == 0 && maze.hasWall(x, y, Direction.SOUTH)) {
+                    n = appendHorizontalWall(
+                        xs, ys, ws, hs, cs, n,
+                        cellX = x, wallY = 0,
+                        variantIndex = WallTextures.variantIndex(x, y, WallTextures.DIR_SOUTH)
+                    )
+                }
+                if (x == maze.width - 1 && maze.hasWall(x, y, Direction.EAST)) {
+                    n = appendVerticalWall(
+                        xs, ys, ws, hs, cs, n,
+                        wallX = x + 1, cellY = y,
+                        variantIndex = WallTextures.variantIndex(x, y, WallTextures.DIR_EAST)
+                    )
+                }
+            }
+        }
+
+        wallRectX = xs
+        wallRectY = ys
+        wallRectW = ws
+        wallRectH = hs
+        wallRectColor = cs
+        wallRectCount = n
+    }
+
+    private fun appendHorizontalWall(
+        xs: FloatArray, ys: FloatArray, ws: FloatArray, hs: FloatArray,
+        cs: Array<Color?>, startIndex: Int,
+        cellX: Int, wallY: Int, variantIndex: Int
+    ): Int {
+        val colors = WallTextures.variantColors[variantIndex]
+        val rows = colors.size
+        val cols = colors[0].size
+        val originX = cellX.toFloat()
         val originY = wallY.toFloat() - WALL_THICKNESS / 2f
         val pixelWidth = 1f / cols
         val pixelHeight = WALL_THICKNESS / rows
+        var n = startIndex
         for (row in 0 until rows) {
-            val rowPattern = pattern[row]
+            val rowColors = colors[row]
+            val py = originY + (rows - row - 1) * pixelHeight
             for (col in 0 until cols) {
-                val ch = rowPattern[col]
-                if (ch == ' ' || ch == '0') continue
-                val color = palette[ch] ?: continue
-                shapes.color = color
-                shapes.rect(
-                    originX + col * pixelWidth,
-                    originY + (rows - row - 1) * pixelHeight,
-                    pixelWidth,
-                    pixelHeight
-                )
+                val color = rowColors[col] ?: continue
+                xs[n] = originX + col * pixelWidth
+                ys[n] = py
+                ws[n] = pixelWidth
+                hs[n] = pixelHeight
+                cs[n] = color
+                n++
             }
         }
+        return n
     }
 
-    private fun drawVerticalWall(wallX: Int, cellY: Int, variantIndex: Int) {
-        // Wall runs vertically along the left edge `wallX` of height 1 cell.
-        // Same patterns as horizontal walls but transposed so the brick rows run
-        // along the wall length (which is now the Y axis).
-        val pattern = WallTextures.variants[variantIndex]
-        val palette = WallTextures.palette
-        val rows = pattern.size       // brick "depth" → maps to wall thickness (X)
-        val cols = pattern[0].length  // brick "length" → maps to wall length (Y)
-        val originX = wallX.toFloat() + mazeOriginX - WALL_THICKNESS / 2f
+    private fun appendVerticalWall(
+        xs: FloatArray, ys: FloatArray, ws: FloatArray, hs: FloatArray,
+        cs: Array<Color?>, startIndex: Int,
+        wallX: Int, cellY: Int, variantIndex: Int
+    ): Int {
+        val colors = WallTextures.variantColors[variantIndex]
+        val rows = colors.size       // brick "depth" → maps to wall thickness (X)
+        val cols = colors[0].size    // brick "length" → maps to wall length (Y)
+        val originX = wallX.toFloat() - WALL_THICKNESS / 2f
         val originY = cellY.toFloat()
         val pixelWidth = WALL_THICKNESS / rows
         val pixelHeight = 1f / cols
+        var n = startIndex
         for (row in 0 until rows) {
-            val rowPattern = pattern[row]
+            val rowColors = colors[row]
+            val px = originX + (rows - row - 1) * pixelWidth
             for (col in 0 until cols) {
-                val ch = rowPattern[col]
-                if (ch == ' ' || ch == '0') continue
-                val color = palette[ch] ?: continue
-                shapes.color = color
-                // Patterns are listed top-down; for a vertical wall, the "top"
-                // of the brick (row 0) should be along the outer side. Place
-                // row 0 at the larger X so highlights point outward (purely
-                // cosmetic; consistent across the maze).
-                shapes.rect(
-                    originX + (rows - row - 1) * pixelWidth,
-                    originY + col * pixelHeight,
-                    pixelWidth,
-                    pixelHeight
-                )
+                val color = rowColors[col] ?: continue
+                xs[n] = px
+                ys[n] = originY + col * pixelHeight
+                ws[n] = pixelWidth
+                hs[n] = pixelHeight
+                cs[n] = color
+                n++
             }
         }
+        return n
     }
 
     private fun drawEntities(engine: GameEngine) {
@@ -198,6 +266,9 @@ class MazeRenderer {
     private companion object {
         // Wall thickness as fraction of a cell (world units).
         private const val WALL_THICKNESS = 0.18f
+
+        // Upper-bound pixel count per wall segment (4 rows * 8 cols brick tile).
+        private const val WALL_PATTERN_PIXELS_PER_SEGMENT = 32
     }
 
     private object PixelPowerUpIconRenderer {

@@ -45,6 +45,14 @@ class DifficultyPresetTest {
         assertEquals(60f, DifficultyPresets.MEDIUM.powerUpPickupLifetimeSeconds, 0.0001f)
         val respawn = DifficultyPresets.MEDIUM.powerUpRespawnIntervalSeconds
         assertNotNull("Medium should respawn power-ups so the map stays populated", respawn)
-        assertTrue("Medium respawn interval should be positive", (respawn ?: 0f) > 0f)
+        // Exact value pins the preset intent — see Difficulty.kt MEDIUM.
+        assertEquals(30f, respawn!!, 0.0001f)
+        // Medium must remain harder than Easy (which respawns every 15s).
+        val easyRespawn = DifficultyPresets.EASY.powerUpRespawnIntervalSeconds
+        assertNotNull(easyRespawn)
+        assertTrue(
+            "Medium respawn interval should be slower (longer) than Easy",
+            respawn > easyRespawn!!
+        )
     }
 }

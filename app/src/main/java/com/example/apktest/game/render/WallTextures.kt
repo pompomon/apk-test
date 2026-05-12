@@ -3,18 +3,20 @@ package com.example.apktest.game.render
 import com.badlogic.gdx.graphics.Color
 
 /**
- * Pixel-art tile patterns used by [MazeRenderer] to texture the maze walls
- * with a brown stone-brick look, with occasional moss / bush variants for a
- * dungeon-y feel. Patterns are read top-to-bottom and rendered via
- * [PixelSpriteRenderer], so [MazeRenderer] does not need its own pattern
- * sampler.
+ * Pixel-art tile data used by [MazeRenderer] to texture maze walls with a
+ * brown/green dungeon brick look (plain stone with sparse moss / bush
+ * variants).
  *
- * Each tile is an 8x4 grid: the wall segments drawn by the renderer are thin
- * strips along a cell edge (full length, ~15% of a cell thick), so a tile with
- * more columns than rows reads as a row of stone bricks. The renderer rotates
- * the patterns via the (centerX, centerY, size) call — vertical wall segments
- * pass the same 8x4 grid but with width/height swapped at the drawing call
- * site so the bricks read along the length of the wall in both orientations.
+ * Tiles are 4x8 character grids (4 rows = wall thickness, 8 cols = wall
+ * length). [MazeRenderer] does its own per-pixel sampling — it picks a variant
+ * per wall segment via [variantIndex], then draws one [com.badlogic.gdx.graphics.glutils.ShapeRenderer]
+ * rect per non-transparent character. To keep the per-frame path cheap, the
+ * resolved per-variant colours are exposed via [variantColors] alongside the
+ * raw [variants] patterns so the renderer can build a static wall-geometry
+ * cache once per maze instead of doing map lookups per pixel per frame.
+ *
+ * Wall thickness in world units is owned by the renderer (see
+ * `MazeRenderer.WALL_THICKNESS`, currently 0.18 of a cell).
  */
 object WallTextures {
     // Stone brick palette — brown/green dungeon look.
@@ -61,6 +63,34 @@ object WallTextures {
 
     val palette: Map<Char, Color> = basePalette
 
+    /**
+     * Pre-resolved [Color] per (variant, row, col), with `null` for transparent
+     * characters. Indexed as `variantColors[variantIndex][row][col]`. Letting
+     * the renderer skip map lookups makes the cache-build step branch-free per
+     * pixel.
+     */
+    val variantColors: Array<Array<Array<Color?>>> = Array(variants.size) { vi ->
+        val pat = variants[vi]
+        Array(pat.size) { r ->
+            val row = pat[r]
+            Array(row.length) { c ->
+                val ch = row[c]
+                if (ch == ' ' || ch == '0') null else basePalette[ch]
+            }
+        }
+    }
+
+    /**
+     * Named direction keys for [variantIndex]. Kept as small integer constants
+     * so the hash stays an `Int` op, but call sites are self-documenting and
+     * stable: changing a value here would change every maze's wall texture
+     * (which is fine, but should be intentional).
+     */
+    const val DIR_NORTH = 0
+    const val DIR_WEST = 1
+    const val DIR_SOUTH = 2
+    const val DIR_EAST = 3
+
     init {
         PixelSpriteRenderer.validatePattern(stoneTile, name = "stoneTile")
         PixelSpriteRenderer.validatePattern(stoneMossTile, name = "stoneMossTile")
@@ -71,6 +101,8 @@ object WallTextures {
      * Deterministic variant chooser keyed on (x, y, dir). Returns the index in
      * [variants]. ~80% plain stone, ~12% moss, ~8% bush. Same maze always
      * produces the same texture pattern (no per-frame allocation, no flicker).
+     * Use the [DIR_NORTH] / [DIR_WEST] / [DIR_SOUTH] / [DIR_EAST] constants for
+     * the `dir` argument.
      */
     fun variantIndex(x: Int, y: Int, dir: Int): Int {
         // Splitmix-style integer hash so adjacent cells don't correlate.
