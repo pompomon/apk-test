@@ -56,7 +56,8 @@ class MazeRenderer {
         val maze = engine.maze
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
-        shapes.color.set(0.12f, 0.12f, 0.16f, 1f)
+        // Floor — slightly darker than before so the brown/green walls pop.
+        shapes.color.set(0.08f, 0.08f, 0.10f, 1f)
         shapes.rect(mazeOriginX, 0f, maze.width.toFloat(), maze.height.toFloat())
 
         // Render the exit as a wooden door sprite centered on the exit cell.
@@ -68,51 +69,89 @@ class MazeRenderer {
             centerY = maze.exit.y + 0.5f,
             size = 0.9f
         )
-        shapes.end()
-
-        shapes.begin(ShapeRenderer.ShapeType.Line)
-        shapes.color = Color.WHITE
 
         // Walls are shared between adjacent cells; only render NORTH+WEST per cell
         // and add the matching outer SOUTH/EAST boundary segments to avoid drawing
-        // each shared edge twice per frame.
+        // each shared edge twice per frame. Each segment is a thin brick strip
+        // textured via WallTextures, with a deterministic moss/bush variant.
         for (y in 0 until maze.height) {
             for (x in 0 until maze.width) {
                 if (maze.hasWall(x, y, Direction.NORTH)) {
-                    shapes.line(
-                        mazeOriginX + x.toFloat(),
-                        (y + 1).toFloat(),
-                        mazeOriginX + (x + 1).toFloat(),
-                        (y + 1).toFloat()
-                    )
+                    drawHorizontalWall(x, y + 1, WallTextures.variantIndex(x, y, 0))
                 }
                 if (maze.hasWall(x, y, Direction.WEST)) {
-                    shapes.line(
-                        mazeOriginX + x.toFloat(),
-                        y.toFloat(),
-                        mazeOriginX + x.toFloat(),
-                        (y + 1).toFloat()
-                    )
+                    drawVerticalWall(x, y, WallTextures.variantIndex(x, y, 1))
                 }
                 if (y == 0 && maze.hasWall(x, y, Direction.SOUTH)) {
-                    shapes.line(
-                        mazeOriginX + x.toFloat(),
-                        0f,
-                        mazeOriginX + (x + 1).toFloat(),
-                        0f
-                    )
+                    drawHorizontalWall(x, 0, WallTextures.variantIndex(x, y, 2))
                 }
                 if (x == maze.width - 1 && maze.hasWall(x, y, Direction.EAST)) {
-                    shapes.line(
-                        mazeOriginX + (x + 1).toFloat(),
-                        y.toFloat(),
-                        mazeOriginX + (x + 1).toFloat(),
-                        (y + 1).toFloat()
-                    )
+                    drawVerticalWall(x + 1, y, WallTextures.variantIndex(x, y, 3))
                 }
             }
         }
         shapes.end()
+    }
+
+    private fun drawHorizontalWall(cellX: Int, wallY: Int, variantIndex: Int) {
+        // Wall runs horizontally along the bottom edge `wallY` of width 1 cell.
+        // Centered vertically on wallY with thickness WALL_THICKNESS.
+        val pattern = WallTextures.variants[variantIndex]
+        val palette = WallTextures.palette()
+        val rows = pattern.size
+        val cols = pattern[0].length
+        val originX = mazeOriginX + cellX.toFloat()
+        val originY = wallY.toFloat() - WALL_THICKNESS / 2f
+        val pixelWidth = 1f / cols
+        val pixelHeight = WALL_THICKNESS / rows
+        for (row in 0 until rows) {
+            val rowPattern = pattern[row]
+            for (col in 0 until cols) {
+                val ch = rowPattern[col]
+                if (ch == ' ' || ch == '0') continue
+                val color = palette[ch] ?: continue
+                shapes.color = color
+                shapes.rect(
+                    originX + col * pixelWidth,
+                    originY + (rows - row - 1) * pixelHeight,
+                    pixelWidth,
+                    pixelHeight
+                )
+            }
+        }
+    }
+
+    private fun drawVerticalWall(wallX: Int, cellY: Int, variantIndex: Int) {
+        // Wall runs vertically along the left edge `wallX` of height 1 cell.
+        // Same patterns as horizontal walls but transposed so the brick rows run
+        // along the wall length (which is now the Y axis).
+        val pattern = WallTextures.variants[variantIndex]
+        val palette = WallTextures.palette()
+        val rows = pattern.size       // brick "depth" → maps to wall thickness (X)
+        val cols = pattern[0].length  // brick "length" → maps to wall length (Y)
+        val originX = wallX.toFloat() + mazeOriginX - WALL_THICKNESS / 2f
+        val originY = cellY.toFloat()
+        val pixelWidth = WALL_THICKNESS / rows
+        val pixelHeight = 1f / cols
+        for (row in 0 until rows) {
+            val rowPattern = pattern[row]
+            for (col in 0 until cols) {
+                val ch = rowPattern[col]
+                if (ch == ' ' || ch == '0') continue
+                val color = palette[ch] ?: continue
+                shapes.color = color
+                // Patterns are listed top-down; for a vertical wall, the "top"
+                // of the brick (row 0) should be along the outer side. Place
+                // row 0 at the larger X so highlights point outward (purely
+                // cosmetic; consistent across the maze).
+                shapes.rect(
+                    originX + (rows - row - 1) * pixelWidth,
+                    originY + col * pixelHeight,
+                    pixelWidth,
+                    pixelHeight
+                )
+            }
+        }
     }
 
     private fun drawEntities(engine: GameEngine) {
@@ -154,6 +193,11 @@ class MazeRenderer {
             )
         }
         shapes.end()
+    }
+
+    private companion object {
+        // Wall thickness as fraction of a cell (world units).
+        private const val WALL_THICKNESS = 0.18f
     }
 
     private object PixelPowerUpIconRenderer {

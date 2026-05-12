@@ -1,6 +1,7 @@
 package com.example.apktest.game.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -37,5 +38,13 @@ class DifficultyPresetTest {
             npcVisionRange = 3,
             balanceRule = NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER
         )
+    }
+
+    @Test
+    fun mediumPowerUpPolicy_usesSixtySecondLifetimeAndRespawns() {
+        assertEquals(60f, DifficultyPresets.MEDIUM.powerUpPickupLifetimeSeconds, 0.0001f)
+        val respawn = DifficultyPresets.MEDIUM.powerUpRespawnIntervalSeconds
+        assertNotNull("Medium should respawn power-ups so the map stays populated", respawn)
+        assertTrue("Medium respawn interval should be positive", (respawn ?: 0f) > 0f)
     }
 }
