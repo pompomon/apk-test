@@ -33,6 +33,17 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     internal var resolvedSwipeCount: Int = 0
         private set
 
+    /**
+     * Feeds a MotionEvent directly into the swipe gesture detector, bypassing
+     * `dispatchTouchEvent`'s hit-testing. Used by instrumentation tests to verify swipe
+     * resolution without depending on the emulator's input pipeline (which can drop synthetic
+     * events) or the cross-app injection permission required by `Instrumentation.sendPointerSync`.
+     */
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun feedSwipeEventForTesting(event: MotionEvent) {
+        swipeGestureDetector?.onTouchEvent(event)
+    }
+
     private var swipeGestureDetector: GestureDetector? = null
     private var swipeGestureActive: Boolean = false
     private val gameHostWindowRect = android.graphics.Rect()

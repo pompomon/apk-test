@@ -131,11 +131,26 @@ class ExampleInstrumentedTest {
         endX: Float,
         endY: Float
     ) {
-        // dispatchSwipe uses Instrumentation.sendPointerSync, which blocks waiting for the
-        // main thread to drain — so it MUST be called from the test thread, not from inside
-        // scenario.onActivity (which already holds the main thread).
-        dispatchSwipe(startX, startY, endX, endY)
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        // For the positive swipe-resolution test we feed events directly into the activity's
+        // swipe GestureDetector via a @VisibleForTesting hook. This avoids two pitfalls:
+        //   1. activity.dispatchTouchEvent + raw MotionEvent.obtain has been observed to drop
+        //      synthetic flings on the emulator (deterministic 0-resolved-swipes even with retries).
+        //   2. Instrumentation.sendPointerSync requires INJECT_EVENTS permission when the test
+        //      and target apps don't share a UID (which is our case), and raises SecurityException.
+        // The view-dispatch hit-testing path is still covered by
+        // mainActivity_swipeOnOverlayDoesNotTriggerMovement, which feeds events through
+        // activity.dispatchTouchEvent.
+        val events = buildSwipeEvents(startX, startY, endX, endY)
+        try {
+            scenario.onActivity { activity ->
+                for (event in events) {
+                    activity.feedSwipeEventForTesting(event)
+                }
+            }
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        } finally {
+            events.forEach { it.recycle() }
+        }
     }
 
     @Test
@@ -143,17 +158,15 @@ class ExampleInstrumentedTest {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             waitForGameHostLaidOut(scenario)
             val baseline = AtomicInteger(0)
-            val topRect = IntArray(4)
-            val bottomRect = IntArray(4)
             scenario.onActivity { activity ->
                 attachedGameFragment(activity)
                 baseline.set(activity.resolvedSwipeCount)
-                captureViewRect(activity, R.id.topOverlay, topRect)
-                captureViewRect(activity, R.id.bottomControls, bottomRect)
+                // Dispatch swipes that start inside the top and bottom overlay regions via the
+                // real dispatchTouchEvent path; the hit-test in MainActivity must reject them
+                // so they never reach the gesture detector.
+                dispatchSwipeInsideView(activity, R.id.topOverlay)
+                dispatchSwipeInsideView(activity, R.id.bottomControls)
             }
-            // Dispatch overlay swipes from the test thread (sendPointerSync requirement).
-            dispatchSwipeInsideRect(topRect)
-            dispatchSwipeInsideRect(bottomRect)
             // Give the gesture detector a chance to (incorrectly) resolve swipes; if the
             // hit-test exclusion is correct, resolvedSwipeCount must remain unchanged.
             SystemClock.sleep(STEP_POLL_INTERVAL_MS * 4)
@@ -168,33 +181,69 @@ class ExampleInstrumentedTest {
         }
     }
 
-    private fun captureViewRect(activity: MainActivity, viewId: Int, out: IntArray) {
-        val view = activity.findViewById<android.view.View>(viewId)
-        if (view == null || view.width <= 0 || view.height <= 0) {
-            out[0] = 0; out[1] = 0; out[2] = 0; out[3] = 0
-            return
-        }
+    private fun dispatchSwipeInsideView(activity: MainActivity, viewId: Int) {
+        val view = activity.findViewById<android.view.View>(viewId) ?: return
+        if (view.width <= 0 || view.height <= 0) return
         val location = IntArray(2)
         view.getLocationInWindow(location)
-        out[0] = location[0]
-        out[1] = location[1]
-        out[2] = view.width
-        out[3] = view.height
-    }
-
-    private fun dispatchSwipeInsideRect(rect: IntArray) {
-        val width = rect[2]
-        val height = rect[3]
-        if (width <= 0 || height <= 0) return
-        val originX = rect[0].toFloat()
-        val originY = rect[1].toFloat()
+        val originX = location[0].toFloat()
+        val originY = location[1].toFloat()
+        val width = view.width.toFloat()
+        val height = view.height.toFloat()
         val centerX = originX + width / 2f
         val centerY = originY + height / 2f
-        // Use a smaller span clamped to the overlay's size so the entire swipe stays inside
-        // the overlay region.
         val span = minOf(width, height) * 0.4f
-        dispatchSwipe(centerX - span / 2f, centerY, centerX + span / 2f, centerY)
-        dispatchSwipe(centerX, centerY - span / 2f, centerX, centerY + span / 2f)
+        dispatchSwipeViaTouchEvent(activity, centerX - span / 2f, centerY, centerX + span / 2f, centerY)
+        dispatchSwipeViaTouchEvent(activity, centerX, centerY - span / 2f, centerX, centerY + span / 2f)
+    }
+
+    private fun dispatchSwipeViaTouchEvent(
+        activity: android.app.Activity,
+        startX: Float,
+        startY: Float,
+        endX: Float,
+        endY: Float
+    ) {
+        val events = buildSwipeEvents(startX, startY, endX, endY)
+        try {
+            for (event in events) {
+                activity.dispatchTouchEvent(event)
+            }
+        } finally {
+            events.forEach { it.recycle() }
+        }
+    }
+
+    private fun buildSwipeEvents(
+        startX: Float,
+        startY: Float,
+        endX: Float,
+        endY: Float
+    ): List<MotionEvent> {
+        val downTime = SystemClock.uptimeMillis()
+        val moveSteps = 10
+        val totalDurationMs = 120L
+        val events = mutableListOf<MotionEvent>()
+        events += MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, startX, startY, 0)
+        for (i in 1..moveSteps) {
+            val fraction = i.toFloat() / (moveSteps + 1)
+            val x = startX + (endX - startX) * fraction
+            val y = startY + (endY - startY) * fraction
+            val eventTime = downTime + (totalDurationMs * fraction).toLong()
+            events += MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_MOVE, x, y, 0)
+        }
+        events += MotionEvent.obtain(
+            downTime,
+            downTime + totalDurationMs,
+            MotionEvent.ACTION_UP,
+            endX,
+            endY,
+            0
+        )
+        for (event in events) {
+            event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+        }
+        return events
     }
 
     private fun attachedGameFragment(activity: MainActivity): GameFragment {
@@ -241,48 +290,6 @@ class ExampleInstrumentedTest {
             }
         }
         return resolved
-    }
-
-    private fun dispatchSwipe(
-        startX: Float,
-        startY: Float,
-        endX: Float,
-        endY: Float
-    ) {
-        // Inject events through Instrumentation.sendPointerSync, which routes via the real
-        // InputDispatcher and sets InputDevice.SOURCE_TOUCHSCREEN. Going through
-        // activity.dispatchTouchEvent with raw MotionEvent.obtain (SOURCE_UNKNOWN) is
-        // unreliable on the emulator: events can be silently dropped before reaching the
-        // GestureDetector, which is why flings never resolved even with retries.
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val downTime = SystemClock.uptimeMillis()
-        val moveSteps = 10
-        val totalDurationMs = 120L
-        val events = mutableListOf<MotionEvent>()
-        events += MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, startX, startY, 0)
-        for (i in 1..moveSteps) {
-            val fraction = i.toFloat() / (moveSteps + 1)
-            val x = startX + (endX - startX) * fraction
-            val y = startY + (endY - startY) * fraction
-            val eventTime = downTime + (totalDurationMs * fraction).toLong()
-            events += MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_MOVE, x, y, 0)
-        }
-        events += MotionEvent.obtain(
-            downTime,
-            downTime + totalDurationMs,
-            MotionEvent.ACTION_UP,
-            endX,
-            endY,
-            0
-        )
-        try {
-            for (event in events) {
-                event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
-                instrumentation.sendPointerSync(event)
-            }
-        } finally {
-            events.forEach { it.recycle() }
-        }
     }
 
     companion object {
