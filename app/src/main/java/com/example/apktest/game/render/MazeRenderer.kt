@@ -97,7 +97,7 @@ class MazeRenderer {
         // Wall runs horizontally along the bottom edge `wallY` of width 1 cell.
         // Centered vertically on wallY with thickness WALL_THICKNESS.
         val pattern = WallTextures.variants[variantIndex]
-        val palette = WallTextures.palette()
+        val palette = WallTextures.palette
         val rows = pattern.size
         val cols = pattern[0].length
         val originX = mazeOriginX + cellX.toFloat()
@@ -126,7 +126,7 @@ class MazeRenderer {
         // Same patterns as horizontal walls but transposed so the brick rows run
         // along the wall length (which is now the Y axis).
         val pattern = WallTextures.variants[variantIndex]
-        val palette = WallTextures.palette()
+        val palette = WallTextures.palette
         val rows = pattern.size       // brick "depth" → maps to wall thickness (X)
         val cols = pattern[0].length  // brick "length" → maps to wall length (Y)
         val originX = wallX.toFloat() + mazeOriginX - WALL_THICKNESS / 2f

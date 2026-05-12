@@ -59,7 +59,7 @@ object WallTextures {
 
     val variants: Array<Array<String>> = arrayOf(stoneTile, stoneMossTile, stoneBushTile)
 
-    fun palette(): Map<Char, Color> = basePalette
+    val palette: Map<Char, Color> = basePalette
 
     init {
         PixelSpriteRenderer.validatePattern(stoneTile, name = "stoneTile")
