@@ -22,6 +22,7 @@ class PowerUpIconView @JvmOverloads constructor(
 
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
+        color = PowerUpIcons.androidColorFor(PowerUpType.entries.first())
     }
     private val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -29,10 +30,17 @@ class PowerUpIconView @JvmOverloads constructor(
     }
 
     private var type: PowerUpType = PowerUpType.entries.first()
+    // Cached values derived from `type` so onDraw never re-resolves them.
+    private var cachedPattern: Array<String> = PowerUpIcons.patternFor(type)
+    private var cachedRows: Int = cachedPattern.size
+    private var cachedCols: Int = if (cachedPattern.isNotEmpty()) cachedPattern[0].length else 0
 
     fun setPowerUpType(type: PowerUpType) {
         if (this.type == type) return
         this.type = type
+        cachedPattern = PowerUpIcons.patternFor(type)
+        cachedRows = cachedPattern.size
+        cachedCols = if (cachedPattern.isNotEmpty()) cachedPattern[0].length else 0
         fillPaint.color = PowerUpIcons.androidColorFor(type)
         invalidate()
     }
@@ -46,10 +54,10 @@ class PowerUpIconView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val pattern = PowerUpIcons.patternFor(type)
-        val rows = pattern.size
+        val pattern = cachedPattern
+        val rows = cachedRows
         if (rows == 0) return
-        val cols = pattern[0].length
+        val cols = cachedCols
         if (cols == 0) return
 
         val size = minOf(width, height).toFloat()
@@ -69,7 +77,6 @@ class PowerUpIconView @JvmOverloads constructor(
             outlinePaint
         )
 
-        fillPaint.color = PowerUpIcons.androidColorFor(type)
         for (row in 0 until rows) {
             val rowStr = pattern[row]
             for (col in 0 until cols) {

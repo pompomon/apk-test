@@ -12,7 +12,37 @@ import com.example.apktest.game.core.PowerUpType
  * renderer flips Y when drawing via [PixelSpriteRenderer].
  */
 object PowerUpIcons {
-    fun patternFor(type: PowerUpType): Array<String> = when (type) {
+    // Per-type values are computed once per PowerUpType via the exhaustive
+    // `when` builders below and then cached, so the per-frame in-game renderer
+    // (MazeRenderer) and the legend icon view do not allocate new arrays /
+    // perform map lookups on every call. The `when` expressions remain the
+    // single source of truth and keep compile-time completeness checks.
+    private val patternByType: Map<PowerUpType, Array<String>> =
+        PowerUpType.entries.associateWith { buildPattern(it) }
+    private val gdxColorByType: Map<PowerUpType, Color> =
+        PowerUpType.entries.associateWith { buildGdxColor(it) }
+    private val androidColorByType: Map<PowerUpType, Int> =
+        PowerUpType.entries.associateWith { buildAndroidColor(it) }
+
+    init {
+        // Validate icon patterns once at class init so PixelSpriteRenderer.draw
+        // and PowerUpIconView.onDraw stay allocation-free in the render loop.
+        patternByType.forEach { (type, pattern) ->
+            PixelSpriteRenderer.validatePattern(pattern, name = "powerUp:$type")
+        }
+    }
+
+    fun patternFor(type: PowerUpType): Array<String> = patternByType.getValue(type)
+
+    fun gdxColorFor(type: PowerUpType): Color = gdxColorByType.getValue(type)
+
+    /**
+     * 0xAARRGGBB color (Android-friendly) matching [gdxColorFor]. Kept in sync
+     * with the libGDX palette above.
+     */
+    fun androidColorFor(type: PowerUpType): Int = androidColorByType.getValue(type)
+
+    private fun buildPattern(type: PowerUpType): Array<String> = when (type) {
         PowerUpType.INVISIBILITY -> arrayOf(
             "00100",
             "01110",
@@ -58,7 +88,7 @@ object PowerUpIcons {
         )
     }
 
-    fun gdxColorFor(type: PowerUpType): Color = when (type) {
+    private fun buildGdxColor(type: PowerUpType): Color = when (type) {
         PowerUpType.INVISIBILITY -> Color(0.68f, 0.5f, 0.96f, 1f)
         PowerUpType.TELEPORT -> Color(0.25f, 0.86f, 0.96f, 1f)
         PowerUpType.SPEED_UP -> Color(1f, 0.91f, 0.3f, 1f)
@@ -67,11 +97,7 @@ object PowerUpIcons {
         PowerUpType.GHOST_MODE -> Color(0.82f, 0.88f, 1f, 1f)
     }
 
-    /**
-     * 0xAARRGGBB color (Android-friendly) matching [gdxColorFor]. Kept in sync
-     * with the libGDX palette above.
-     */
-    fun androidColorFor(type: PowerUpType): Int = when (type) {
+    private fun buildAndroidColor(type: PowerUpType): Int = when (type) {
         PowerUpType.INVISIBILITY -> 0xFFAD80F5.toInt()
         PowerUpType.TELEPORT -> 0xFF40DBF5.toInt()
         PowerUpType.SPEED_UP -> 0xFFFFE84D.toInt()

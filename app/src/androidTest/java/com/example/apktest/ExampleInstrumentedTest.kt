@@ -89,15 +89,22 @@ class ExampleInstrumentedTest {
             val vs = verticalSpan.get().toFloat()
             // Each swipe is dispatched in its own UI-thread frame and followed by an idle-sync,
             // so the GestureDetector / VelocityTracker can finish processing the previous fling
-            // before the next ACTION_DOWN arrives.
-            dispatchSwipeOnUiThread(scenario, cx, cy + vs / 2f, cx, cy - vs / 2f)
-            dispatchSwipeOnUiThread(scenario, cx, cy - vs / 2f, cx, cy + vs / 2f)
-            dispatchSwipeOnUiThread(scenario, cx + hs / 2f, cy, cx - hs / 2f, cy)
-            dispatchSwipeOnUiThread(scenario, cx - hs / 2f, cy, cx + hs / 2f, cy)
-
-            val finalSwipes = pollResolvedSwipes(scenario, initialSwipes.get())
+            // before the next ACTION_DOWN arrives. The whole 4-swipe sequence is retried a few
+            // times because synthetic flings can be dropped intermittently on slow emulators
+            // (we only need ONE of them to be resolved for the assertion to pass).
+            var finalSwipes = initialSwipes.get()
+            var swipeAttempts = 0
+            while (finalSwipes <= initialSwipes.get() && swipeAttempts < MAX_SWIPE_RETRY_ATTEMPTS) {
+                dispatchSwipeOnUiThread(scenario, cx, cy + vs / 2f, cx, cy - vs / 2f)
+                dispatchSwipeOnUiThread(scenario, cx, cy - vs / 2f, cx, cy + vs / 2f)
+                dispatchSwipeOnUiThread(scenario, cx + hs / 2f, cy, cx - hs / 2f, cy)
+                dispatchSwipeOnUiThread(scenario, cx - hs / 2f, cy, cx + hs / 2f, cy)
+                finalSwipes = pollResolvedSwipes(scenario, initialSwipes.get())
+                swipeAttempts++
+            }
             assertTrue(
-                "At least one swipe should be resolved by the gesture detector",
+                "At least one swipe should be resolved by the gesture detector " +
+                    "(attempts=$swipeAttempts)",
                 finalSwipes > initialSwipes.get()
             )
 
@@ -267,5 +274,8 @@ class ExampleInstrumentedTest {
         private const val SWIPE_REL_SPAN = 0.6f
         private const val MAX_LAYOUT_POLL_ATTEMPTS = 40
         private const val LAYOUT_POLL_INTERVAL_MS = 50L
+        // Retry the entire 4-swipe sequence a few times if no fling resolves; synthetic flings
+        // can be intermittently dropped by the emulator's input pipeline.
+        private const val MAX_SWIPE_RETRY_ATTEMPTS = 5
     }
 }

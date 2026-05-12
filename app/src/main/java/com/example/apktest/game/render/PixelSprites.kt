@@ -7,8 +7,9 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer
  * Renders multi-color pixel-art sprites described by a rectangular character
  * grid and a character → [Color] palette. Each character corresponds to one
  * pixel of the sprite; `' '` (space) and `'0'` are reserved for "transparent"
- * pixels and are never drawn. All rows must share the same length (enforced
- * by [draw]); the grid does not need to be square.
+ * pixels and are never drawn. All rows must share the same length; this is
+ * the caller's contract and is validated once when a pattern is defined (see
+ * the [Sprites] init block) so [draw] stays allocation-free in the render loop.
  *
  * The patterns are stored as rows read top-to-bottom so they read naturally in
  * code, and the renderer flips Y when drawing because [ShapeRenderer] uses
@@ -27,11 +28,6 @@ object PixelSpriteRenderer {
         if (rows == 0) return
         val cols = pattern[0].length
         if (cols == 0) return
-        // Sprite patterns are authored as fixed-size grids; require row
-        // consistency so callers can rely on uniform pixel dimensions.
-        require(pattern.all { it.length == cols }) {
-            "All rows in a sprite pattern must have the same length ($cols)."
-        }
 
         val pixelWidth = size / cols
         val pixelHeight = size / rows
@@ -52,6 +48,22 @@ object PixelSpriteRenderer {
                     pixelWidth,
                     pixelHeight
                 )
+            }
+        }
+    }
+
+    /**
+     * Validates that every row of [pattern] shares the same length. Intended to
+     * be called once from sprite/icon definitions (not from [draw]) so the per-
+     * frame render path stays allocation-free.
+     */
+    fun validatePattern(pattern: Array<String>, name: String = "<unnamed>") {
+        if (pattern.isEmpty()) return
+        val cols = pattern[0].length
+        for (i in 1 until pattern.size) {
+            require(pattern[i].length == cols) {
+                "Sprite pattern '$name' row $i has length ${pattern[i].length}, " +
+                    "expected $cols."
             }
         }
     }
@@ -118,4 +130,12 @@ object Sprites {
     fun heroPalette(): Map<Char, Color> = heroPalette
     fun monsterPalette(): Map<Char, Color> = monsterPalette
     fun doorPalette(): Map<Char, Color> = doorPalette
+
+    init {
+        // Validate sprite grids once at class init so PixelSpriteRenderer.draw
+        // stays allocation-free in the per-frame render loop.
+        PixelSpriteRenderer.validatePattern(hero, name = "hero")
+        PixelSpriteRenderer.validatePattern(monster, name = "monster")
+        PixelSpriteRenderer.validatePattern(exitDoor, name = "exitDoor")
+    }
 }
