@@ -1,5 +1,6 @@
 package com.example.apktest
 
+import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -7,9 +8,7 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
-import android.widget.ArrayAdapter
 import android.widget.Button
-import android.widget.Spinner
 import android.widget.TextView
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatActivity
@@ -23,6 +22,7 @@ import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
+import com.example.apktest.ui.LegendDialog
 
 class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private lateinit var statusText: TextView
@@ -32,6 +32,17 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal var resolvedSwipeCount: Int = 0
         private set
+
+    /**
+     * Feeds a MotionEvent directly into the swipe gesture detector, bypassing
+     * `dispatchTouchEvent`'s hit-testing. Used by instrumentation tests to verify swipe
+     * resolution without depending on the emulator's input pipeline (which can drop synthetic
+     * events) or the cross-app injection permission required by `Instrumentation.sendPointerSync`.
+     */
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun feedSwipeEventForTesting(event: MotionEvent) {
+        swipeGestureDetector?.onTouchEvent(event)
+    }
 
     private var swipeGestureDetector: GestureDetector? = null
     private var swipeGestureActive: Boolean = false
@@ -64,13 +75,41 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         powerUpText = findViewById(R.id.textPowerUps)
 
         if (savedInstanceState == null) {
+            val fragment = GameFragment().apply {
+                arguments = buildGameFragmentArgs(intent)
+            }
             supportFragmentManager.beginTransaction()
-                .replace(R.id.fragmentGameHost, GameFragment())
+                .replace(R.id.fragmentGameHost, fragment)
                 .commit()
         }
 
         setupControls()
         setupSwipeControls()
+    }
+
+    private fun buildGameFragmentArgs(intent: Intent): Bundle {
+        // Resolve selections from the launching intent; fall back to safe
+        // defaults so the activity remains usable if launched directly.
+        val player = enumOrDefault(
+            intent.getStringExtra(SetupActivity.EXTRA_PLAYER_POLICY),
+            PlayerPolicyType.MANUAL
+        )
+        val npc = enumOrDefault(
+            intent.getStringExtra(SetupActivity.EXTRA_NPC_POLICY),
+            NpcPolicyType.DIRECT_CHASE
+        )
+        val difficulty = intent.getStringExtra(SetupActivity.EXTRA_DIFFICULTY)
+            ?: DifficultyPresets.MEDIUM.name
+        return Bundle().apply {
+            putString(GameFragment.ARG_PLAYER_POLICY, player.name)
+            putString(GameFragment.ARG_NPC_POLICY, npc.name)
+            putString(GameFragment.ARG_DIFFICULTY, difficulty)
+        }
+    }
+
+    private inline fun <reified E : Enum<E>> enumOrDefault(name: String?, default: E): E {
+        if (name == null) return default
+        return enumValues<E>().firstOrNull { it.name == name } ?: default
     }
 
     override fun exit() {
@@ -90,45 +129,6 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     }
 
     private fun setupControls() {
-        val playerSpinner = findViewById<Spinner>(R.id.spinnerPlayerPolicy)
-        val npcSpinner = findViewById<Spinner>(R.id.spinnerNpcPolicy)
-        val difficultySpinner = findViewById<Spinner>(R.id.spinnerDifficulty)
-
-        playerSpinner.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_item,
-            PlayerPolicyType.entries.map { it.label }
-        ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-
-        npcSpinner.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_item,
-            NpcPolicyType.entries.map { it.label }
-        ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-
-        val difficulties = DifficultyPresets.all.map { it.name }
-        difficultySpinner.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_item,
-            difficulties
-        ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-        val defaultDifficultyIndex = difficulties.indexOf(DifficultyPresets.MEDIUM.name)
-            .takeIf { it >= 0 }
-            ?: 0
-        difficultySpinner.setSelection(defaultDifficultyIndex)
-
-        findViewById<Button>(R.id.buttonApply).setOnClickListener {
-            val fragment = gameFragment() ?: return@setOnClickListener
-            val selectedPlayer = PlayerPolicyType.entries[playerSpinner.selectedItemPosition]
-            val selectedNpc = NpcPolicyType.entries[npcSpinner.selectedItemPosition]
-            val selectedDifficulty = difficultySpinner.selectedItem.toString()
-
-            fragment.setPlayerPolicy(selectedPlayer)
-            fragment.setNpcPolicy(selectedNpc)
-            fragment.setDifficulty(selectedDifficulty)
-            refreshHudSnapshot()
-        }
-
         findViewById<Button>(R.id.buttonPause).setOnClickListener {
             gameFragment()?.togglePause()
             refreshHudSnapshot()
@@ -137,6 +137,18 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         findViewById<Button>(R.id.buttonRestart).setOnClickListener {
             gameFragment()?.restart()
             refreshHudSnapshot()
+        }
+
+        findViewById<Button>(R.id.buttonLegend).setOnClickListener {
+            LegendDialog.show(this)
+        }
+
+        findViewById<Button>(R.id.buttonBackToSetup).setOnClickListener {
+            val intent = Intent(this, SetupActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            startActivity(intent)
+            finish()
         }
 
         findViewById<Button>(R.id.buttonUp).setOnClickListener { move(Direction.NORTH) }

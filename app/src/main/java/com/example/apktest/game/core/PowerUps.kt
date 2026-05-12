@@ -21,10 +21,12 @@ data class PowerUpMetadata(
 
 enum class PowerUpType(
     val label: String,
+    val description: String,
     val metadata: PowerUpMetadata
 ) {
     INVISIBILITY(
         label = "Invisibility",
+        description = "Hides the player from NPCs and prevents capture while active.",
         metadata = PowerUpMetadata(
             kind = PowerUpEffectKind.TIMED,
             defaultDurationSeconds = 5f,
@@ -34,6 +36,7 @@ enum class PowerUpType(
     ),
     TELEPORT(
         label = "Teleport",
+        description = "Instantly relocates the player to a random walkable cell that still has a path to the exit.",
         metadata = PowerUpMetadata(
             kind = PowerUpEffectKind.INSTANT,
             defaultDurationSeconds = 0f,
@@ -43,6 +46,7 @@ enum class PowerUpType(
     ),
     SPEED_UP(
         label = "Speed-up",
+        description = "Doubles the player's movement speed for a short duration.",
         metadata = PowerUpMetadata(
             kind = PowerUpEffectKind.TIMED,
             defaultDurationSeconds = 10f,
@@ -52,6 +56,7 @@ enum class PowerUpType(
     ),
     FREEZE(
         label = "Freeze",
+        description = "Freezes all NPCs in place; the player cannot be caught while active.",
         metadata = PowerUpMetadata(
             kind = PowerUpEffectKind.TIMED,
             defaultDurationSeconds = 5f,
@@ -61,11 +66,22 @@ enum class PowerUpType(
     ),
     BLAST(
         label = "Blast",
+        description = "Instantly removes the walls around the player's current cell.",
         metadata = PowerUpMetadata(
             kind = PowerUpEffectKind.INSTANT,
             defaultDurationSeconds = 0f,
             iconId = "blast",
             stackPolicy = PowerUpStackPolicy.IGNORE_IF_ACTIVE
+        )
+    ),
+    GHOST_MODE(
+        label = "Ghost Mode",
+        description = "Lets the player walk through walls for 3 seconds. Does not prevent capture.",
+        metadata = PowerUpMetadata(
+            kind = PowerUpEffectKind.TIMED,
+            defaultDurationSeconds = 3f,
+            iconId = "ghost_mode",
+            stackPolicy = PowerUpStackPolicy.REFRESH_DURATION
         )
     )
 }

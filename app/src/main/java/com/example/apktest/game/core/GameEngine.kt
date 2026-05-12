@@ -184,9 +184,19 @@ class GameEngine(
             )
         } ?: return
 
-        if (!maze.canMove(player.position, requestedDirection)) return
+        // GHOST_MODE lets the player walk through walls; NPCs intentionally do
+        // not gain this ability (NpcPolicyContext is unchanged) so the power-up
+        // gives the player a distinct movement advantage rather than full
+        // collision immunity (which is what INVISIBILITY/FREEZE provide).
+        val nextPosition = player.position.moved(requestedDirection)
+        val canTraverse = if (isEffectActive(PowerUpType.GHOST_MODE)) {
+            maze.inBounds(nextPosition)
+        } else {
+            maze.canMove(player.position, requestedDirection)
+        }
+        if (!canTraverse) return
 
-        player.position = player.position.moved(requestedDirection)
+        player.position = nextPosition
         player.facing = requestedDirection
         steps += 1
         collectPowerUpAtPlayer()
@@ -342,6 +352,7 @@ class GameEngine(
             PowerUpType.SPEED_UP -> activateTimedEffect(PowerUpType.SPEED_UP)
             PowerUpType.FREEZE -> activateTimedEffect(PowerUpType.FREEZE)
             PowerUpType.BLAST -> applyBlast()
+            PowerUpType.GHOST_MODE -> activateTimedEffect(PowerUpType.GHOST_MODE)
         }
     }
 
