@@ -4,7 +4,11 @@ data class Player(
     var position: GridPos,
     var facing: Direction = Direction.EAST,
     var animationFrame: Int = 0,
-    var lastMoveAtSeconds: Float = 0f
+    // Sentinel "never moved": NEGATIVE_INFINITY ensures the renderer's
+    // `elapsedSeconds - lastMoveAtSeconds > IDLE_THRESHOLD` check is true at
+    // t=0, so newly-spawned entities start in the idle frame rather than
+    // accidentally being drawn mid-step.
+    var lastMoveAtSeconds: Float = Float.NEGATIVE_INFINITY
 )
 
 enum class NpcState {
@@ -23,7 +27,8 @@ data class Npc(
     var lastKnownPlayerPos: GridPos? = null,
     var searchTicksRemaining: Int = 0,
     var animationFrame: Int = 0,
-    var lastMoveAtSeconds: Float = 0f
+    // See Player.lastMoveAtSeconds for the sentinel rationale.
+    var lastMoveAtSeconds: Float = Float.NEGATIVE_INFINITY
 )
 
 enum class GameStatus {

@@ -332,7 +332,7 @@ class GameEngineTest {
         engine.update(1f / engine.difficulty.playerMovesPerSecond + 0.001f)
 
         assertEquals(frameBefore, engine.player.animationFrame)
-        assertEquals(lastMoveBefore, engine.player.lastMoveAtSeconds, 0.0001f)
+        assertEquals(lastMoveBefore, engine.player.lastMoveAtSeconds)
     }
 
     @Test

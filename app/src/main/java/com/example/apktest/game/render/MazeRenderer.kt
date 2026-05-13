@@ -112,9 +112,11 @@ class MazeRenderer {
 
     /**
      * Walks every wall edge and expands its brick pattern into a flat list of
-     * coloured rects, stored in maze-local coordinates. Called only when the
-     * active Maze instance changes (start of game / restart), so the per-frame
-     * draw loop pays no pattern-decoding cost.
+     * coloured rects, stored in maze-local coordinates. Called whenever the
+     * active [Maze] instance changes (start of game / restart) **or** its
+     * [Maze.revision] counter advances after an in-place wall mutation (e.g.
+     * the BLAST power-up calling [Maze.removeWall]). The per-frame draw loop
+     * pays no pattern-decoding cost while the cache is hot.
      */
     private fun rebuildWallGeometry(maze: Maze) {
         // Upper-bound the scratch arrays so the append loop is branch-free

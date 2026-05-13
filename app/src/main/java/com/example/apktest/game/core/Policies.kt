@@ -200,9 +200,15 @@ object PolicyFactory {
         PlayerPolicyType.ASTAR_EXIT -> AStarExitPolicy()
     }
 
-    fun npc(type: NpcPolicyType): NpcPolicy = when (type) {
-        NpcPolicyType.DIRECT_CHASE -> DirectChasePolicy()
-        NpcPolicyType.PREDICTIVE_CHASE -> PredictiveChasePolicy()
+    /**
+     * Builds an [NpcPolicy]. Callers should pass a deterministic [random] so
+     * NPC behaviour under INVISIBILITY (which falls back to a random wander)
+     * remains reproducible for a given engine seed; the default [Random.Default]
+     * is only intended for ad-hoc construction in tests/tools.
+     */
+    fun npc(type: NpcPolicyType, random: Random = Random.Default): NpcPolicy = when (type) {
+        NpcPolicyType.DIRECT_CHASE -> DirectChasePolicy(random)
+        NpcPolicyType.PREDICTIVE_CHASE -> PredictiveChasePolicy(random)
         NpcPolicyType.PATROL_GUARD -> PatrolGuardPolicy()
     }
 }
@@ -216,16 +222,46 @@ private fun nextDirection(from: GridPos, path: List<GridPos>): Direction? {
 private fun manhattanDistance(a: GridPos, b: GridPos): Int = abs(a.x - b.x) + abs(a.y - b.y)
 
 /**
- * Picks a random walkable neighbour direction for [npc], preferring to keep
- * moving forward and avoiding an immediate reversal when other options exist.
- * Used by chase policies when the player is invisible so NPCs wander instead
- * of standing still (FREEZE remains the only effect that truly stops NPCs).
+ * Picks a random walkable neighbour direction for [npc], avoiding an immediate
+ * reversal (`npc.facing.opposite()`) when at least one other walkable
+ * direction exists. Used by chase policies when the player is invisible so
+ * NPCs wander instead of standing still (FREEZE remains the only effect that
+ *  truly stops NPCs). Implementation is allocation-free: it iterates
+ * [Direction.entries] once into a shared single-thread scratch array
+ * (the engine update loop is strictly single-threaded), suitable for the
+ * per-tick NPC loop.
  */
 private fun wanderMove(npc: Npc, maze: Maze, random: Random): Direction? {
-    val options = Direction.entries.filter { maze.canMove(npc.position, it) }
-    if (options.isEmpty()) return null
+    val all = Direction.entries
+    val pool = WANDER_POOL_SCRATCH
     val reverse = npc.facing.opposite()
-    val nonReverse = options.filter { it != reverse }
-    val pool = if (nonReverse.isNotEmpty()) nonReverse else options
-    return pool[random.nextInt(pool.size)]
+    var total = 0
+    var nonReverse = 0
+    for (i in all.indices) {
+        val direction = all[i]
+        if (!maze.canMove(npc.position, direction)) continue
+        pool[total] = direction
+        total++
+        if (direction != reverse) nonReverse++
+    }
+    if (total == 0) return null
+    return if (nonReverse > 0) {
+        // Pick uniformly from the non-reversal subset by rejection-sampling
+        // within the small (<=4) pool — still allocation-free.
+        var pick = random.nextInt(nonReverse)
+        for (i in 0 until total) {
+            val d = pool[i]!!
+            if (d == reverse) continue
+            if (pick == 0) return d
+            pick--
+        }
+        pool[0]!! // unreachable but keeps the compiler happy
+    } else {
+        pool[random.nextInt(total)]!!
+    }
 }
+
+// Per-thread scratch pool; the NPC update loop runs on the GL thread and is
+// strictly single-threaded, so a shared array is safe and avoids a per-call
+// allocation. Sized to the maximum possible walkable neighbours (4).
+private val WANDER_POOL_SCRATCH: Array<Direction?> = arrayOfNulls(4)
