@@ -2,7 +2,9 @@ package com.example.apktest.game.core
 
 data class Player(
     var position: GridPos,
-    var facing: Direction = Direction.EAST
+    var facing: Direction = Direction.EAST,
+    var animationFrame: Int = 0,
+    var lastMoveAtSeconds: Float = 0f
 )
 
 enum class NpcState {
@@ -19,7 +21,9 @@ data class Npc(
     val patrolRoute: List<GridPos> = emptyList(),
     var patrolIndex: Int = 0,
     var lastKnownPlayerPos: GridPos? = null,
-    var searchTicksRemaining: Int = 0
+    var searchTicksRemaining: Int = 0,
+    var animationFrame: Int = 0,
+    var lastMoveAtSeconds: Float = 0f
 )
 
 enum class GameStatus {

@@ -198,6 +198,8 @@ class GameEngine(
 
         player.position = nextPosition
         player.facing = requestedDirection
+        player.animationFrame = (player.animationFrame + 1) % ANIMATION_FRAMES
+        player.lastMoveAtSeconds = elapsedSeconds
         steps += 1
         collectPowerUpAtPlayer()
     }
@@ -218,6 +220,8 @@ class GameEngine(
 
             npc.position = npc.position.moved(direction)
             npc.facing = direction
+            npc.animationFrame = (npc.animationFrame + 1) % ANIMATION_FRAMES
+            npc.lastMoveAtSeconds = elapsedSeconds
         }
     }
 
@@ -418,5 +422,11 @@ class GameEngine(
         private const val MAX_EXTRA_PATROL_WAYPOINTS = 2
         private const val MAX_MANUAL_QUEUE = 8
         private const val SPEED_UP_MULTIPLIER = 2f
+        const val ANIMATION_FRAMES = 3
+        /**
+         * Renderer-side idle threshold: entities that haven't moved for this many
+         * seconds are drawn using the idle frame.
+         */
+        const val ANIMATION_IDLE_THRESHOLD_SECONDS = 0.15f
     }
 }

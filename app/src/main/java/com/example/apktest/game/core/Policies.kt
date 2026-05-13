@@ -98,17 +98,19 @@ class AStarExitPolicy : PlayerPolicy {
     }
 }
 
-class DirectChasePolicy : NpcPolicy {
+class DirectChasePolicy(private val random: Random = Random.Default) : NpcPolicy {
     override fun nextMove(npc: Npc, context: NpcPolicyContext): Direction? {
-        if (!context.playerVisible || context.npcsFrozen) return null
+        if (context.npcsFrozen) return null
+        if (!context.playerVisible) return wanderMove(npc, context.maze, random)
         val path = context.navigator.bfsPath(npc.position, context.player.position)
         return nextDirection(npc.position, path)
     }
 }
 
-class PredictiveChasePolicy : NpcPolicy {
+class PredictiveChasePolicy(private val random: Random = Random.Default) : NpcPolicy {
     override fun nextMove(npc: Npc, context: NpcPolicyContext): Direction? {
-        if (!context.playerVisible || context.npcsFrozen) return null
+        if (context.npcsFrozen) return null
+        if (!context.playerVisible) return wanderMove(npc, context.maze, random)
         var projected = context.player.position
         repeat(PREDICTION_STEPS) {
             val next = projected.moved(context.player.facing)
@@ -212,3 +214,18 @@ private fun nextDirection(from: GridPos, path: List<GridPos>): Direction? {
 }
 
 private fun manhattanDistance(a: GridPos, b: GridPos): Int = abs(a.x - b.x) + abs(a.y - b.y)
+
+/**
+ * Picks a random walkable neighbour direction for [npc], preferring to keep
+ * moving forward and avoiding an immediate reversal when other options exist.
+ * Used by chase policies when the player is invisible so NPCs wander instead
+ * of standing still (FREEZE remains the only effect that truly stops NPCs).
+ */
+private fun wanderMove(npc: Npc, maze: Maze, random: Random): Direction? {
+    val options = Direction.entries.filter { maze.canMove(npc.position, it) }
+    if (options.isEmpty()) return null
+    val reverse = npc.facing.opposite()
+    val nonReverse = options.filter { it != reverse }
+    val pool = if (nonReverse.isNotEmpty()) nonReverse else options
+    return pool[random.nextInt(pool.size)]
+}

@@ -12,6 +12,16 @@ class Maze(
         require(cells.size == width * height)
     }
 
+    /**
+     * Monotonically increasing counter that bumps each time a wall is actually
+     * removed via [removeWall]. Renderers/caches that derive geometry from the
+     * wall layout can use it as a cheap cache-invalidation signal alongside the
+     * Maze instance identity, so that in-place mutations (e.g. the BLAST power-
+     * up) cause stale brick geometry to be rebuilt.
+     */
+    var revision: Int = 0
+        private set
+
     fun inBounds(pos: GridPos): Boolean = pos.x in 0 until width && pos.y in 0 until height
 
     fun hasWall(pos: GridPos, direction: Direction): Boolean {
@@ -51,8 +61,13 @@ class Maze(
         val currentIndex = indexOf(pos)
         val nextIndex = indexOf(next)
 
-        cells[currentIndex] = cells[currentIndex] and currentMask.inv()
-        cells[nextIndex] = cells[nextIndex] and oppositeMask.inv()
+        val currentBefore = cells[currentIndex]
+        val nextBefore = cells[nextIndex]
+        cells[currentIndex] = currentBefore and currentMask.inv()
+        cells[nextIndex] = nextBefore and oppositeMask.inv()
+        if (cells[currentIndex] != currentBefore || cells[nextIndex] != nextBefore) {
+            revision++
+        }
     }
 
     fun copyCells(): IntArray = cells.copyOf()

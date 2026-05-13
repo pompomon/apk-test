@@ -82,7 +82,8 @@ object Sprites {
         'B' to Color(0.40f, 0.27f, 0.16f, 1f), // belt / boots
         'E' to Color(0.05f, 0.05f, 0.08f, 1f)  // eyes / outline
     )
-    val hero: Array<String> = arrayOf(
+    // Idle: legs together / boots planted.
+    val heroIdle: Array<String> = arrayOf(
         "0HHHHH0",
         "HHHHHHH",
         "0SESES0",
@@ -91,6 +92,29 @@ object Sprites {
         "0HHBHH0",
         "0B000B0"
     )
+    // Step 1: left boot forward, right boot back.
+    val heroStep1: Array<String> = arrayOf(
+        "0HHHHH0",
+        "HHHHHHH",
+        "0SESES0",
+        "0SSSSS0",
+        "0HHHHH0",
+        "0HHBHH0",
+        "B0000B0"
+    )
+    // Step 2: right boot forward, left boot back.
+    val heroStep2: Array<String> = arrayOf(
+        "0HHHHH0",
+        "HHHHHHH",
+        "0SESES0",
+        "0SSSSS0",
+        "0HHHHH0",
+        "0HHBHH0",
+        "0B0000B"
+    )
+    /** Backwards-compatible alias for the legacy single-frame hero pattern. */
+    val hero: Array<String> = heroIdle
+    val heroFrames: Array<Array<String>> = arrayOf(heroIdle, heroStep1, heroStep2)
 
     // Monster: red goblin/ghost with white eyes and jagged bottom (7x7).
     private val monsterPalette = mapOf(
@@ -99,7 +123,8 @@ object Sprites {
         'W' to Color(0.96f, 0.96f, 0.98f, 1f), // eye whites
         'E' to Color(0.05f, 0.05f, 0.08f, 1f)  // pupils
     )
-    val monster: Array<String> = arrayOf(
+    // Idle: symmetric jagged hem.
+    val monsterIdle: Array<String> = arrayOf(
         "0DMMMD0",
         "DMMMMMD",
         "MWEMEWM",
@@ -108,6 +133,29 @@ object Sprites {
         "DMDMDMD",
         "0D0M0D0"
     )
+    // Step 1: hem sways one way.
+    val monsterStep1: Array<String> = arrayOf(
+        "0DMMMD0",
+        "DMMMMMD",
+        "MWEMEWM",
+        "MMMMMMM",
+        "DMMMMMD",
+        "MDMDMDM",
+        "D0M0D00"
+    )
+    // Step 2: hem sways the other way.
+    val monsterStep2: Array<String> = arrayOf(
+        "0DMMMD0",
+        "DMMMMMD",
+        "MWEMEWM",
+        "MMMMMMM",
+        "DMMMMMD",
+        "MDMDMDM",
+        "00D0M0D"
+    )
+    /** Backwards-compatible alias for the legacy single-frame monster pattern. */
+    val monster: Array<String> = monsterIdle
+    val monsterFrames: Array<Array<String>> = arrayOf(monsterIdle, monsterStep1, monsterStep2)
 
     // Exit: wooden door with frame, planks, knob (7x7).
     private val doorPalette = mapOf(
@@ -134,8 +182,12 @@ object Sprites {
     init {
         // Validate sprite grids once at class init so PixelSpriteRenderer.draw
         // stays allocation-free in the per-frame render loop.
-        PixelSpriteRenderer.validatePattern(hero, name = "hero")
-        PixelSpriteRenderer.validatePattern(monster, name = "monster")
+        PixelSpriteRenderer.validatePattern(heroIdle, name = "heroIdle")
+        PixelSpriteRenderer.validatePattern(heroStep1, name = "heroStep1")
+        PixelSpriteRenderer.validatePattern(heroStep2, name = "heroStep2")
+        PixelSpriteRenderer.validatePattern(monsterIdle, name = "monsterIdle")
+        PixelSpriteRenderer.validatePattern(monsterStep1, name = "monsterStep1")
+        PixelSpriteRenderer.validatePattern(monsterStep2, name = "monsterStep2")
         PixelSpriteRenderer.validatePattern(exitDoor, name = "exitDoor")
     }
 }

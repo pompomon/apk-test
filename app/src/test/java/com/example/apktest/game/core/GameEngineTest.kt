@@ -276,6 +276,112 @@ class GameEngineTest {
         assertEquals(GameStatus.LOSE, engine.status)
     }
 
+    @Test
+    fun player_animationFrameAdvancesOnSuccessfulMove() {
+        val engine = GameEngine(testPreset(), seed)
+        engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        // Find any direction the player can move from its current cell.
+        val direction = Direction.entries.first {
+            engine.maze.canMove(engine.player.position, it)
+        }
+        val before = engine.player.animationFrame
+
+        engine.queueManualMove(direction)
+        engine.update(1f / engine.difficulty.playerMovesPerSecond + 0.001f)
+
+        assertEquals((before + 1) % GameEngine.ANIMATION_FRAMES, engine.player.animationFrame)
+        assertTrue(engine.player.lastMoveAtSeconds > 0f)
+    }
+
+    @Test
+    fun player_animationFrameCyclesAcrossThreeMoves() {
+        val engine = GameEngine(testPreset(), seed)
+        engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        val origin = engine.player.position
+        // Drive the player along the BFS path to the exit so each move succeeds.
+        val moveInterval = 1f / engine.difficulty.playerMovesPerSecond
+        val frames = mutableListOf<Int>()
+        var current = origin
+        repeat(3) {
+            val path = engine.navigator.bfsPath(current, engine.maze.exit)
+            val next = path[1]
+            val direction = requireNotNull(
+                Direction.fromDelta(next.x - current.x, next.y - current.y)
+            )
+            engine.queueManualMove(direction)
+            engine.update(moveInterval + 0.001f)
+            frames += engine.player.animationFrame
+            current = engine.player.position
+        }
+
+        assertEquals(listOf(1, 2, 0), frames)
+    }
+
+    @Test
+    fun player_animationFrameDoesNotAdvanceOnBlockedMove() {
+        val engine = GameEngine(testPreset(), seed)
+        engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        // Find a direction that is blocked by a wall (or the maze boundary).
+        val blocked = Direction.entries.firstOrNull {
+            !engine.maze.canMove(engine.player.position, it)
+        } ?: return
+        val frameBefore = engine.player.animationFrame
+        val lastMoveBefore = engine.player.lastMoveAtSeconds
+
+        engine.queueManualMove(blocked)
+        engine.update(1f / engine.difficulty.playerMovesPerSecond + 0.001f)
+
+        assertEquals(frameBefore, engine.player.animationFrame)
+        assertEquals(lastMoveBefore, engine.player.lastMoveAtSeconds, 0.0001f)
+    }
+
+    @Test
+    fun npc_animationFrameAdvancesWhenItMoves() {
+        // Use a preset with a single NPC and a player far away so DirectChase
+        // produces a deterministic move every tick.
+        val engine = GameEngine(testPreset(npcCount = 1), seed)
+        engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        val npc = engine.npcs.first()
+        val frameBefore = npc.animationFrame
+        val posBefore = npc.position
+
+        // Advance enough time for the NPC to move at least once.
+        engine.update(2f / engine.difficulty.npcMovesPerSecond + 0.001f)
+
+        // Either the NPC moved (and animation advanced) or it had no valid move;
+        // in the moved case the frame must have advanced.
+        if (npc.position != posBefore) {
+            assertNotEquals(frameBefore, npc.animationFrame)
+            assertTrue(npc.lastMoveAtSeconds > 0f)
+        }
+    }
+
+    @Test
+    fun invisibility_doesNotFreezeNpcs() {
+        val engine = GameEngine(testPreset(npcCount = 1), seed)
+        engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        collectPowerUp(engine, PowerUpType.INVISIBILITY)
+        val before = engine.npcs.first().position
+
+        // Run several NPC ticks while INVISIBILITY is active.
+        engine.update(3f / engine.difficulty.npcMovesPerSecond + 0.001f)
+
+        assertNotEquals(before, engine.npcs.first().position)
+    }
+
+    @Test
+    fun freeze_freezesNpcs() {
+        val engine = GameEngine(testPreset(npcCount = 1), seed)
+        engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        collectPowerUp(engine, PowerUpType.FREEZE)
+        val before = engine.npcs.first().position
+
+        // FREEZE duration is 5s; tick well within that window.
+        engine.update(2f)
+
+        assertEquals(before, engine.npcs.first().position)
+    }
+
     private fun findCellWithAnyWall(maze: Maze): GridPos {
         for (y in 0 until maze.height) {
             for (x in 0 until maze.width) {
