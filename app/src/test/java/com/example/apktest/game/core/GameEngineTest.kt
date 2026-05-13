@@ -345,8 +345,8 @@ class GameEngineTest {
         val frameBefore = npc.animationFrame
         val posBefore = npc.position
 
-        // Advance enough time for the NPC to move at least once.
-        engine.update(2f / engine.difficulty.npcMovesPerSecond + 0.001f)
+        // Advance enough time for the NPC to move exactly once.
+        engine.update(1f / engine.difficulty.npcMovesPerSecond + 0.001f)
 
         // Either the NPC moved (and animation advanced) or it had no valid move;
         // in the moved case the frame must have advanced.
