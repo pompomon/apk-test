@@ -10,18 +10,19 @@
         android:id="@+id/fragmentGameHost"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/bottomControls"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toBottomOf="@id/topOverlay" />
 
     <LinearLayout
         android:id="@+id/topOverlay"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:background="@color/maze_top_overlay_background"
+        android:background="@color/maze_root_background"
         android:orientation="vertical"
         android:padding="8dp"
+        app:layout_constraintBottom_toTopOf="@id/fragmentGameHost"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
@@ -91,13 +92,13 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="8dp"
-        android:background="@color/maze_bottom_overlay_background"
         android:gravity="center"
         android:orientation="vertical"
         android:padding="@dimen/maze_dpad_container_padding"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/fragmentGameHost">
 
         <Button
             android:id="@+id/buttonUp"

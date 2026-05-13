@@ -8,10 +8,8 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
-    <!-- Maze game overlay palette -->
+    <!-- Maze game palette -->
     <color name="maze_root_background">#101218</color>
-    <color name="maze_top_overlay_background">#AA121826</color>
-    <color name="maze_bottom_overlay_background">#4D121826</color>
     <color name="maze_dpad_button_background">#66331A66</color>
     <color name="maze_dpad_button_text">#F2FFFFFF</color>
     <color name="maze_status_text">#FFFFFF</color>

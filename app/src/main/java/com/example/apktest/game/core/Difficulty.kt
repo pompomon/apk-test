@@ -50,8 +50,8 @@ object DifficultyPresets {
         npcMovesPerSecond = 1.5f,
         npcVisionRange = 5,
         balanceRule = NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER,
-        powerUpPickupLifetimeSeconds = 10f,
-        powerUpRespawnIntervalSeconds = null
+        powerUpPickupLifetimeSeconds = 60f,
+        powerUpRespawnIntervalSeconds = 30f
     )
 
     val HARD = DifficultyPreset(
