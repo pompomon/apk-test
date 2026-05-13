@@ -20,6 +20,7 @@ class MazeRenderer {
     private var cachedWidth = -1
     private var cachedHeight = -1
     private var mazeOriginX = 0f
+    private var mazeOriginY = 0f
 
     // Static wall geometry cache, rebuilt only when the active Maze changes.
     // Each pixel of the brick pattern is a rect in maze-local coords (x is
@@ -27,6 +28,7 @@ class MazeRenderer {
     // This keeps per-frame work to O(wallPixels) shapes.rect calls with no
     // map lookups, no allocations, and no character-by-character branching.
     private var cachedWallMaze: Maze? = null
+    private var cachedWallRevision: Int = -1
     private var wallRectX: FloatArray = FloatArray(0)
     private var wallRectY: FloatArray = FloatArray(0)
     private var wallRectW: FloatArray = FloatArray(0)
@@ -41,6 +43,7 @@ class MazeRenderer {
     fun render(engine: GameEngine) {
         updateViewportForMaze(engine.maze)
         mazeOriginX = (viewport.worldWidth - engine.maze.width.toFloat()) / 2f
+        mazeOriginY = (viewport.worldHeight - engine.maze.height.toFloat()) / 2f
 
         ScreenUtils.clear(0.08f, 0.08f, 0.1f, 1f)
         viewport.apply(true)
@@ -67,16 +70,17 @@ class MazeRenderer {
 
     private fun drawMaze(engine: GameEngine) {
         val maze = engine.maze
-        if (cachedWallMaze !== maze) {
+        if (cachedWallMaze !== maze || cachedWallRevision != maze.revision) {
             rebuildWallGeometry(maze)
             cachedWallMaze = maze
+            cachedWallRevision = maze.revision
         }
 
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
         // Floor — slightly darker than before so the brown/green walls pop.
         shapes.color.set(0.08f, 0.08f, 0.10f, 1f)
-        shapes.rect(mazeOriginX, 0f, maze.width.toFloat(), maze.height.toFloat())
+        shapes.rect(mazeOriginX, mazeOriginY, maze.width.toFloat(), maze.height.toFloat())
 
         // Render the exit as a wooden door sprite centered on the exit cell.
         PixelSpriteRenderer.draw(
@@ -84,12 +88,12 @@ class MazeRenderer {
             pattern = Sprites.exitDoor,
             palette = Sprites.doorPalette(),
             centerX = mazeOriginX + maze.exit.x + 0.5f,
-            centerY = maze.exit.y + 0.5f,
+            centerY = mazeOriginY + maze.exit.y + 0.5f,
             size = 0.9f
         )
 
-        // Walls: replay the precomputed brick rects. mazeOriginX is added on the
-        // fly because the viewport (and therefore mazeOriginX) can shift with
+        // Walls: replay the precomputed brick rects. mazeOriginX/Y are added on
+        // the fly because the viewport (and therefore the origin) can shift with
         // screen size while the geometry stays valid.
         val count = wallRectCount
         val xs = wallRectX
@@ -98,18 +102,21 @@ class MazeRenderer {
         val hs = wallRectH
         val cs = wallRectColor
         val ox = mazeOriginX
+        val oy = mazeOriginY
         for (i in 0 until count) {
             shapes.color = cs[i]!!
-            shapes.rect(ox + xs[i], ys[i], ws[i], hs[i])
+            shapes.rect(ox + xs[i], oy + ys[i], ws[i], hs[i])
         }
         shapes.end()
     }
 
     /**
      * Walks every wall edge and expands its brick pattern into a flat list of
-     * coloured rects, stored in maze-local coordinates. Called only when the
-     * active Maze instance changes (start of game / restart), so the per-frame
-     * draw loop pays no pattern-decoding cost.
+     * coloured rects, stored in maze-local coordinates. Called whenever the
+     * active [Maze] instance changes (start of game / restart) **or** its
+     * [Maze.revision] counter advances after an in-place wall mutation (e.g.
+     * the BLAST power-up calling [Maze.removeWall]). The per-frame draw loop
+     * pays no pattern-decoding cost while the cache is hot.
      */
     private fun rebuildWallGeometry(maze: Maze) {
         // Upper-bound the scratch arrays so the append loop is branch-free
@@ -229,27 +236,58 @@ class MazeRenderer {
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
         val player = engine.player
+        val playerPattern = pickFrame(
+            frames = Sprites.heroFrames,
+            elapsedSeconds = engine.elapsedSeconds,
+            lastMoveAtSeconds = player.lastMoveAtSeconds,
+            animationFrame = player.animationFrame
+        )
         PixelSpriteRenderer.draw(
             shapes = shapes,
-            pattern = Sprites.hero,
+            pattern = playerPattern,
             palette = Sprites.heroPalette(),
             centerX = mazeOriginX + player.position.x + 0.5f,
-            centerY = player.position.y + 0.5f,
+            centerY = mazeOriginY + player.position.y + 0.5f,
             size = 0.78f
         )
 
         engine.npcs.forEach { npc ->
+            val npcPattern = pickFrame(
+                frames = Sprites.monsterFrames,
+                elapsedSeconds = engine.elapsedSeconds,
+                lastMoveAtSeconds = npc.lastMoveAtSeconds,
+                animationFrame = npc.animationFrame
+            )
             PixelSpriteRenderer.draw(
                 shapes = shapes,
-                pattern = Sprites.monster,
+                pattern = npcPattern,
                 palette = Sprites.monsterPalette(),
                 centerX = mazeOriginX + npc.position.x + 0.5f,
-                centerY = npc.position.y + 0.5f,
+                centerY = mazeOriginY + npc.position.y + 0.5f,
                 size = 0.72f
             )
         }
 
         shapes.end()
+    }
+
+    /**
+     * Pick the active animation frame. Entities that haven't moved in
+     * [GameEngine.ANIMATION_IDLE_THRESHOLD_SECONDS] are drawn as the idle
+     * frame; otherwise the renderer alternates between the two step frames
+     * based on the entity's [animationFrame] counter (which only advances on
+     * successful moves) so the legs actually swap between consecutive steps.
+     */
+    private fun pickFrame(
+        frames: Array<Array<String>>,
+        elapsedSeconds: Float,
+        lastMoveAtSeconds: Float,
+        animationFrame: Int
+    ): Array<String> {
+        if (elapsedSeconds - lastMoveAtSeconds > GameEngine.ANIMATION_IDLE_THRESHOLD_SECONDS) {
+            return frames[0]
+        }
+        return frames[1 + (animationFrame % 2)]
     }
 
     private fun drawPowerUps(engine: GameEngine) {
@@ -259,7 +297,7 @@ class MazeRenderer {
                 shapes = shapes,
                 type = pickup.type,
                 x = mazeOriginX + pickup.position.x + 0.5f,
-                y = pickup.position.y + 0.5f,
+                y = mazeOriginY + pickup.position.y + 0.5f,
                 size = 0.54f
             )
         }

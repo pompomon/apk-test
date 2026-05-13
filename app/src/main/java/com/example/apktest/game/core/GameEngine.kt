@@ -41,8 +41,13 @@ class GameEngine(
         get() = activeEffectsByType.values.sortedBy { it.type.ordinal }
 
     private var random = Random(seed)
+    // Independent RNG stream for NPC policy decisions (e.g. wander move under
+    // INVISIBILITY). Derived from the same seed so behaviour stays
+    // reproducible, but kept separate from `random` so power-up spawning and
+    // other engine RNG consumers don't perturb the wander sequence.
+    private var npcRandom = Random(seed xor NPC_RANDOM_SEED_MIX)
     private var playerPolicy: PlayerPolicy = PolicyFactory.player(playerPolicyType)
-    private var npcPolicy: NpcPolicy = PolicyFactory.npc(npcPolicyType)
+    private var npcPolicy: NpcPolicy = PolicyFactory.npc(npcPolicyType, npcRandom)
 
     private var playerAccumulator = 0f
     private var npcAccumulator = 0f
@@ -63,6 +68,8 @@ class GameEngine(
         player = Player(maze.start)
         npcs = mutableListOf()
         random = Random(seed)
+        npcRandom = Random(seed xor NPC_RANDOM_SEED_MIX)
+        npcPolicy = PolicyFactory.npc(npcPolicyType, npcRandom)
         status = GameStatus.RUNNING
         elapsedSeconds = 0f
         steps = 0
@@ -101,7 +108,7 @@ class GameEngine(
 
     fun setNpcPolicy(type: NpcPolicyType) {
         npcPolicyType = type
-        npcPolicy = PolicyFactory.npc(type)
+        npcPolicy = PolicyFactory.npc(type, npcRandom)
         npcPolicy.reset()
         resetNpcPolicyState()
     }
@@ -198,6 +205,8 @@ class GameEngine(
 
         player.position = nextPosition
         player.facing = requestedDirection
+        player.animationFrame = (player.animationFrame + 1) % ANIMATION_FRAMES
+        player.lastMoveAtSeconds = elapsedSeconds
         steps += 1
         collectPowerUpAtPlayer()
     }
@@ -218,6 +227,8 @@ class GameEngine(
 
             npc.position = npc.position.moved(direction)
             npc.facing = direction
+            npc.animationFrame = (npc.animationFrame + 1) % ANIMATION_FRAMES
+            npc.lastMoveAtSeconds = elapsedSeconds
         }
     }
 
@@ -418,5 +429,24 @@ class GameEngine(
         private const val MAX_EXTRA_PATROL_WAYPOINTS = 2
         private const val MAX_MANUAL_QUEUE = 8
         private const val SPEED_UP_MULTIPLIER = 2f
+        // Arbitrary mix constant so the NPC policy RNG stream is decoupled from
+        // (but still deterministically derived from) the engine seed. Written
+        // as a signed-Long literal because Kotlin `const val` initializers must
+        // be compile-time constants (UInt/ULong .toLong() is not).
+        private const val NPC_RANDOM_SEED_MIX: Long = -0x61C8864680B583EBL
+        /**
+         * Number of distinct movement-step animation frames an entity cycles
+         * through while moving. The renderer picks `stepFrames[animationFrame]`
+         * directly, so this MUST be 2 to ensure consecutive moves alternate
+         * the two step poses without a wraparound that visibly repeats one
+         * pose. The idle frame is selected separately by elapsed-time
+         * threshold and is not part of this counter.
+         */
+        const val ANIMATION_FRAMES = 2
+        /**
+         * Renderer-side idle threshold: entities that haven't moved for this many
+         * seconds are drawn using the idle frame.
+         */
+        const val ANIMATION_IDLE_THRESHOLD_SECONDS = 0.15f
     }
 }
