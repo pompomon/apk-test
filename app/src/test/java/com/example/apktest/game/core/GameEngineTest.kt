@@ -314,7 +314,7 @@ class GameEngineTest {
             current = engine.player.position
         }
 
-        assertEquals(listOf(1, 2, 0), frames)
+        assertEquals(listOf(1, 0, 1), frames)
     }
 
     @Test

@@ -430,9 +430,19 @@ class GameEngine(
         private const val MAX_MANUAL_QUEUE = 8
         private const val SPEED_UP_MULTIPLIER = 2f
         // Arbitrary mix constant so the NPC policy RNG stream is decoupled from
-        // (but still deterministically derived from) the engine seed.
-        private const val NPC_RANDOM_SEED_MIX = 0x9E3779B97F4A7C15UL.toLong()
-        const val ANIMATION_FRAMES = 3
+        // (but still deterministically derived from) the engine seed. Written
+        // as a signed-Long literal because Kotlin `const val` initializers must
+        // be compile-time constants (UInt/ULong .toLong() is not).
+        private const val NPC_RANDOM_SEED_MIX: Long = -0x61C8864680B583EBL
+        /**
+         * Number of distinct movement-step animation frames an entity cycles
+         * through while moving. The renderer picks `stepFrames[animationFrame]`
+         * directly, so this MUST be 2 to ensure consecutive moves alternate
+         * the two step poses without a wraparound that visibly repeats one
+         * pose. The idle frame is selected separately by elapsed-time
+         * threshold and is not part of this counter.
+         */
+        const val ANIMATION_FRAMES = 2
         /**
          * Renderer-side idle threshold: entities that haven't moved for this many
          * seconds are drawn using the idle frame.
