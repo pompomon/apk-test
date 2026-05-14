@@ -61,7 +61,7 @@ interface PlayerPolicy {
  * since the wrapper invokes either [rankedMoves] *or* [PlayerPolicy.nextMove]
  * — never both — for a given tick.
  */
-internal interface RankedPlayerPolicy : PlayerPolicy {
+interface RankedPlayerPolicy : PlayerPolicy {
     fun rankedMoves(context: PlayerPolicyContext): List<Direction>
 }
 
@@ -153,13 +153,16 @@ class AStarExitPolicy : RankedPlayerPolicy {
  *   treated as deadly; the player can safely step onto an NPC's neighbour.
  * - For [BfsExitPolicy] / [AStarExitPolicy] the wrapper first asks the
  *   navigator for an avoidance-aware path that excludes NPC cells, and
- *   prefers that step when one exists.
+ *   prefers that step when it avoids both deadly *and* risky cells (or
+ *   when it lands on the exit, which wins the game this tick).
  * - Otherwise the wrapper picks the highest-ranked safe candidate from
  *   [RankedPlayerPolicy.rankedMoves] (preserving wall-follower priority and
- *   random-memory visit-count ordering). If no candidate avoids deadly
- *   cells the wrapper returns `null` (skip the tick) — unless the player
- *   is *already* in a next-step-danger cell, in which case standing still
- *   provides no safety benefit and the inner policy's choice is returned.
+ *   random-memory visit-count ordering). A move that lands on the exit is
+ *   always preferred, even if the exit is currently occupied by an NPC,
+ *   since [GameEngine] evaluates the win condition before NPC collision.
+ *   If every candidate enters a currently NPC-occupied (deadly) cell the
+ *   wrapper returns `null` (skip the tick) — stepping onto an NPC is a
+ *   guaranteed loss, whereas waiting is at worst the same outcome.
  */
 class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
     override fun nextMove(context: PlayerPolicyContext): Direction? {
@@ -176,12 +179,17 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
 
         // For exit-finding policies, try an avoidance-aware path first so the
         // single-tick choice still routes optimally toward the exit while
-        // skirting NPC cells. If the avoidance-aware path is blocked we fall
-        // through to the ranked-candidate logic below.
+        // skirting NPC cells. We only commit to the path step when it is
+        // strictly safe (avoids both deadly *and* risky), so that a
+        // non-risky candidate from the ranked list can still win a tie.
+        // Exception: if the path step lands on the exit, that move wins the
+        // game this tick (GameEngine evaluates the win condition before NPC
+        // collision), so take it unconditionally.
         val pathStep = avoidanceAwarePathStep(context, deadly)
         if (pathStep != null) {
             val dest = context.player.position.moved(pathStep)
-            if (dest !in deadly) return pathStep
+            if (dest == context.exit) return pathStep
+            if (dest !in deadly && dest !in risky) return pathStep
         }
 
         val ranked = (inner as? RankedPlayerPolicy)?.rankedMoves(context)
@@ -190,18 +198,23 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
         if (ranked.isEmpty()) return null
 
         val from = context.player.position
+        // A move that wins the game this tick is always preferred, even if
+        // the exit cell is currently occupied by an NPC.
+        val winning = ranked.firstOrNull { from.moved(it) == context.exit }
+        if (winning != null) return winning
+
         val safe = ranked.firstOrNull { from.moved(it) !in deadly && from.moved(it) !in risky }
         if (safe != null) return safe
 
         val nonDeadly = ranked.firstOrNull { from.moved(it) !in deadly }
         if (nonDeadly != null) return nonDeadly
 
-        // Every walkable direction enters a deadly cell. Standing still is
-        // strictly safer than stepping into an NPC, *unless* an NPC could
-        // reach the player's current cell next tick anyway — in which case
-        // there is nothing to gain by waiting and we let the inner policy
-        // dictate the move.
-        return if (from in risky) ranked.first() else null
+        // Every walkable direction enters a deadly (currently NPC-occupied)
+        // cell. Stepping onto an NPC is a guaranteed loss this tick, while
+        // standing still is at worst the same outcome (the NPC may or may
+        // not move onto the player's cell), so we always skip rather than
+        // commit to a guaranteed loss.
+        return null
     }
 
     override fun reset() {

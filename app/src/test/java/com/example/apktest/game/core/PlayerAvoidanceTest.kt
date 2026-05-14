@@ -140,12 +140,11 @@ class PlayerAvoidanceTest {
     }
 
     @Test
-    fun noSafeMove_fallsBackToInnerWhenPlayerCellAlsoRisky() {
-        // Player in a 2-cell corridor with an NPC on the only walkable
-        // neighbour. Maze walls are symmetric, so the NPC could move back
-        // onto the player's cell next tick — i.e. player's cell is in the
-        // risky set. The wrapper has no improvement to offer and falls
-        // back to the inner BFS step rather than uselessly skipping.
+    fun winningMove_takenEvenWhenExitOccupiedByNpc() {
+        // Player at (0,0) in a 2-cell corridor with NPC standing on the exit
+        // at (1,0). GameEngine evaluates the win condition before NPC
+        // collision, so the wrapper must take the winning EAST step instead
+        // of skipping the tick.
         val maze = Maze(
             width = 2,
             height = 2,
@@ -173,35 +172,61 @@ class PlayerAvoidanceTest {
     }
 
     @Test
-    fun bfsAvoidance_fallsBackWhenAlreadyInRiskyCell() {
-        // Same setup as noSafeMove_fallsBackToInnerWhenPlayerCellAlsoRisky;
-        // kept as a separate explicit assertion that the wrapper does not
-        // return null when standing still confers no safety advantage.
-        val maze = Maze(
-            width = 2,
-            height = 2,
-            cells = IntArray(4) { Maze.ALL_WALLS },
-            start = GridPos(0, 0),
-            exit = GridPos(1, 0)
-        )
-        maze.removeWall(GridPos(0, 0), Direction.EAST)
+    fun allOptionsDeadly_returnsNullRatherThanGuaranteedLoss() {
+        // Player at (1,1) on a 3x3 open grid with NPCs on every walkable
+        // neighbour. Every candidate direction lands on a currently
+        // NPC-occupied cell (deadly), so the wrapper must skip the tick
+        // rather than commit to a guaranteed loss — even though the
+        // player's own cell is itself in the risky set.
+        val maze = Maze.openGrid(3, 3)
         val navigator = MazeNavigator(maze)
-        val policy = AvoidanceWrapperPolicy(BfsExitPolicy())
-        val player = Player(position = GridPos(0, 0), facing = Direction.EAST)
-        val npc = Npc(id = 1, position = GridPos(1, 0))
+        val policy = AvoidanceWrapperPolicy(WallFollowerPolicy(leftHand = true))
+        val player = Player(position = GridPos(1, 1), facing = Direction.EAST)
+        val npcs = listOf(
+            Npc(id = 1, position = GridPos(0, 1)), // WEST
+            Npc(id = 2, position = GridPos(2, 1)), // EAST
+            Npc(id = 3, position = GridPos(1, 0)), // SOUTH
+            Npc(id = 4, position = GridPos(1, 2))  // NORTH
+        )
 
         val move = policy.nextMove(
             PlayerPolicyContext(
                 maze = maze,
                 navigator = navigator,
                 player = player,
-                exit = GridPos(1, 0),
+                exit = GridPos(0, 0), // not adjacent, no winning shortcut
+                npcs = npcs
+            )
+        )
+
+        assertEquals(null, move)
+    }
+
+    @Test
+    fun bfsAvoidance_prefersRankedSafeOverRiskyPathStep() {
+        // Player (0,0); exit (4,0) on an open 5x5 grid. Avoidance-aware BFS
+        // path step is EAST (-> (1,0)), but an NPC at (2,0) makes (1,0)
+        // risky (NPC could step there next tick). The ranked candidate
+        // NORTH (-> (0,1)) is fully safe. The wrapper must prefer the safe
+        // ranked candidate over the risky avoidance-aware path step.
+        val maze = Maze.openGrid(5, 5)
+        val navigator = MazeNavigator(maze)
+        val policy = AvoidanceWrapperPolicy(BfsExitPolicy())
+        val player = Player(position = GridPos(0, 0), facing = Direction.EAST)
+        val npc = Npc(id = 1, position = GridPos(2, 0))
+
+        val move = policy.nextMove(
+            PlayerPolicyContext(
+                maze = maze,
+                navigator = navigator,
+                player = player,
+                exit = GridPos(4, 0),
                 npcs = listOf(npc)
             )
         )
 
-        assertNotNull(move)
-        assertEquals(Direction.EAST, move)
+        assertNotEquals(Direction.EAST, move)
+        assertEquals(Direction.NORTH, move)
     }
 
     @Test

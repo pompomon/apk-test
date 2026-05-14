@@ -83,6 +83,18 @@ class MazeNavigatorTest {
     }
 
     @Test
+    fun aStarPath_goalCanBeInsideBlockedSet() {
+        val maze = Maze.openGrid(3, 3)
+        val navigator = MazeNavigator(maze)
+
+        val goal = GridPos(2, 0)
+        val path = navigator.aStarPath(GridPos(0, 0), goal, setOf(goal))
+
+        assertTrue(path.isNotEmpty())
+        assertEquals(goal, path.last())
+    }
+
+    @Test
     fun aStarPath_returnsEmptyWhenAllRoutesBlocked() {
         val maze = Maze(
             width = 3,
