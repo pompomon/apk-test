@@ -23,7 +23,19 @@ data class PlayerPolicyContext(
     val navigator: MazeNavigator,
     val player: Player,
     val exit: GridPos,
-    val npcs: List<Npc>
+    val npcs: List<Npc>,
+    /**
+     * True when the [PowerUpType.INVISIBILITY] effect is active for the
+     * player. NPCs cannot end the game on contact while this is true, so
+     * automatic-avoidance wrappers treat the maze as if no NPCs were present.
+     */
+    val playerInvisibleToNpcs: Boolean = false,
+    /**
+     * True when the [PowerUpType.FREEZE] effect is active. NPCs do not move
+     * this tick, so only their *current* cells are dangerous; the player can
+     * safely step onto any walkable neighbour of an NPC.
+     */
+    val npcsFrozen: Boolean = false
 )
 
 data class NpcPolicyContext(
@@ -40,6 +52,19 @@ interface PlayerPolicy {
     fun reset() {}
 }
 
+/**
+ * Optional extension implemented by non-manual player policies that can
+ * enumerate their move candidates in preference order. Used by
+ * [AvoidanceWrapperPolicy] to pick the highest-ranked candidate that does
+ * not step into an NPC. Implementations must update any per-tick internal
+ * state (e.g. visit counters) the same way [PlayerPolicy.nextMove] would,
+ * since the wrapper invokes either [rankedMoves] *or* [PlayerPolicy.nextMove]
+ * — never both — for a given tick.
+ */
+internal interface RankedPlayerPolicy : PlayerPolicy {
+    fun rankedMoves(context: PlayerPolicyContext): List<Direction>
+}
+
 interface NpcPolicy {
     fun nextMove(npc: Npc, context: NpcPolicyContext): Direction?
     fun reset() {}
@@ -49,22 +74,30 @@ class ManualPolicy : PlayerPolicy {
     override fun nextMove(context: PlayerPolicyContext): Direction? = null
 }
 
-class RandomWalkMemoryPolicy(private val random: Random = Random.Default) : PlayerPolicy {
+class RandomWalkMemoryPolicy(private val random: Random = Random.Default) : RankedPlayerPolicy {
     private val visitCounts = mutableMapOf<GridPos, Int>()
 
-    override fun nextMove(context: PlayerPolicyContext): Direction? {
+    override fun nextMove(context: PlayerPolicyContext): Direction? =
+        rankedMoves(context).firstOrNull()
+
+    override fun rankedMoves(context: PlayerPolicyContext): List<Direction> {
         visitCounts[context.player.position] = visitCounts.getOrDefault(context.player.position, 0) + 1
 
         val options = Direction.entries.filter { context.maze.canMove(context.player.position, it) }
-        if (options.isEmpty()) return null
+        if (options.isEmpty()) return emptyList()
 
-        val scored = options.groupBy { direction ->
+        // Group walkable directions by destination visit count and emit the
+        // groups in ascending order. Each group is shuffled with the policy's
+        // seeded RNG so behaviour is deterministic for a given seed and ties
+        // within a group are broken uniformly (matching the previous
+        // single-pick behaviour of [nextMove]).
+        val grouped = options.groupBy { direction ->
             val destination = context.player.position.moved(direction)
             visitCounts.getOrDefault(destination, 0)
         }
-        val minVisits = requireNotNull(scored.keys.minOrNull())
-        val bestOptions = scored[minVisits].orEmpty()
-        return bestOptions[random.nextInt(bestOptions.size)]
+        return grouped.entries
+            .sortedBy { it.key }
+            .flatMap { it.value.shuffled(random) }
     }
 
     override fun reset() {
@@ -72,29 +105,120 @@ class RandomWalkMemoryPolicy(private val random: Random = Random.Default) : Play
     }
 }
 
-class WallFollowerPolicy(private val leftHand: Boolean) : PlayerPolicy {
-    override fun nextMove(context: PlayerPolicyContext): Direction? {
+class WallFollowerPolicy(private val leftHand: Boolean) : RankedPlayerPolicy {
+    override fun nextMove(context: PlayerPolicyContext): Direction? =
+        rankedMoves(context).firstOrNull()
+
+    override fun rankedMoves(context: PlayerPolicyContext): List<Direction> {
         val facing = context.player.facing
         val ordered = if (leftHand) {
             listOf(facing.left(), facing, facing.right(), facing.opposite())
         } else {
             listOf(facing.right(), facing, facing.left(), facing.opposite())
         }
-        return ordered.firstOrNull { context.maze.canMove(context.player.position, it) }
+        return ordered.filter { context.maze.canMove(context.player.position, it) }
     }
 }
 
-class BfsExitPolicy : PlayerPolicy {
+class BfsExitPolicy : RankedPlayerPolicy {
     override fun nextMove(context: PlayerPolicyContext): Direction? {
         val path = context.navigator.bfsPath(context.player.position, context.exit)
         return nextDirection(context.player.position, path)
     }
+
+    override fun rankedMoves(context: PlayerPolicyContext): List<Direction> =
+        rankedExitMoves(context) { start, goal -> context.navigator.bfsPath(start, goal) }
 }
 
-class AStarExitPolicy : PlayerPolicy {
+class AStarExitPolicy : RankedPlayerPolicy {
     override fun nextMove(context: PlayerPolicyContext): Direction? {
         val path = context.navigator.aStarPath(context.player.position, context.exit)
         return nextDirection(context.player.position, path)
+    }
+
+    override fun rankedMoves(context: PlayerPolicyContext): List<Direction> =
+        rankedExitMoves(context) { start, goal -> context.navigator.aStarPath(start, goal) }
+}
+
+/**
+ * Decorates an [inner] [PlayerPolicy] with automatic single-step NPC
+ * avoidance: directions that would step into a cell currently occupied by
+ * an NPC are filtered out, with a softer preference against directions
+ * adjacent to an NPC (cells the NPC could move into next NPC tick).
+ *
+ * Behaviour:
+ * - When [PlayerPolicyContext.playerInvisibleToNpcs] is true, the wrapper is
+ *   a pass-through (NPC contact does not lose the game under INVISIBILITY).
+ * - When [PlayerPolicyContext.npcsFrozen] is true only NPC current cells are
+ *   treated as deadly; the player can safely step onto an NPC's neighbour.
+ * - For [BfsExitPolicy] / [AStarExitPolicy] the wrapper first asks the
+ *   navigator for an avoidance-aware path that excludes NPC cells, and
+ *   prefers that step when one exists.
+ * - Otherwise the wrapper picks the highest-ranked safe candidate from
+ *   [RankedPlayerPolicy.rankedMoves] (preserving wall-follower priority and
+ *   random-memory visit-count ordering). If no candidate avoids deadly
+ *   cells the wrapper returns `null` (skip the tick) — unless the player
+ *   is *already* in a next-step-danger cell, in which case standing still
+ *   provides no safety benefit and the inner policy's choice is returned.
+ */
+class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
+    override fun nextMove(context: PlayerPolicyContext): Direction? {
+        if (context.playerInvisibleToNpcs || context.npcs.isEmpty()) {
+            return inner.nextMove(context)
+        }
+
+        val deadly = computeDeadlyCells(context)
+        val risky = computeRiskyCells(context, deadly)
+
+        if (deadly.isEmpty() && risky.isEmpty()) {
+            return inner.nextMove(context)
+        }
+
+        // For exit-finding policies, try an avoidance-aware path first so the
+        // single-tick choice still routes optimally toward the exit while
+        // skirting NPC cells. If the avoidance-aware path is blocked we fall
+        // through to the ranked-candidate logic below.
+        val pathStep = avoidanceAwarePathStep(context, deadly)
+        if (pathStep != null) {
+            val dest = context.player.position.moved(pathStep)
+            if (dest !in deadly) return pathStep
+        }
+
+        val ranked = (inner as? RankedPlayerPolicy)?.rankedMoves(context)
+            ?: listOfNotNull(inner.nextMove(context))
+
+        if (ranked.isEmpty()) return null
+
+        val from = context.player.position
+        val safe = ranked.firstOrNull { from.moved(it) !in deadly && from.moved(it) !in risky }
+        if (safe != null) return safe
+
+        val nonDeadly = ranked.firstOrNull { from.moved(it) !in deadly }
+        if (nonDeadly != null) return nonDeadly
+
+        // Every walkable direction enters a deadly cell. Standing still is
+        // strictly safer than stepping into an NPC, *unless* an NPC could
+        // reach the player's current cell next tick anyway — in which case
+        // there is nothing to gain by waiting and we let the inner policy
+        // dictate the move.
+        return if (from in risky) ranked.first() else null
+    }
+
+    override fun reset() {
+        inner.reset()
+    }
+
+    private fun avoidanceAwarePathStep(
+        context: PlayerPolicyContext,
+        deadly: Set<GridPos>
+    ): Direction? {
+        val from = context.player.position
+        val path = when (inner) {
+            is BfsExitPolicy -> context.navigator.bfsPath(from, context.exit, deadly)
+            is AStarExitPolicy -> context.navigator.aStarPath(from, context.exit, deadly)
+            else -> return null
+        }
+        return nextDirection(from, path)
     }
 }
 
@@ -193,11 +317,11 @@ class PatrolGuardPolicy : NpcPolicy {
 object PolicyFactory {
     fun player(type: PlayerPolicyType): PlayerPolicy = when (type) {
         PlayerPolicyType.MANUAL -> ManualPolicy()
-        PlayerPolicyType.RANDOM_MEMORY -> RandomWalkMemoryPolicy()
-        PlayerPolicyType.WALL_LEFT -> WallFollowerPolicy(leftHand = true)
-        PlayerPolicyType.WALL_RIGHT -> WallFollowerPolicy(leftHand = false)
-        PlayerPolicyType.BFS_EXIT -> BfsExitPolicy()
-        PlayerPolicyType.ASTAR_EXIT -> AStarExitPolicy()
+        PlayerPolicyType.RANDOM_MEMORY -> AvoidanceWrapperPolicy(RandomWalkMemoryPolicy())
+        PlayerPolicyType.WALL_LEFT -> AvoidanceWrapperPolicy(WallFollowerPolicy(leftHand = true))
+        PlayerPolicyType.WALL_RIGHT -> AvoidanceWrapperPolicy(WallFollowerPolicy(leftHand = false))
+        PlayerPolicyType.BFS_EXIT -> AvoidanceWrapperPolicy(BfsExitPolicy())
+        PlayerPolicyType.ASTAR_EXIT -> AvoidanceWrapperPolicy(AStarExitPolicy())
     }
 
     /**
@@ -220,6 +344,65 @@ private fun nextDirection(from: GridPos, path: List<GridPos>): Direction? {
 }
 
 private fun manhattanDistance(a: GridPos, b: GridPos): Int = abs(a.x - b.x) + abs(a.y - b.y)
+
+/**
+ * Builds a preference-ordered list of walkable directions for an exit-finding
+ * policy. The path's own next step is first; remaining walkable directions
+ * follow, sorted by manhattan distance from the resulting cell to the exit
+ * so the [AvoidanceWrapperPolicy] still tends toward the exit when the
+ * primary path step is unsafe.
+ */
+private fun rankedExitMoves(
+    context: PlayerPolicyContext,
+    pathFinder: (GridPos, GridPos) -> List<GridPos>
+): List<Direction> {
+    val from = context.player.position
+    val pathStep = nextDirection(from, pathFinder(from, context.exit))
+    val walkable = Direction.entries.filter { context.maze.canMove(from, it) }
+    if (walkable.isEmpty()) return emptyList()
+    val others = walkable
+        .filter { it != pathStep }
+        .sortedBy { manhattanDistance(from.moved(it), context.exit) }
+    return if (pathStep != null && pathStep in walkable) listOf(pathStep) + others else others
+}
+
+/**
+ * Cells the player must not enter this tick: the current position of every
+ * NPC. Returns an empty set when the player is invisible to NPCs (no
+ * collision can end the game).
+ */
+private fun computeDeadlyCells(context: PlayerPolicyContext): Set<GridPos> {
+    if (context.playerInvisibleToNpcs || context.npcs.isEmpty()) return emptySet()
+    val cells = HashSet<GridPos>(context.npcs.size)
+    for (npc in context.npcs) cells.add(npc.position)
+    return cells
+}
+
+/**
+ * Cells the player should avoid stepping into because an NPC could move
+ * onto them on the next NPC tick. Computed as a one-step horizon over each
+ * NPC's walkable neighbours; we deliberately do not model individual NPC
+ * policies. Cells already in [deadly] are excluded so the wrapper can
+ * differentiate "currently occupied" from "potentially occupied next tick".
+ * Empty when [PlayerPolicyContext.npcsFrozen] is true (NPCs cannot move).
+ */
+private fun computeRiskyCells(
+    context: PlayerPolicyContext,
+    deadly: Set<GridPos>
+): Set<GridPos> {
+    if (context.playerInvisibleToNpcs || context.npcsFrozen || context.npcs.isEmpty()) return emptySet()
+    val maze = context.maze
+    val cells = HashSet<GridPos>()
+    for (npc in context.npcs) {
+        for (direction in Direction.entries) {
+            if (!maze.canMove(npc.position, direction)) continue
+            val neighbour = npc.position.moved(direction)
+            if (neighbour in deadly) continue
+            cells.add(neighbour)
+        }
+    }
+    return cells
+}
 
 /**
  * Picks a random walkable neighbour direction for [npc], avoiding an immediate
