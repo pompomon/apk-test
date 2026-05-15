@@ -186,7 +186,9 @@ class GameEngine(
                     navigator = navigator,
                     player = player,
                     exit = maze.exit,
-                    npcs = npcs
+                    npcs = npcs,
+                    playerInvisibleToNpcs = isEffectActive(PowerUpType.INVISIBILITY),
+                    npcsFrozen = isEffectActive(PowerUpType.FREEZE)
                 )
             )
         } ?: return

@@ -170,6 +170,34 @@ class GameEngineTest {
     }
 
     @Test
+    fun automaticPlayerPolicy_doesNotImmediatelyWalkIntoAdjacentNpc() {
+        // Smoke test for AvoidanceWrapperPolicy: with BFS_EXIT and an NPC
+        // sitting on the player's BFS-preferred next cell, the engine must
+        // not advance the player into the NPC on the very first tick.
+        val engine = GameEngine(testPreset(npcCount = 1), seed)
+        engine.setPlayerPolicy(PlayerPolicyType.BFS_EXIT)
+
+        // Find the BFS path's next step from the current player position and
+        // re-seat the lone NPC there so a naive (un-wrapped) BFS would step
+        // straight onto it.
+        val playerPos = engine.player.position
+        val path = engine.navigator.bfsPath(playerPos, engine.maze.exit)
+        assertTrue("expected a BFS path with at least one step", path.size >= 2)
+        val bfsNext = path[1]
+        engine.npcs[0].position = bfsNext
+
+        // Single player tick.
+        engine.update(1f / DifficultyPresets.MEDIUM.playerMovesPerSecond + 0.001f)
+
+        assertNotEquals(
+            "Avoidance wrapper let the player step onto the NPC at $bfsNext",
+            bfsNext,
+            engine.player.position
+        )
+        assertNotEquals(GameStatus.LOSE, engine.status)
+    }
+
+    @Test
     fun blast_removesWallsAroundPlayerCell() {
         val blastPreset = testPreset(
             mazeWidth = 6,
