@@ -242,7 +242,7 @@ class PlayerPickupSeekingTest {
     fun winningMove_beatsPickupDetour() {
         // Player at (0,0), exit at (1,0): an adjacent winning step is
         // available. A power-up at (0,1) must be ignored in favour of the
-        // exit (GameEngine evaluates win before NPC collision/pickup).
+        // exit so the wrapped BfsExitPolicy can claim the win this tick.
         val maze = Maze.openGrid(2, 2)
         val navigator = MazeNavigator(maze)
         val policy = AvoidanceWrapperPolicy(BfsExitPolicy())
