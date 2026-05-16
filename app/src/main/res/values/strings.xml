@@ -38,4 +38,7 @@
     <string name="setup_difficulty_label">Difficulty</string>
     <string name="start_game">Start</string>
     <string name="back_to_setup">Back to setup</string>
+
+    <!-- Game menu (hamburger) -->
+    <string name="menu_button_description">Open game menu</string>
 </resources>
