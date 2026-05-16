@@ -17,9 +17,9 @@ import com.example.apktest.R
 /**
  * Floating popover anchored to the in-maze hamburger button. Contains the game
  * actions (Pause/Resume, Restart, Legend, Back to Setup) plus the live HUD text
- * (status, speed, power-ups). HUD text views are exposed so the host activity
- * can keep its existing periodic refresh logic and only update them while the
- * popover is visible.
+ * (status, speed, power-ups). The HUD views are kept internal to this class;
+ * the host activity updates the displayed values via [updateHud] and can choose
+ * to call it only while the popover is visible.
  */
 class GameMenuPopover(
     private val context: Context,
