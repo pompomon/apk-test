@@ -11,6 +11,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import com.example.apktest.R
 
 /**
@@ -43,7 +44,7 @@ class GameMenuPopover(
         val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad, pad, pad)
-            setBackgroundColor(0xF01A1B22.toInt())
+            setBackgroundColor(ContextCompat.getColor(context, R.color.maze_menu_popover_background))
             // Reasonable minimum width so labels don't wrap awkwardly.
             minimumWidth = dp(220f)
         }
@@ -64,7 +65,7 @@ class GameMenuPopover(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 dp(1f)
             ).apply { topMargin = pad; bottomMargin = pad }
-            setBackgroundColor(0x33FFFFFF)
+            setBackgroundColor(ContextCompat.getColor(context, R.color.maze_menu_popover_divider))
         }
         root.addView(divider)
 
@@ -135,7 +136,7 @@ class GameMenuPopover(
     private fun hudTextView(textRes: Int, colorRes: Int, sizeSp: Float): TextView {
         return TextView(context).apply {
             setText(textRes)
-            setTextColor(context.resources.getColor(colorRes, context.theme))
+            setTextColor(ContextCompat.getColor(context, colorRes))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
