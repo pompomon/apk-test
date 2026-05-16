@@ -191,7 +191,8 @@ class ExampleInstrumentedTest {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             waitForGameHostLaidOut(scenario)
             scenario.onActivity { activity ->
-                attachedGameFragment(activity)
+                val gameFragment = attachedGameFragment(activity)
+                assertTrue("Game fragment should be added before opening menu", gameFragment.isAdded)
                 activity.findViewById<android.view.View>(R.id.buttonMenu).performClick()
             }
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
@@ -238,17 +239,29 @@ class ExampleInstrumentedTest {
             .targetContext
             .getString(textRes)
             .substringBefore('%')
-            .trimEnd()
+            .trim()
     }
 
     private fun localizedTokenAfterPipes(textRes: Int, pipeCount: Int): String {
-        var template = InstrumentationRegistry.getInstrumentation()
-            .targetContext
-            .getString(textRes)
-        repeat(pipeCount) {
-            template = template.substringAfter('|')
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val template = context.getString(textRes)
+        val availablePipes = template.count { it == '|' }
+        val resourceName = try {
+            context.resources.getResourceEntryName(textRes)
+        } catch (_: android.content.res.Resources.NotFoundException) {
+            textRes.toString()
         }
-        return template.substringBefore('%').trim()
+        require(availablePipes >= pipeCount) {
+            "String resource $resourceName must contain at least $pipeCount pipe delimiters"
+        }
+        var tokenSection = template
+        repeat(pipeCount) {
+            tokenSection = tokenSection.substringAfter('|')
+        }
+        require(tokenSection.contains('%')) {
+            "String resource $resourceName must contain a format token after $pipeCount pipe delimiters"
+        }
+        return tokenSection.substringBefore('%').trim()
     }
 
     private fun dispatchSwipeInsideView(activity: MainActivity, viewId: Int) {
