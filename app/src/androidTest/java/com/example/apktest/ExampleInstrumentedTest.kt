@@ -13,6 +13,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.apktest.BuildConfig
 import com.example.apktest.game.GameFragment
 import java.util.concurrent.atomic.AtomicInteger
+import org.hamcrest.Matchers.allOf
+import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.startsWith
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -187,7 +189,9 @@ class ExampleInstrumentedTest {
     @Test
     fun mainActivityMenuButtonShowsPopoverActionsAndHud() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            waitForGameHostLaidOut(scenario)
             scenario.onActivity { activity ->
+                attachedGameFragment(activity)
                 activity.findViewById<android.view.View>(R.id.buttonMenu).performClick()
             }
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
@@ -198,13 +202,34 @@ class ExampleInstrumentedTest {
             onView(withText(R.string.back_to_setup)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
             onView(withText(startsWith(localizedPrefix(R.string.status_template))))
                 .inRoot(isPlatformPopup())
-                .check(matches(isDisplayed()))
+                .check(
+                    matches(
+                        allOf(
+                            isDisplayed(),
+                            withText(containsString(localizedTokenAfterPipes(R.string.status_template, 1)))
+                        )
+                    )
+                )
             onView(withText(startsWith(localizedPrefix(R.string.speed_detail_template))))
                 .inRoot(isPlatformPopup())
-                .check(matches(isDisplayed()))
+                .check(
+                    matches(
+                        allOf(
+                            isDisplayed(),
+                            withText(containsString(localizedTokenAfterPipes(R.string.speed_detail_template, 2)))
+                        )
+                    )
+                )
             onView(withText(startsWith(localizedPrefix(R.string.powerups_detail_template))))
                 .inRoot(isPlatformPopup())
-                .check(matches(isDisplayed()))
+                .check(
+                    matches(
+                        allOf(
+                            isDisplayed(),
+                            withText(containsString(localizedTokenAfterPipes(R.string.powerups_detail_template, 1)))
+                        )
+                    )
+                )
         }
     }
 
@@ -214,6 +239,16 @@ class ExampleInstrumentedTest {
             .getString(textRes)
             .substringBefore('%')
             .trimEnd()
+    }
+
+    private fun localizedTokenAfterPipes(textRes: Int, pipeCount: Int): String {
+        var template = InstrumentationRegistry.getInstrumentation()
+            .targetContext
+            .getString(textRes)
+        repeat(pipeCount) {
+            template = template.substringAfter('|')
+        }
+        return template.substringBefore('%').trim()
     }
 
     private fun dispatchSwipeInsideView(activity: MainActivity, viewId: Int) {
