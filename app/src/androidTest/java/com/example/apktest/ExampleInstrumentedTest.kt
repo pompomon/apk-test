@@ -2,12 +2,17 @@ package com.example.apktest
 
 import android.os.SystemClock
 import android.view.MotionEvent
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
+import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.apktest.BuildConfig
 import com.example.apktest.game.GameFragment
 import java.util.concurrent.atomic.AtomicInteger
+import org.hamcrest.Matchers.startsWith
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -175,6 +180,24 @@ class ExampleInstrumentedTest {
                     activity.resolvedSwipeCount
                 )
             }
+        }
+    }
+
+    @Test
+    fun mainActivity_menuButtonShowsPopoverActionsAndHud() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.findViewById<android.view.View>(R.id.buttonMenu).performClick()
+            }
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+
+            onView(withText(R.string.pause_resume)).check(matches(isDisplayed()))
+            onView(withText(R.string.restart)).check(matches(isDisplayed()))
+            onView(withText(R.string.legend)).check(matches(isDisplayed()))
+            onView(withText(R.string.back_to_setup)).check(matches(isDisplayed()))
+            onView(withText(startsWith("Status:"))).check(matches(isDisplayed()))
+            onView(withText(startsWith("Player speed:"))).check(matches(isDisplayed()))
+            onView(withText(startsWith("Power-ups:"))).check(matches(isDisplayed()))
         }
     }
 

@@ -63,7 +63,7 @@ class GameMenuPopover(
         val divider = View(context).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(1f)
+                maxOf(1, dp(1f))
             ).apply { topMargin = pad; bottomMargin = pad }
             setBackgroundColor(ContextCompat.getColor(context, R.color.maze_menu_popover_divider))
         }
