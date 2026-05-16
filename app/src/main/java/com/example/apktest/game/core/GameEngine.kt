@@ -188,7 +188,9 @@ class GameEngine(
                     exit = maze.exit,
                     npcs = npcs,
                     playerInvisibleToNpcs = isEffectActive(PowerUpType.INVISIBILITY),
-                    npcsFrozen = isEffectActive(PowerUpType.FREEZE)
+                    npcsFrozen = isEffectActive(PowerUpType.FREEZE),
+                    spawnedPowerUps = spawnedPowerUpsView,
+                    pickupRadius = difficulty.automaticPickupRadius
                 )
             )
         } ?: return

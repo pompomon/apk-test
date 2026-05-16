@@ -40,6 +40,27 @@ class DifficultyPresetTest {
         )
     }
 
+    @Test(expected = IllegalArgumentException::class)
+    fun difficultyPreset_rejectsNegativeAutomaticPickupRadius() {
+        DifficultyPreset(
+            name = "BadRadius",
+            mazeWidth = 10,
+            mazeHeight = 10,
+            npcCount = 1,
+            playerMovesPerSecond = 4f,
+            npcMovesPerSecond = 1f,
+            npcVisionRange = 3,
+            automaticPickupRadius = -1
+        )
+    }
+
+    @Test
+    fun defaultPresets_useAutomaticPickupRadiusOfOne() {
+        assertEquals(1, DifficultyPresets.EASY.automaticPickupRadius)
+        assertEquals(1, DifficultyPresets.MEDIUM.automaticPickupRadius)
+        assertEquals(1, DifficultyPresets.HARD.automaticPickupRadius)
+    }
+
     @Test
     fun mediumPowerUpPolicy_usesSixtySecondLifetimeAndRespawns() {
         assertEquals(60f, DifficultyPresets.MEDIUM.powerUpPickupLifetimeSeconds, 0.0001f)

@@ -35,7 +35,20 @@ data class PlayerPolicyContext(
      * this tick, so only their *current* cells are dangerous; the player can
      * safely step onto any walkable neighbour of an NPC.
      */
-    val npcsFrozen: Boolean = false
+    val npcsFrozen: Boolean = false,
+    /**
+     * Spawned power-ups currently on the map. Empty by default for
+     * back-compatibility with call sites that don't supply pickup state
+     * (e.g. unit tests). Used by [AvoidanceWrapperPolicy] together with
+     * [pickupRadius] to drive opportunistic pickup detours.
+     */
+    val spawnedPowerUps: Collection<SpawnedPowerUp> = emptyList(),
+    /**
+     * Chebyshev (king-move) cell radius around [player] within which
+     * [AvoidanceWrapperPolicy] will divert one step to pick up a nearby
+     * power-up. `0` (the default) disables pickup-seeking behaviour.
+     */
+    val pickupRadius: Int = 0
 )
 
 data class NpcPolicyContext(
@@ -146,9 +159,28 @@ class AStarExitPolicy : RankedPlayerPolicy {
  * an NPC are filtered out, with a softer preference against directions
  * adjacent to an NPC (cells the NPC could move into next NPC tick).
  *
+ * Pickup-seeking (added):
+ * Before delegating to the inner policy, the wrapper checks for any
+ * [PlayerPolicyContext.spawnedPowerUps] within Chebyshev distance
+ * [PlayerPolicyContext.pickupRadius] of the player. If a power-up is
+ * reachable by a walkable path of length ≤ `pickupRadius`, the wrapper
+ * diverts one step toward it. The detour is gated by the same safety
+ * ordering used for the regular move selection:
+ * - A move that lands on [PlayerPolicyContext.exit] always wins this tick
+ *   and beats any pickup detour ([GameEngine] evaluates the win condition
+ *   before NPC collision).
+ * - Detour steps into a currently NPC-occupied cell (`deadly`) are never
+ *   taken.
+ * - Among otherwise-valid candidates, non-risky steps (cells not threatened
+ *   by an NPC neighbour) are preferred over risky ones; ties are broken
+ *   first by graph distance, then by [PowerUpType.ordinal] for determinism.
+ * Pickup-seeking is disabled when `pickupRadius <= 0` (the default for
+ * contexts that don't supply one).
+ *
  * Behaviour:
- * - When [PlayerPolicyContext.playerInvisibleToNpcs] is true, the wrapper is
- *   a pass-through (NPC contact does not lose the game under INVISIBILITY).
+ * - When [PlayerPolicyContext.playerInvisibleToNpcs] is true, NPC contact
+ *   does not lose the game; deadly/risky sets are empty and the wrapper
+ *   reduces to pickup-seeking + a pass-through to the inner policy.
  * - When [PlayerPolicyContext.npcsFrozen] is true only NPC current cells are
  *   treated as deadly; the player can safely step onto an NPC's neighbour.
  * - For [BfsExitPolicy] / [AStarExitPolicy] the wrapper first asks the
@@ -166,12 +198,18 @@ class AStarExitPolicy : RankedPlayerPolicy {
  */
 class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
     override fun nextMove(context: PlayerPolicyContext): Direction? {
+        val deadly = computeDeadlyCells(context)
+        val risky = computeRiskyCells(context, deadly)
+
+        // Pickup-seeking detour: pre-empts the inner policy when a nearby
+        // power-up can be reached safely within the configured radius. The
+        // helper itself defers to a winning move when one exists, so the
+        // exit always beats any detour.
+        pickupSeekingStep(context, deadly, risky)?.let { return it }
+
         if (context.playerInvisibleToNpcs || context.npcs.isEmpty()) {
             return inner.nextMove(context)
         }
-
-        val deadly = computeDeadlyCells(context)
-        val risky = computeRiskyCells(context, deadly)
 
         if (deadly.isEmpty() && risky.isEmpty()) {
             return inner.nextMove(context)
@@ -232,6 +270,83 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
             else -> return null
         }
         return nextDirection(from, path)
+    }
+
+    /**
+     * Returns a single-step direction that diverts the player toward the
+     * nearest reachable spawned power-up within [PlayerPolicyContext.pickupRadius]
+     * Chebyshev cells, or `null` to defer to the regular policy logic.
+     *
+     * Returns `null` when:
+     * - pickup-seeking is disabled (`pickupRadius <= 0`) or there are no
+     *   spawned power-ups in [context],
+     * - a winning step (walkable adjacent direction onto [PlayerPolicyContext.exit])
+     *   is available — taking the exit always beats picking up,
+     * - no candidate pickup is reachable by a walkable path of length
+     *   `1..pickupRadius` whose first step is not currently NPC-occupied
+     *   (`deadly`).
+     *
+     * Candidate ordering: non-risky first, then by graph distance ascending,
+     * then by [PowerUpType.ordinal] for determinism.
+     */
+    private fun pickupSeekingStep(
+        context: PlayerPolicyContext,
+        deadly: Set<GridPos>,
+        risky: Set<GridPos>
+    ): Direction? {
+        val radius = context.pickupRadius
+        if (radius <= 0) return null
+        if (context.spawnedPowerUps.isEmpty()) return null
+
+        val from = context.player.position
+        val exit = context.exit
+
+        // A winning step beats any pickup detour. Defer to the regular
+        // selection logic (which preserves the existing win-priority
+        // semantics, including the "exit cell occupied by an NPC" case).
+        for (direction in Direction.entries) {
+            if (context.maze.canMove(from, direction) && from.moved(direction) == exit) {
+                return null
+            }
+        }
+
+        var bestDirection: Direction? = null
+        var bestRisky = true
+        var bestDistance = Int.MAX_VALUE
+        var bestOrdinal = Int.MAX_VALUE
+
+        for (pickup in context.spawnedPowerUps) {
+            val pos = pickup.position
+            if (pos == from || pos == exit) continue
+            val chebyshev = maxOf(abs(pos.x - from.x), abs(pos.y - from.y))
+            if (chebyshev > radius) continue
+
+            val path = context.navigator.bfsPath(from, pos)
+            val steps = path.size - 1
+            if (steps <= 0 || steps > radius) continue
+
+            val direction = nextDirection(from, path) ?: continue
+            if (!context.maze.canMove(from, direction)) continue
+            val dest = from.moved(direction)
+            if (dest in deadly) continue
+
+            val candidateRisky = dest in risky
+            val candidateOrdinal = pickup.type.ordinal
+            val better = when {
+                candidateRisky != bestRisky -> !candidateRisky
+                steps != bestDistance -> steps < bestDistance
+                candidateOrdinal != bestOrdinal -> candidateOrdinal < bestOrdinal
+                else -> false
+            }
+            if (bestDirection == null || better) {
+                bestDirection = direction
+                bestRisky = candidateRisky
+                bestDistance = steps
+                bestOrdinal = candidateOrdinal
+            }
+        }
+
+        return bestDirection
     }
 }
 
