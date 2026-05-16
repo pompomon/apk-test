@@ -194,7 +194,9 @@ class ExampleInstrumentedTest {
         val swipeSpan = if (gameHost != null && gameHost.width > 0) {
             maxOf(gameHost.width, gameHost.height) * SWIPE_REL_SPAN
         } else {
-            maxOf(view.width, view.height) * 8f
+            // Fallback: 8× the button dimension keeps displacement well above
+            // scaledTouchSlop * 4 (minDistance) even on high-density screens.
+            maxOf(view.width, view.height) * OVERLAY_SWIPE_FALLBACK_MULTIPLIER
         }
         dispatchSwipeViaTouchEvent(activity, startX, startY, startX + swipeSpan, startY)
         dispatchSwipeViaTouchEvent(activity, startX, startY, startX, startY + swipeSpan)
@@ -306,5 +308,8 @@ class ExampleInstrumentedTest {
         // Retry the entire 4-swipe sequence a few times if no fling resolves; synthetic flings
         // can be intermittently dropped by the emulator's input pipeline.
         private const val MAX_SWIPE_RETRY_ATTEMPTS = 5
+        // Fallback multiplier for overlay swipes when the game host is not yet measured;
+        // 8× the button's own dimension is large enough to exceed minDistance on any density.
+        private const val OVERLAY_SWIPE_FALLBACK_MULTIPLIER = 8f
     }
 }
