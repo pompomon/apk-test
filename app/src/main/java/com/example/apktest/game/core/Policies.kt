@@ -200,19 +200,40 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
     override fun nextMove(context: PlayerPolicyContext): Direction? {
         val deadly = computeDeadlyCells(context)
         val risky = computeRiskyCells(context, deadly)
+        val from = context.player.position
+
+        // Always ask the wrapped policy for candidates first so ranked
+        // policies can update their per-tick state (e.g. Random+Memory visit
+        // counters), even on ticks where pickup-seeking wins.
+        val ranked = (inner as? RankedPlayerPolicy)?.rankedMoves(context)
+            ?: listOfNotNull(inner.nextMove(context))
+        if (ranked.isEmpty()) return null
+
+        // A move that wins the game this tick is always preferred, even if
+        // the exit cell is currently occupied by an NPC.
+        val winning = ranked.firstOrNull { from.moved(it) == context.exit }
+        if (winning != null) return winning
+
+        val safeRanked = ranked.firstOrNull { from.moved(it) !in deadly && from.moved(it) !in risky }
+        val hasSafeRegularMove = safeRanked != null
 
         // Pickup-seeking detour: pre-empts the inner policy when a nearby
         // power-up can be reached safely within the configured radius. The
         // helper itself defers to a winning move when one exists, so the
         // exit always beats any detour.
-        pickupSeekingStep(context, deadly, risky)?.let { return it }
+        pickupSeekingStep(context, deadly, risky)?.let { pickupStep ->
+            // Keep the existing safety ordering: do not take a risky pickup
+            // detour when a non-risky regular move exists this tick.
+            val pickupDest = from.moved(pickupStep)
+            if (pickupDest !in risky || !hasSafeRegularMove) return pickupStep
+        }
 
         if (context.playerInvisibleToNpcs || context.npcs.isEmpty()) {
-            return inner.nextMove(context)
+            return ranked.firstOrNull()
         }
 
         if (deadly.isEmpty() && risky.isEmpty()) {
-            return inner.nextMove(context)
+            return ranked.firstOrNull()
         }
 
         // For exit-finding policies, try an avoidance-aware path first so the
@@ -230,18 +251,7 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
             if (dest !in deadly && dest !in risky) return pathStep
         }
 
-        val ranked = (inner as? RankedPlayerPolicy)?.rankedMoves(context)
-            ?: listOfNotNull(inner.nextMove(context))
-
-        if (ranked.isEmpty()) return null
-
-        val from = context.player.position
-        // A move that wins the game this tick is always preferred, even if
-        // the exit cell is currently occupied by an NPC.
-        val winning = ranked.firstOrNull { from.moved(it) == context.exit }
-        if (winning != null) return winning
-
-        val safe = ranked.firstOrNull { from.moved(it) !in deadly && from.moved(it) !in risky }
+        val safe = safeRanked
         if (safe != null) return safe
 
         val nonDeadly = ranked.firstOrNull { from.moved(it) !in deadly }

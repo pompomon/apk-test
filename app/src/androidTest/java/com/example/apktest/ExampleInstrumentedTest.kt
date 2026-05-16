@@ -3,9 +3,11 @@ package com.example.apktest
 import android.os.SystemClock
 import android.view.MotionEvent
 import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
+import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -193,8 +195,8 @@ class ExampleInstrumentedTest {
             scenario.onActivity { activity ->
                 val gameFragment = attachedGameFragment(activity)
                 assertTrue("Game fragment should be added before opening menu", gameFragment.isAdded)
-                activity.findViewById<android.view.View>(R.id.buttonMenu).performClick()
             }
+            onView(withId(R.id.buttonMenu)).perform(click())
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
 
             onView(withText(R.string.pause_resume)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))

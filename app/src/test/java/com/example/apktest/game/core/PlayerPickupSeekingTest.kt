@@ -5,6 +5,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
+import kotlin.random.Random
 
 class PlayerPickupSeekingTest {
 
@@ -182,11 +183,11 @@ class PlayerPickupSeekingTest {
     }
 
     @Test
-    fun riskyPickup_takenWhenNoSafeAlternativeExists() {
+    fun riskyPickup_doesNotBeatSafeRegularMove() {
         // Player (0,0); single power-up NORTH at (0,1). An NPC at (1,1)
-        // makes (0,1) risky (NPC could step west next tick). With no other
-        // pickup option the wrapper still detours to grab it (risky but
-        // not deadly).
+        // makes (0,1) risky (NPC could step west next tick). EAST remains a
+        // safe regular move toward the exit, so the wrapper should not take
+        // the risky detour.
         val maze = Maze.openGrid(5, 5)
         val navigator = MazeNavigator(maze)
         val policy = AvoidanceWrapperPolicy(BfsExitPolicy())
@@ -206,15 +207,14 @@ class PlayerPickupSeekingTest {
             )
         )
 
-        assertEquals(Direction.NORTH, move)
+        assertEquals(Direction.EAST, move)
     }
 
     @Test
     fun nonRiskyPickupPreferredOverRiskyPickup() {
-        // Two pickups at equal distance: (0,1) is risky (NPC at (1,1)),
-        // (-1,0)... use (0,-1)? Player at (1,1) so we can have a clean
-        // 4-direction layout. Power-up NORTH at (1,2) is non-risky; SOUTH
-        // at (1,0) is risky because of an NPC at (2,0).
+        // Two pickups at equal distance from player (1,1). Power-up NORTH at
+        // (1,2) is non-risky; SOUTH at (1,0) is risky because of an NPC at
+        // (2,0). The non-risky pickup should be preferred.
         val maze = Maze.openGrid(5, 5)
         val navigator = MazeNavigator(maze)
         val policy = AvoidanceWrapperPolicy(BfsExitPolicy())
@@ -336,6 +336,35 @@ class PlayerPickupSeekingTest {
         )
 
         assertNull(move)
+    }
+
+    @Test
+    fun randomMemory_pickupDetourStillUpdatesVisitCounts() {
+        val maze = Maze.openGrid(5, 5)
+        val navigator = MazeNavigator(maze)
+        val inner = RandomWalkMemoryPolicy(Random(42))
+        val policy = AvoidanceWrapperPolicy(inner)
+        val player = Player(position = GridPos(0, 0), facing = Direction.EAST)
+        val pickup = spawnedPowerUp(PowerUpType.SPEED_UP, GridPos(0, 1))
+
+        val move = policy.nextMove(
+            PlayerPolicyContext(
+                maze = maze,
+                navigator = navigator,
+                player = player,
+                exit = GridPos(4, 0),
+                npcs = emptyList(),
+                spawnedPowerUps = listOf(pickup),
+                pickupRadius = 1
+            )
+        )
+
+        assertEquals(Direction.NORTH, move)
+        val visitCountsField = RandomWalkMemoryPolicy::class.java.getDeclaredField("visitCounts")
+        visitCountsField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val visitCounts = visitCountsField.get(inner) as Map<GridPos, Int>
+        assertEquals(1, visitCounts[GridPos(0, 0)])
     }
 
     @Test
