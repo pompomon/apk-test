@@ -183,15 +183,21 @@ class ExampleInstrumentedTest {
         if (view.width <= 0 || view.height <= 0) return
         val location = IntArray(2)
         view.getLocationInWindow(location)
-        val originX = location[0].toFloat()
-        val originY = location[1].toFloat()
-        val width = view.width.toFloat()
-        val height = view.height.toFloat()
-        val centerX = originX + width / 2f
-        val centerY = originY + height / 2f
-        val span = minOf(width, height) * 0.4f
-        dispatchSwipeViaTouchEvent(activity, centerX - span / 2f, centerY, centerX + span / 2f, centerY)
-        dispatchSwipeViaTouchEvent(activity, centerX, centerY - span / 2f, centerX, centerY + span / 2f)
+        val startX = location[0].toFloat() + view.width / 2f
+        val startY = location[1].toFloat() + view.height / 2f
+        // Use a span derived from the game host (not the button) so the displacement
+        // is guaranteed to exceed minDistance (scaledTouchSlop * 4) on every density.
+        // If the hit-test exclusion regresses and ACTION_DOWN is incorrectly forwarded
+        // to the gesture detector, this long swipe would register as a valid fling and
+        // the test would correctly catch the regression.
+        val gameHost = activity.findViewById<android.view.View>(R.id.fragmentGameHost)
+        val swipeSpan = if (gameHost != null && gameHost.width > 0) {
+            maxOf(gameHost.width, gameHost.height) * SWIPE_REL_SPAN
+        } else {
+            maxOf(view.width, view.height) * 8f
+        }
+        dispatchSwipeViaTouchEvent(activity, startX, startY, startX + swipeSpan, startY)
+        dispatchSwipeViaTouchEvent(activity, startX, startY, startX, startY + swipeSpan)
     }
 
     private fun dispatchSwipeViaTouchEvent(
