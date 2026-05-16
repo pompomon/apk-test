@@ -360,11 +360,7 @@ class PlayerPickupSeekingTest {
         )
 
         assertEquals(Direction.NORTH, move)
-        val visitCountsField = RandomWalkMemoryPolicy::class.java.getDeclaredField("visitCounts")
-        visitCountsField.isAccessible = true
-        @Suppress("UNCHECKED_CAST")
-        val visitCounts = visitCountsField.get(inner) as Map<GridPos, Int>
-        assertEquals(1, visitCounts[GridPos(0, 0)])
+        assertEquals(1, inner.visitCount(GridPos(0, 0)))
     }
 
     @Test

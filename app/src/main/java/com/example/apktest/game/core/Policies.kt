@@ -90,6 +90,8 @@ class ManualPolicy : PlayerPolicy {
 class RandomWalkMemoryPolicy(private val random: Random = Random.Default) : RankedPlayerPolicy {
     private val visitCounts = mutableMapOf<GridPos, Int>()
 
+    internal fun visitCount(position: GridPos): Int = visitCounts.getOrDefault(position, 0)
+
     override fun nextMove(context: PlayerPolicyContext): Direction? =
         rankedMoves(context).firstOrNull()
 
