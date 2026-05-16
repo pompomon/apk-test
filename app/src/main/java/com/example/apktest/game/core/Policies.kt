@@ -253,8 +253,7 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
             if (dest !in deadly && dest !in risky) return pathStep
         }
 
-        val safe = safeRanked
-        if (safe != null) return safe
+        if (safeRanked != null) return safeRanked
 
         val nonDeadly = ranked.firstOrNull { from.moved(it) !in deadly }
         if (nonDeadly != null) return nonDeadly
