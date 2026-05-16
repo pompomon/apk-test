@@ -168,8 +168,8 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             menuPopover = it
         }
         if (popover.isShowing) return
-        refreshHudSnapshot()
         popover.show(menuButton)
+        refreshHudSnapshot()
         hudHandler.removeCallbacks(hudRefreshRunnable)
         hudHandler.postDelayed(hudRefreshRunnable, HUD_REFRESH_INTERVAL_MS)
     }
