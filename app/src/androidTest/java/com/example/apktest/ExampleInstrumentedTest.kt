@@ -28,10 +28,7 @@ class ExampleInstrumentedTest {
             scenario.onActivity { activity ->
                 val viewIds = intArrayOf(
                     R.id.fragmentGameHost,
-                    R.id.buttonPause,
-                    R.id.buttonRestart,
-                    R.id.buttonLegend,
-                    R.id.buttonBackToSetup,
+                    R.id.buttonMenu,
                     R.id.buttonUp,
                     R.id.buttonLeft,
                     R.id.buttonDown,
@@ -164,7 +161,7 @@ class ExampleInstrumentedTest {
                 // Dispatch swipes that start inside the top and bottom overlay regions via the
                 // real dispatchTouchEvent path; the hit-test in MainActivity must reject them
                 // so they never reach the gesture detector.
-                dispatchSwipeInsideView(activity, R.id.topOverlay)
+                dispatchSwipeInsideView(activity, R.id.buttonMenu)
                 dispatchSwipeInsideView(activity, R.id.bottomControls)
             }
             // Give the gesture detector a chance to (incorrectly) resolve swipes; if the
