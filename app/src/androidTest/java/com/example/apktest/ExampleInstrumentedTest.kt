@@ -184,7 +184,7 @@ class ExampleInstrumentedTest {
     }
 
     @Test
-    fun mainActivity_menuButtonShowsPopoverActionsAndHud() {
+    fun mainActivityMenuButtonShowsPopoverActionsAndHud() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
                 activity.findViewById<android.view.View>(R.id.buttonMenu).performClick()
