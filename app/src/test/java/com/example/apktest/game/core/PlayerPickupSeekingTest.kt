@@ -184,8 +184,8 @@ class PlayerPickupSeekingTest {
 
     @Test
     fun riskyPickup_doesNotBeatSafeRegularMove() {
-        // Player (0,0); single power-up NORTH at (0,1). An NPC at (1,1)
-        // makes (0,1) risky (NPC could step west next tick). EAST remains a
+        // Player (0,0); single power-up NORTH at (0,1). An NPC at (0,2)
+        // makes (0,1) risky (NPC could step south next tick). EAST remains a
         // safe regular move toward the exit, so the wrapper should not take
         // the risky detour.
         val maze = Maze.openGrid(5, 5)
@@ -193,7 +193,7 @@ class PlayerPickupSeekingTest {
         val policy = AvoidanceWrapperPolicy(BfsExitPolicy())
         val player = Player(position = GridPos(0, 0), facing = Direction.EAST)
         val pickup = spawnedPowerUp(PowerUpType.SPEED_UP, GridPos(0, 1))
-        val npc = Npc(id = 1, position = GridPos(1, 1))
+        val npc = Npc(id = 1, position = GridPos(0, 2))
 
         val move = policy.nextMove(
             PlayerPolicyContext(
