@@ -9,7 +9,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.widget.Button
-import android.widget.TextView
+import android.widget.ImageButton
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -22,12 +22,12 @@ import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
+import com.example.apktest.ui.GameMenuPopover
 import com.example.apktest.ui.LegendDialog
 
 class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
-    private lateinit var statusText: TextView
-    private lateinit var speedText: TextView
-    private lateinit var powerUpText: TextView
+    private var menuPopover: GameMenuPopover? = null
+    private lateinit var menuButton: ImageButton
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal var resolvedSwipeCount: Int = 0
@@ -70,9 +70,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             insets
         }
 
-        statusText = findViewById(R.id.textStatus)
-        speedText = findViewById(R.id.textSpeed)
-        powerUpText = findViewById(R.id.textPowerUps)
+        menuButton = findViewById(R.id.buttonMenu)
 
         if (savedInstanceState == null) {
             val fragment = GameFragment().apply {
@@ -118,43 +116,62 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     override fun onResume() {
         super.onResume()
-        refreshHudSnapshot()
-        hudHandler.removeCallbacks(hudRefreshRunnable)
-        hudHandler.postDelayed(hudRefreshRunnable, HUD_REFRESH_INTERVAL_MS)
+        // No need to start the HUD ticker until the popover is opened; HUD text
+        // is only visible inside the popover now.
     }
 
     override fun onPause() {
         hudHandler.removeCallbacks(hudRefreshRunnable)
+        menuPopover?.dismiss()
         super.onPause()
     }
 
     private fun setupControls() {
-        findViewById<Button>(R.id.buttonPause).setOnClickListener {
-            gameFragment()?.togglePause()
-            refreshHudSnapshot()
-        }
-
-        findViewById<Button>(R.id.buttonRestart).setOnClickListener {
-            gameFragment()?.restart()
-            refreshHudSnapshot()
-        }
-
-        findViewById<Button>(R.id.buttonLegend).setOnClickListener {
-            LegendDialog.show(this)
-        }
-
-        findViewById<Button>(R.id.buttonBackToSetup).setOnClickListener {
-            val intent = Intent(this, SetupActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            }
-            startActivity(intent)
-            finish()
-        }
+        menuButton.setOnClickListener { showMenuPopover() }
 
         findViewById<Button>(R.id.buttonUp).setOnClickListener { move(Direction.NORTH) }
         findViewById<Button>(R.id.buttonDown).setOnClickListener { move(Direction.SOUTH) }
         findViewById<Button>(R.id.buttonLeft).setOnClickListener { move(Direction.WEST) }
         findViewById<Button>(R.id.buttonRight).setOnClickListener { move(Direction.EAST) }
+    }
+
+    private fun showMenuPopover() {
+        val popover = menuPopover ?: GameMenuPopover(
+            this,
+            object : GameMenuPopover.Callbacks {
+                override fun onPauseResume() {
+                    gameFragment()?.togglePause()
+                    refreshHudSnapshot()
+                }
+
+                override fun onRestart() {
+                    gameFragment()?.restart()
+                    refreshHudSnapshot()
+                }
+
+                override fun onLegend() {
+                    LegendDialog.show(this@MainActivity)
+                }
+
+                override fun onBackToSetup() {
+                    val intent = Intent(this@MainActivity, SetupActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    }
+                    startActivity(intent)
+                    finish()
+                }
+            }
+        ).also {
+            it.setOnDismissListener {
+                hudHandler.removeCallbacks(hudRefreshRunnable)
+            }
+            menuPopover = it
+        }
+        if (popover.isShowing) return
+        popover.show(menuButton)
+        refreshHudSnapshot()
+        hudHandler.removeCallbacks(hudRefreshRunnable)
+        hudHandler.postDelayed(hudRefreshRunnable, HUD_REFRESH_INTERVAL_MS)
     }
 
     private fun move(direction: Direction) {
@@ -197,9 +214,9 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     // Routes touches that begin inside the game host through the swipe detector before the
     // regular dispatch path, so swipes are observed even when child views (e.g., the libGDX
     // SurfaceView inside fragmentGameHost) consume the events. Touches that start on overlay
-    // UI (spinners/buttons) are NOT forwarded so scrolls/flings on controls don't trigger
-    // unintended player moves. We never consume the event here so existing dispatch behavior
-    // for child views and arrow-button controls is preserved.
+    // UI (the hamburger button or D-pad) are NOT forwarded so taps/scrolls on controls don't
+    // trigger unintended player moves. We never consume the event here so existing dispatch
+    // behavior for child views and arrow-button controls is preserved.
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         val detector = swipeGestureDetector
         if (detector != null) {
@@ -234,10 +251,10 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         val x = ev.x.toInt()
         val y = ev.y.toInt()
         if (!gameHostWindowRect.contains(x, y)) return false
-        // The fragment host spans the full screen and is overlapped by the top/bottom overlays;
-        // exclude touches that fall on those overlay regions so swipes/flings on spinners and
-        // arrow buttons don't trigger unintended player moves.
-        if (isInsideOverlay(R.id.topOverlay, x, y)) return false
+        // The fragment host now spans the full screen above the D-pad; exclude touches that
+        // fall on the hamburger button (top-right overlay) and on the D-pad so taps/flings on
+        // controls don't trigger unintended player moves.
+        if (isInsideOverlay(R.id.buttonMenu, x, y)) return false
         if (isInsideOverlay(R.id.bottomControls, x, y)) return false
         return true
     }
@@ -258,25 +275,28 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     }
 
     private fun refreshHudSnapshot() {
+        val popover = menuPopover ?: return
+        if (!popover.isShowing) return
         val hud = gameFragment()?.hudState() ?: return
-        statusText.text = getString(
+        val status = getString(
             R.string.status_template,
             displayStatus(hud.status),
             hud.steps,
             hud.elapsedSeconds
         )
-        speedText.text = getString(
+        val speed = getString(
             R.string.speed_detail_template,
             hud.playerSpeed,
             hud.npcSpeed,
             hud.playerPolicyLabel,
             hud.npcPolicyLabel
         )
-        powerUpText.text = getString(
+        val powerUps = getString(
             R.string.powerups_detail_template,
             hud.activePowerUps.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: getString(R.string.powerups_none),
             hud.powerUpsOnMap
         )
+        popover.updateHud(status, speed, powerUps)
     }
 
     private fun gameFragment(): GameFragment? {

@@ -14,4 +14,8 @@
     <color name="maze_dpad_button_text">#F2FFFFFF</color>
     <color name="maze_status_text">#FFFFFF</color>
     <color name="maze_speed_text">#D0D7E2</color>
+    <color name="maze_menu_button_background">#99000000</color>
+    <color name="maze_menu_button_icon">#F2FFFFFF</color>
+    <color name="maze_menu_popover_background">#F01A1B22</color>
+    <color name="maze_menu_popover_divider">#33FFFFFF</color>
 </resources>

@@ -2,12 +2,20 @@ package com.example.apktest
 
 import android.os.SystemClock
 import android.view.MotionEvent
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
+import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
+import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.apktest.BuildConfig
 import com.example.apktest.game.GameFragment
 import java.util.concurrent.atomic.AtomicInteger
+import org.hamcrest.Matchers.allOf
+import org.hamcrest.Matchers.containsString
+import org.hamcrest.Matchers.startsWith
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -28,10 +36,7 @@ class ExampleInstrumentedTest {
             scenario.onActivity { activity ->
                 val viewIds = intArrayOf(
                     R.id.fragmentGameHost,
-                    R.id.buttonPause,
-                    R.id.buttonRestart,
-                    R.id.buttonLegend,
-                    R.id.buttonBackToSetup,
+                    R.id.buttonMenu,
                     R.id.buttonUp,
                     R.id.buttonLeft,
                     R.id.buttonDown,
@@ -164,7 +169,7 @@ class ExampleInstrumentedTest {
                 // Dispatch swipes that start inside the top and bottom overlay regions via the
                 // real dispatchTouchEvent path; the hit-test in MainActivity must reject them
                 // so they never reach the gesture detector.
-                dispatchSwipeInsideView(activity, R.id.topOverlay)
+                dispatchSwipeInsideView(activity, R.id.buttonMenu)
                 dispatchSwipeInsideView(activity, R.id.bottomControls)
             }
             // Give the gesture detector a chance to (incorrectly) resolve swipes; if the
@@ -181,20 +186,106 @@ class ExampleInstrumentedTest {
         }
     }
 
+    @Test
+    fun mainActivityMenuButtonShowsPopoverActionsAndHud() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            waitForGameHostLaidOut(scenario)
+            scenario.onActivity { activity ->
+                val gameFragment = attachedGameFragment(activity)
+                assertTrue("Game fragment should be added before opening menu", gameFragment.isAdded)
+                activity.findViewById<android.view.View>(R.id.buttonMenu).performClick()
+            }
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+
+            onView(withText(R.string.pause_resume)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
+            onView(withText(R.string.restart)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
+            onView(withText(R.string.legend)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
+            onView(withText(R.string.back_to_setup)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
+            onView(withText(startsWith(localizedPrefix(R.string.status_template))))
+                .inRoot(isPlatformPopup())
+                .check(
+                    matches(
+                        allOf(
+                            isDisplayed(),
+                            withText(containsString(localizedTokenAfterPipes(R.string.status_template, 1)))
+                        )
+                    )
+                )
+            onView(withText(startsWith(localizedPrefix(R.string.speed_detail_template))))
+                .inRoot(isPlatformPopup())
+                .check(
+                    matches(
+                        allOf(
+                            isDisplayed(),
+                            withText(containsString(localizedTokenAfterPipes(R.string.speed_detail_template, 2)))
+                        )
+                    )
+                )
+            onView(withText(startsWith(localizedPrefix(R.string.powerups_detail_template))))
+                .inRoot(isPlatformPopup())
+                .check(
+                    matches(
+                        allOf(
+                            isDisplayed(),
+                            withText(containsString(localizedTokenAfterPipes(R.string.powerups_detail_template, 1)))
+                        )
+                    )
+                )
+        }
+    }
+
+    private fun localizedPrefix(textRes: Int): String {
+        return InstrumentationRegistry.getInstrumentation()
+            .targetContext
+            .getString(textRes)
+            .substringBefore('%')
+            .trim()
+    }
+
+    private fun localizedTokenAfterPipes(textRes: Int, pipeCount: Int): String {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val template = context.getString(textRes)
+        val availablePipes = template.count { it == '|' }
+        val resourceName = try {
+            context.resources.getResourceEntryName(textRes)
+        } catch (_: android.content.res.Resources.NotFoundException) {
+            textRes.toString()
+        }
+        require(availablePipes >= pipeCount) {
+            "String resource $resourceName must contain at least $pipeCount pipe delimiters"
+        }
+        var tokenSection = template
+        repeat(pipeCount) {
+            tokenSection = tokenSection.substringAfter('|')
+        }
+        require(tokenSection.contains('%')) {
+            "String resource $resourceName must contain a format token after $pipeCount pipe delimiters"
+        }
+        return tokenSection.substringBefore('%').trim()
+    }
+
     private fun dispatchSwipeInsideView(activity: MainActivity, viewId: Int) {
         val view = activity.findViewById<android.view.View>(viewId) ?: return
         if (view.width <= 0 || view.height <= 0) return
         val location = IntArray(2)
         view.getLocationInWindow(location)
-        val originX = location[0].toFloat()
-        val originY = location[1].toFloat()
-        val width = view.width.toFloat()
-        val height = view.height.toFloat()
-        val centerX = originX + width / 2f
-        val centerY = originY + height / 2f
-        val span = minOf(width, height) * 0.4f
-        dispatchSwipeViaTouchEvent(activity, centerX - span / 2f, centerY, centerX + span / 2f, centerY)
-        dispatchSwipeViaTouchEvent(activity, centerX, centerY - span / 2f, centerX, centerY + span / 2f)
+        val startX = location[0].toFloat() + view.width / 2f
+        val startY = location[1].toFloat() + view.height / 2f
+        // Use a span derived from the game host (not the button) so the displacement
+        // is guaranteed to exceed minDistance (scaledTouchSlop * 4) on every density.
+        // If the hit-test exclusion regresses and ACTION_DOWN is incorrectly forwarded
+        // to the gesture detector, this long swipe would register as a valid fling and
+        // the test would correctly catch the regression.
+        val gameHost = activity.findViewById<android.view.View>(R.id.fragmentGameHost)
+        val swipeSpan = if (gameHost != null && gameHost.width > 0) {
+            maxOf(gameHost.width, gameHost.height) * SWIPE_REL_SPAN
+        } else {
+            // Fallback: 8× the button dimension keeps displacement well above
+            // scaledTouchSlop * 4 (minDistance) even on high-density screens.
+            maxOf(view.width, view.height) * OVERLAY_SWIPE_FALLBACK_MULTIPLIER
+        }
+        dispatchSwipeViaTouchEvent(activity, startX, startY, startX + swipeSpan, startY)
+        dispatchSwipeViaTouchEvent(activity, startX, startY, startX, startY + swipeSpan)
     }
 
     private fun dispatchSwipeViaTouchEvent(
@@ -303,5 +394,8 @@ class ExampleInstrumentedTest {
         // Retry the entire 4-swipe sequence a few times if no fling resolves; synthetic flings
         // can be intermittently dropped by the emulator's input pipeline.
         private const val MAX_SWIPE_RETRY_ATTEMPTS = 5
+        // Fallback multiplier for overlay swipes when the game host is not yet measured;
+        // 8× the button's own dimension is large enough to exceed minDistance on any density.
+        private const val OVERLAY_SWIPE_FALLBACK_MULTIPLIER = 8f
     }
 }
