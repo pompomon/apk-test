@@ -4,6 +4,7 @@ import android.os.SystemClock
 import android.view.MotionEvent
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.core.app.ActivityScenario
@@ -191,14 +192,28 @@ class ExampleInstrumentedTest {
             }
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
 
-            onView(withText(R.string.pause_resume)).check(matches(isDisplayed()))
-            onView(withText(R.string.restart)).check(matches(isDisplayed()))
-            onView(withText(R.string.legend)).check(matches(isDisplayed()))
-            onView(withText(R.string.back_to_setup)).check(matches(isDisplayed()))
-            onView(withText(startsWith("Status:"))).check(matches(isDisplayed()))
-            onView(withText(startsWith("Player speed:"))).check(matches(isDisplayed()))
-            onView(withText(startsWith("Power-ups:"))).check(matches(isDisplayed()))
+            onView(withText(R.string.pause_resume)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
+            onView(withText(R.string.restart)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
+            onView(withText(R.string.legend)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
+            onView(withText(R.string.back_to_setup)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
+            onView(withText(startsWith(localizedPrefix(R.string.status_template))))
+                .inRoot(isPlatformPopup())
+                .check(matches(isDisplayed()))
+            onView(withText(startsWith(localizedPrefix(R.string.speed_detail_template))))
+                .inRoot(isPlatformPopup())
+                .check(matches(isDisplayed()))
+            onView(withText(startsWith(localizedPrefix(R.string.powerups_detail_template))))
+                .inRoot(isPlatformPopup())
+                .check(matches(isDisplayed()))
         }
+    }
+
+    private fun localizedPrefix(textRes: Int): String {
+        return InstrumentationRegistry.getInstrumentation()
+            .targetContext
+            .getString(textRes)
+            .substringBefore('%')
+            .trimEnd()
     }
 
     private fun dispatchSwipeInsideView(activity: MainActivity, viewId: Int) {
