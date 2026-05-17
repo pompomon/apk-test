@@ -389,4 +389,28 @@ class PlayerPickupSeekingTest {
         assertNotNull(move)
         assertEquals(Direction.NORTH, move)
     }
+
+    @Test
+    fun equalRiskDistanceAndType_tieBreaksDeterministicallyByPosition() {
+        val maze = Maze.openGrid(5, 5)
+        val navigator = MazeNavigator(maze)
+        val policy = AvoidanceWrapperPolicy(BfsExitPolicy())
+        val player = Player(position = GridPos(2, 2), facing = Direction.NORTH)
+        val westPickup = spawnedPowerUp(PowerUpType.SPEED_UP, GridPos(1, 2))
+        val eastPickup = spawnedPowerUp(PowerUpType.SPEED_UP, GridPos(3, 2))
+
+        val move = policy.nextMove(
+            PlayerPolicyContext(
+                maze = maze,
+                navigator = navigator,
+                player = player,
+                exit = GridPos(4, 4),
+                npcs = emptyList(),
+                spawnedPowerUps = setOf(eastPickup, westPickup),
+                pickupRadius = 1
+            )
+        )
+
+        assertEquals(Direction.WEST, move)
+    }
 }

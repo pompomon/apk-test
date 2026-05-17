@@ -175,7 +175,8 @@ class AStarExitPolicy : RankedPlayerPolicy {
  *   taken.
  * - Among otherwise-valid candidates, non-risky steps (cells not threatened
  *   by an NPC neighbour) are preferred over risky ones; ties are broken
- *   first by graph distance, then by [PowerUpType.ordinal] for determinism.
+ *   by graph distance, [PowerUpType.ordinal], pickup position, then
+ *   direction for deterministic behaviour.
  * Pickup-seeking is disabled when `pickupRadius <= 0` (the default for
  * contexts that don't supply one).
  *
@@ -298,7 +299,8 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
      *   (`deadly`).
      *
      * Candidate ordering: non-risky first, then by graph distance ascending,
-     * then by [PowerUpType.ordinal] for determinism.
+     * then by [PowerUpType.ordinal], pickup position, and direction for
+     * deterministic tie-breaking.
      */
     private fun pickupSeekingStep(
         context: PlayerPolicyContext,
@@ -325,6 +327,9 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
         var bestRisky = true
         var bestDistance = Int.MAX_VALUE
         var bestOrdinal = Int.MAX_VALUE
+        var bestX = Int.MAX_VALUE
+        var bestY = Int.MAX_VALUE
+        var bestDirectionOrdinal = Int.MAX_VALUE
 
         for (pickup in context.spawnedPowerUps) {
             val pos = pickup.position
@@ -343,10 +348,15 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
 
             val candidateRisky = dest in risky
             val candidateOrdinal = pickup.type.ordinal
+            val candidateDirectionOrdinal = direction.ordinal
             val better = when {
                 candidateRisky != bestRisky -> !candidateRisky
                 steps != bestDistance -> steps < bestDistance
                 candidateOrdinal != bestOrdinal -> candidateOrdinal < bestOrdinal
+                pos.x != bestX -> pos.x < bestX
+                pos.y != bestY -> pos.y < bestY
+                candidateDirectionOrdinal != bestDirectionOrdinal ->
+                    candidateDirectionOrdinal < bestDirectionOrdinal
                 else -> false
             }
             if (bestDirection == null || better) {
@@ -354,6 +364,9 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
                 bestRisky = candidateRisky
                 bestDistance = steps
                 bestOrdinal = candidateOrdinal
+                bestX = pos.x
+                bestY = pos.y
+                bestDirectionOrdinal = candidateDirectionOrdinal
             }
         }
 
