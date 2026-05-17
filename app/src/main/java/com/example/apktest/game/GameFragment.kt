@@ -8,6 +8,7 @@ import com.badlogic.gdx.backends.android.AndroidApplicationConfiguration
 import com.badlogic.gdx.backends.android.AndroidFragmentApplication
 import com.example.apktest.game.core.DifficultyPresets
 import com.example.apktest.game.core.Direction
+import com.example.apktest.game.core.GameEngineSnapshot
 import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.game.ui.HudState
@@ -18,6 +19,7 @@ class GameFragment : AndroidFragmentApplication() {
     private var pendingPlayerPolicy: PlayerPolicyType = PlayerPolicyType.MANUAL
     private var pendingNpcPolicy: NpcPolicyType = NpcPolicyType.DIRECT_CHASE
     private var pendingDifficulty: String = DifficultyPresets.MEDIUM.name
+    private var pendingSnapshot: GameEngineSnapshot? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,6 +33,9 @@ class GameFragment : AndroidFragmentApplication() {
                     ?: pendingNpcPolicy
             }
             args.getString(ARG_DIFFICULTY)?.let { pendingDifficulty = it }
+            args.getString(ARG_RESUME_SNAPSHOT_JSON)?.let { json ->
+                pendingSnapshot = GameEngineSnapshot.fromJson(json)
+            }
         }
     }
 
@@ -48,9 +53,17 @@ class GameFragment : AndroidFragmentApplication() {
 
         val gameInstance = MazeGame()
         game = gameInstance
-        gameInstance.setPlayerPolicy(pendingPlayerPolicy)
-        gameInstance.setNpcPolicy(pendingNpcPolicy)
-        gameInstance.setDifficulty(pendingDifficulty)
+        val snapshot = pendingSnapshot
+        if (snapshot != null) {
+            // Apply the snapshot before the first render so the engine boots
+            // straight into the resumed state (and so the fresh-game
+            // countdown is suppressed by MazeGame).
+            gameInstance.restoreSnapshot(snapshot)
+        } else {
+            gameInstance.setPlayerPolicy(pendingPlayerPolicy)
+            gameInstance.setNpcPolicy(pendingNpcPolicy)
+            gameInstance.setDifficulty(pendingDifficulty)
+        }
 
         return initializeForView(gameInstance, config)
     }
@@ -87,11 +100,19 @@ class GameFragment : AndroidFragmentApplication() {
         game?.restart()
     }
 
+    /**
+     * Captures the engine's current snapshot synchronously (blocking until
+     * the render thread runs the request, with a short timeout). Returns
+     * `null` if the game isn't initialised or the render thread is starved.
+     */
+    fun captureSnapshot(): GameEngineSnapshot? = game?.snapshotBlocking()
+
     fun hudState(): HudState? = game?.hudState()
 
     companion object {
         const val ARG_PLAYER_POLICY = "arg_player_policy"
         const val ARG_NPC_POLICY = "arg_npc_policy"
         const val ARG_DIFFICULTY = "arg_difficulty"
+        const val ARG_RESUME_SNAPSHOT_JSON = "arg_resume_snapshot_json"
     }
 }
