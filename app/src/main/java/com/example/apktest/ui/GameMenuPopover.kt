@@ -127,7 +127,7 @@ class GameMenuPopover(
 
     private fun collectText(rootView: View, out: MutableList<String>) {
         when (rootView) {
-            is TextView -> out.add(rootView.text?.toString().orEmpty())
+            is TextView -> out.add(rootView.text.toString())
             is ViewGroup -> {
                 for (index in 0 until rootView.childCount) {
                     collectText(rootView.getChildAt(index), out)
