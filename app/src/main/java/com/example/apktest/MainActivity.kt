@@ -24,11 +24,14 @@ import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.ui.GameMenuPopover
 import com.example.apktest.ui.LegendDialog
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private var menuPopover: GameMenuPopover? = null
     private lateinit var menuButton: ImageButton
     private lateinit var stateStore: GameStateStore
+    private val autosaveExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal var resolvedSwipeCount: Int = 0
@@ -157,10 +160,17 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         val hud = gameFragment()?.hudState()
         if (hud != null && (hud.status == GameStatus.RUNNING || hud.status == GameStatus.PAUSED)) {
             gameFragment()?.captureSnapshotAsync { snapshot ->
-                Thread { stateStore.save(snapshot) }.start()
+                autosaveExecutor.execute {
+                    stateStore.save(snapshot)
+                }
             }
         }
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        autosaveExecutor.shutdown()
+        super.onDestroy()
     }
 
     private fun setupControls() {
@@ -197,7 +207,12 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
                     if (hud?.status == GameStatus.RUNNING) {
                         gameFragment()?.togglePause()
                     }
-                    gameFragment()?.captureSnapshot()?.let { stateStore.save(it) }
+                    val status = hud?.status
+                    if (status == GameStatus.RUNNING || status == GameStatus.PAUSED) {
+                        gameFragment()?.captureSnapshot()?.let { stateStore.save(it) }
+                    } else if (status == GameStatus.WIN || status == GameStatus.LOSE) {
+                        stateStore.clear()
+                    }
                     val intent = Intent(this@MainActivity, SetupActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     }
