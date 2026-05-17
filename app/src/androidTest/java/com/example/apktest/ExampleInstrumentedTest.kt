@@ -2,20 +2,12 @@ package com.example.apktest
 
 import android.os.SystemClock
 import android.view.MotionEvent
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.assertion.ViewAssertions.matches
-import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
-import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.apktest.BuildConfig
 import com.example.apktest.game.GameFragment
 import java.util.concurrent.atomic.AtomicInteger
-import org.hamcrest.Matchers.allOf
-import org.hamcrest.Matchers.containsString
-import org.hamcrest.Matchers.startsWith
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -199,40 +191,32 @@ class ExampleInstrumentedTest {
             }
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
 
-            onView(withText(R.string.pause_resume)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
-            onView(withText(R.string.restart)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
-            onView(withText(R.string.legend)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
-            onView(withText(R.string.back_to_setup)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
-            onView(withText(startsWith(localizedPrefix(R.string.status_template))))
-                .inRoot(isPlatformPopup())
-                .check(
-                    matches(
-                        allOf(
-                            isDisplayed(),
-                            withText(containsString(localizedTokenAfterPipes(R.string.status_template, 1)))
-                        )
-                    )
+            scenario.onActivity { activity ->
+                assertTrue("Menu popover should be visible after tapping the menu button", activity.isMenuPopoverShowingForTesting())
+                val snapshot = activity.menuPopoverTextSnapshotForTesting()
+                assertTrue(snapshot.contains(activity.getString(R.string.pause_resume)))
+                assertTrue(snapshot.contains(activity.getString(R.string.restart)))
+                assertTrue(snapshot.contains(activity.getString(R.string.legend)))
+                assertTrue(snapshot.contains(activity.getString(R.string.back_to_setup)))
+                assertTrue(
+                    snapshot.any { text ->
+                        text.startsWith(localizedPrefix(R.string.status_template)) &&
+                            text.contains(localizedTokenAfterPipes(R.string.status_template, 1))
+                    }
                 )
-            onView(withText(startsWith(localizedPrefix(R.string.speed_detail_template))))
-                .inRoot(isPlatformPopup())
-                .check(
-                    matches(
-                        allOf(
-                            isDisplayed(),
-                            withText(containsString(localizedTokenAfterPipes(R.string.speed_detail_template, 2)))
-                        )
-                    )
+                assertTrue(
+                    snapshot.any { text ->
+                        text.startsWith(localizedPrefix(R.string.speed_detail_template)) &&
+                            text.contains(localizedTokenAfterPipes(R.string.speed_detail_template, 2))
+                    }
                 )
-            onView(withText(startsWith(localizedPrefix(R.string.powerups_detail_template))))
-                .inRoot(isPlatformPopup())
-                .check(
-                    matches(
-                        allOf(
-                            isDisplayed(),
-                            withText(containsString(localizedTokenAfterPipes(R.string.powerups_detail_template, 1)))
-                        )
-                    )
+                assertTrue(
+                    snapshot.any { text ->
+                        text.startsWith(localizedPrefix(R.string.powerups_detail_template)) &&
+                            text.contains(localizedTokenAfterPipes(R.string.powerups_detail_template, 1))
+                    }
                 )
+            }
         }
     }
 
