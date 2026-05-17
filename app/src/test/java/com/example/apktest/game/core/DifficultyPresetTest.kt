@@ -62,8 +62,8 @@ class DifficultyPresetTest {
     }
 
     @Test
-    fun mediumPowerUpPolicy_usesSixtySecondLifetimeAndRespawns() {
-        assertEquals(60f, DifficultyPresets.MEDIUM.powerUpPickupLifetimeSeconds, 0.0001f)
+    fun mediumPowerUpPolicy_usesOneTwentySecondLifetimeAndRespawns() {
+        assertEquals(120f, DifficultyPresets.MEDIUM.powerUpPickupLifetimeSeconds, 0.0001f)
         val respawn = DifficultyPresets.MEDIUM.powerUpRespawnIntervalSeconds
         assertNotNull("Medium should respawn power-ups so the map stays populated", respawn)
         // Exact value pins the preset intent — see Difficulty.kt MEDIUM.
@@ -75,5 +75,24 @@ class DifficultyPresetTest {
             "Medium respawn interval should be slower (longer) than Easy",
             respawn > easyRespawn!!
         )
+    }
+
+    @Test
+    fun easyKeepsInfinitePowerUpLifetime() {
+        // Easy mode treats `0f` as infinite: items spawned on the map should
+        // never auto-expire so players can take their time gathering them.
+        assertEquals(0f, DifficultyPresets.EASY.powerUpPickupLifetimeSeconds, 0.0001f)
+    }
+
+    @Test
+    fun hardUsesSixtyFiveSecondLifetime() {
+        assertEquals(65f, DifficultyPresets.HARD.powerUpPickupLifetimeSeconds, 0.0001f)
+    }
+
+    @Test
+    fun defaultPresets_useTenSecondExpirationStagger() {
+        assertEquals(10f, DifficultyPresets.EASY.powerUpExpirationStaggerSeconds, 0.0001f)
+        assertEquals(10f, DifficultyPresets.MEDIUM.powerUpExpirationStaggerSeconds, 0.0001f)
+        assertEquals(10f, DifficultyPresets.HARD.powerUpExpirationStaggerSeconds, 0.0001f)
     }
 }

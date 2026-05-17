@@ -1,5 +1,6 @@
 package com.example.apktest.game.core
 
+import androidx.annotation.VisibleForTesting
 import com.example.apktest.game.ui.HudState
 import kotlin.random.Random
 
@@ -55,6 +56,13 @@ class GameEngine(
 
     private val powerUpsByCell = mutableMapOf<GridPos, SpawnedPowerUp>()
     private val activeEffectsByType = mutableMapOf<PowerUpType, ActivePowerUpEffect>()
+    /**
+     * Tracks a FREEZE effect inflicted on the *player* by an NPC that picked
+     * up a FREEZE power-up. Kept separate from [activeEffectsByType] so it
+     * does not piggy-back on the player's collision immunity (a player frozen
+     * by an NPC must still LOSE on contact).
+     */
+    private var npcInducedPlayerFreeze: ActivePowerUpEffect? = null
     private var powerUpRespawnAccumulator = 0f
 
     init {
@@ -78,6 +86,7 @@ class GameEngine(
         powerUpRespawnAccumulator = 0f
         powerUpsByCell.clear()
         activeEffectsByType.clear()
+        npcInducedPlayerFreeze = null
         manualQueue.clear()
         playerPolicy.reset()
         npcPolicy.reset()
@@ -133,7 +142,13 @@ class GameEngine(
         if (status != GameStatus.RUNNING) return
 
         elapsedSeconds += deltaSeconds
-        playerAccumulator += deltaSeconds
+        // Pause player time accumulation while the NPC-induced FREEZE is
+        // active so the player can't be moved by manual input or by automated
+        // policies, and so no burst of accumulated moves fires after thaw.
+        // Mirrors the symmetric NPC accumulator gate below.
+        if (!isPlayerFrozenByNpc()) {
+            playerAccumulator += deltaSeconds
+        }
         // Pause NPC time accumulation while FREEZE is active so freezing truly
         // pauses NPC movement. Preserve the existing accumulator value so any
         // partial progress made before FREEZE started is not discarded
@@ -145,7 +160,11 @@ class GameEngine(
         processPowerUpLifecycles(deltaSeconds)
 
         val playerInterval = 1f / effectivePlayerMovesPerSecond()
-        while (playerAccumulator >= playerInterval && status == GameStatus.RUNNING) {
+        while (
+            !isPlayerFrozenByNpc() &&
+            playerAccumulator >= playerInterval &&
+            status == GameStatus.RUNNING
+        ) {
             playerAccumulator -= playerInterval
             updatePlayer()
             evaluateEndConditions()
@@ -173,7 +192,7 @@ class GameEngine(
         activePowerUps = activePowerUpSnapshots().map { snapshot ->
             val remaining = snapshot.remainingSeconds?.coerceAtLeast(0f)
             if (remaining == null) snapshot.type.label else "${snapshot.type.label} %.1fs".format(remaining)
-        },
+        } + npcInducedFreezeHudEntries(),
         powerUpsOnMap = powerUpsByCell.size
     )
 
@@ -233,7 +252,52 @@ class GameEngine(
             npc.facing = direction
             npc.animationFrame = (npc.animationFrame + 1) % ANIMATION_FRAMES
             npc.lastMoveAtSeconds = elapsedSeconds
+            collectPowerUpAtNpc(npc)
         }
+    }
+
+    /**
+     * Power-ups picked up by NPCs. Currently only `FREEZE` is consumed — it
+     * freezes the *player* (mirror image of player-picked FREEZE freezing
+     * NPCs). Other types are intentionally not collected by NPCs.
+     */
+    private fun collectPowerUpAtNpc(npc: Npc) {
+        val powerUp = powerUpsByCell[npc.position] ?: return
+        if (powerUp.type != PowerUpType.FREEZE) return
+        powerUpsByCell.remove(npc.position)
+        activateNpcInducedPlayerFreeze()
+    }
+
+    /**
+     * Test seam: simulate the given NPC arriving at [position]. Triggers the
+     * same pickup-collection branch that runs after a normal NPC movement
+     * step. Production code calls the private path via [updateNpcs].
+     */
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun simulateNpcArrivalForTest(npcIndex: Int, position: GridPos) {
+        val npc = npcs[npcIndex]
+        npc.position = position
+        collectPowerUpAtNpc(npc)
+    }
+
+    private fun activateNpcInducedPlayerFreeze() {
+        val duration = PowerUpType.FREEZE.metadata.defaultDurationSeconds
+        if (duration <= 0f) return
+        val startedAt = npcInducedPlayerFreeze?.startedAtSeconds ?: elapsedSeconds
+        // FREEZE uses REFRESH_DURATION stack policy: re-pickup extends the end
+        // time but keeps the original start so HUD remaining-time math stays
+        // monotonic.
+        npcInducedPlayerFreeze = ActivePowerUpEffect(
+            type = PowerUpType.FREEZE,
+            startedAtSeconds = startedAt,
+            endsAtSeconds = elapsedSeconds + duration
+        )
+    }
+
+    private fun isPlayerFrozenByNpc(): Boolean {
+        val effect = npcInducedPlayerFreeze ?: return false
+        val endsAt = effect.endsAtSeconds ?: return true
+        return elapsedSeconds < endsAt
     }
 
     private fun evaluateEndConditions() {
@@ -278,21 +342,33 @@ class GameEngine(
 
     private fun spawnInitialPowerUps() {
         val candidates = availablePowerUpSpawnCells().shuffled(random).toMutableList()
-        difficulty.initialPowerUpTypes.forEach { type ->
-            if (candidates.isEmpty()) return@forEach
-            val index = random.nextInt(candidates.size)
-            val position = candidates.removeAt(index)
-            spawnPowerUp(type, position)
+        difficulty.initialPowerUpTypes.forEachIndexed { index, type ->
+            if (candidates.isEmpty()) return@forEachIndexed
+            val cellIndex = random.nextInt(candidates.size)
+            val position = candidates.removeAt(cellIndex)
+            // Stagger initial expirations so a batch of pickups doesn't all
+            // vanish on the same tick. Ignored on infinite-lifetime presets
+            // (Easy) where `spawnPowerUp` will store a `null` expiry anyway.
+            val extraDelay = index * difficulty.powerUpExpirationStaggerSeconds
+            spawnPowerUp(type, position, extraDelay)
         }
     }
 
-    private fun spawnPowerUp(type: PowerUpType, position: GridPos) {
+    private fun spawnPowerUp(
+        type: PowerUpType,
+        position: GridPos,
+        extraDelaySeconds: Float = 0f
+    ) {
         if (position in powerUpsByCell) return
         if (position == maze.start || position == maze.exit) return
         if (position == player.position) return
         if (npcs.any { it.position == position }) return
         val lifetime = difficulty.powerUpPickupLifetimeSeconds
-        val expiresAt = if (lifetime > 0f) elapsedSeconds + lifetime else null
+        val expiresAt = if (lifetime > 0f) {
+            elapsedSeconds + lifetime + extraDelaySeconds.coerceAtLeast(0f)
+        } else {
+            null
+        }
         powerUpsByCell[position] = SpawnedPowerUp(
             type = type,
             position = position,
@@ -320,6 +396,12 @@ class GameEngine(
             .filter { it.endsAtSeconds != null && elapsedSeconds >= it.endsAtSeconds }
             .map { it.type }
         expired.forEach { activeEffectsByType.remove(it) }
+        npcInducedPlayerFreeze?.let { effect ->
+            val endsAt = effect.endsAtSeconds
+            if (endsAt != null && elapsedSeconds >= endsAt) {
+                npcInducedPlayerFreeze = null
+            }
+        }
     }
 
     private fun scheduleEasyModeRespawns(deltaSeconds: Float) {
@@ -416,6 +498,18 @@ class GameEngine(
                 val remaining = effect.endsAtSeconds?.let { it - elapsedSeconds }?.coerceAtLeast(0f)
                 ActivePowerUpSnapshot(effect.type, remaining)
             }
+    }
+
+    /**
+     * HUD entry shown when the player has been frozen by an NPC FREEZE
+     * pickup. Distinct label from the regular FREEZE active effect so the
+     * player can tell which side benefits.
+     */
+    private fun npcInducedFreezeHudEntries(): List<String> {
+        val effect = npcInducedPlayerFreeze ?: return emptyList()
+        val remaining = effect.endsAtSeconds?.let { it - elapsedSeconds }?.coerceAtLeast(0f)
+        val label = "Frozen"
+        return listOf(if (remaining == null) label else "%s %.1fs".format(label, remaining))
     }
 
     private fun isEffectActive(type: PowerUpType): Boolean {
