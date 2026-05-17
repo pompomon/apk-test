@@ -10,6 +10,14 @@ data class DifficultyPreset(
     val npcVisionRange: Int,
     val balanceRule: NpcSpeedBalanceRule = NpcSpeedBalanceRule.NONE,
     val powerUpPickupLifetimeSeconds: Float = 10f,
+    /**
+     * Additional per-pickup delay (in seconds) applied to consecutive initial
+     * power-up spawns so they don't all expire on the exact same tick. The
+     * n-th initial pickup gets `lifetime + n * stagger` extra time on the map.
+     * Ignored on presets with an infinite lifetime
+     * (`powerUpPickupLifetimeSeconds <= 0f`).
+     */
+    val powerUpExpirationStaggerSeconds: Float = 10f,
     val powerUpRespawnIntervalSeconds: Float? = null,
     val initialPowerUpTypes: List<PowerUpType> = PowerUpType.entries,
     /**
@@ -30,6 +38,9 @@ data class DifficultyPreset(
         }
         require(automaticPickupRadius >= 0) {
             "automaticPickupRadius ($automaticPickupRadius) must be >= 0 for $name."
+        }
+        require(powerUpExpirationStaggerSeconds >= 0f) {
+            "powerUpExpirationStaggerSeconds ($powerUpExpirationStaggerSeconds) must be >= 0 for $name."
         }
     }
 }
@@ -62,7 +73,7 @@ object DifficultyPresets {
         npcMovesPerSecond = 1.5f,
         npcVisionRange = 5,
         balanceRule = NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER,
-        powerUpPickupLifetimeSeconds = 60f,
+        powerUpPickupLifetimeSeconds = 120f,
         powerUpRespawnIntervalSeconds = 30f
     )
 
@@ -75,7 +86,7 @@ object DifficultyPresets {
         npcMovesPerSecond = 3.6f,
         npcVisionRange = 6,
         balanceRule = NpcSpeedBalanceRule.NONE,
-        powerUpPickupLifetimeSeconds = 5f,
+        powerUpPickupLifetimeSeconds = 65f,
         powerUpRespawnIntervalSeconds = null
     )
 

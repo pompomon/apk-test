@@ -126,6 +126,52 @@ class GameEngineTest {
     }
 
     @Test
+    fun initialPickups_haveStaggeredExpirationsWhenLifetimeIsFinite() {
+        val preset = testPreset(
+            powerUpPickupLifetimeSeconds = 10f,
+            powerUpExpirationStaggerSeconds = 5f,
+            powerUpRespawnIntervalSeconds = null
+        )
+        val engine = GameEngine(preset, seed)
+
+        val expirations = engine.spawnedPowerUps.mapNotNull { it.expiresAtSeconds }.sorted()
+        assertEquals(engine.spawnedPowerUps.size, expirations.size)
+        assertTrue("Should spawn more than one pickup for this test", expirations.size > 1)
+        // First spawn expires at lifetime (10s); each subsequent at +5s.
+        assertEquals(10f, expirations.first(), 0.0001f)
+        for (i in 1 until expirations.size) {
+            assertEquals(5f, expirations[i] - expirations[i - 1], 0.0001f)
+        }
+
+        // Ticking past the first boundary removes exactly one pickup.
+        val totalBefore = engine.spawnedPowerUps.size
+        engine.update(10.1f)
+        assertEquals(totalBefore - 1, engine.spawnedPowerUps.size)
+
+        // Ticking past the next boundary removes one more.
+        engine.update(5f)
+        assertEquals(totalBefore - 2, engine.spawnedPowerUps.size)
+    }
+
+    @Test
+    fun easyMode_initialPickupsNeverExpire() {
+        val easy = testPreset(
+            powerUpPickupLifetimeSeconds = 0f,
+            powerUpRespawnIntervalSeconds = null
+        )
+        val engine = GameEngine(easy, seed)
+
+        assertTrue(engine.spawnedPowerUps.isNotEmpty())
+        assertTrue(engine.spawnedPowerUps.all { it.expiresAtSeconds == null })
+
+        val initialPositions = engine.spawnedPowerUps.map { it.position }.toSet()
+        engine.update(10_000f)
+        // Every original pickup still on the map (none expired).
+        val stillThere = engine.spawnedPowerUps.map { it.position }.toSet()
+        assertTrue(initialPositions.all { it in stillThere })
+    }
+
+    @Test
     fun hudState_reflectsPresetNpcSpeedAfterDifficultyChange() {
         val engine = GameEngine(testPreset(), seed)
         engine.setDifficulty(DifficultyPresets.EASY)
@@ -542,7 +588,8 @@ class GameEngineTest {
         npcCount: Int = 0,
         powerUpPickupLifetimeSeconds: Float = 600f,
         powerUpRespawnIntervalSeconds: Float? = null,
-        initialPowerUpTypes: List<PowerUpType> = PowerUpType.entries
+        initialPowerUpTypes: List<PowerUpType> = PowerUpType.entries,
+        powerUpExpirationStaggerSeconds: Float = 0f
     ): DifficultyPreset {
         return DifficultyPreset(
             name = "Test",
@@ -553,6 +600,7 @@ class GameEngineTest {
             npcMovesPerSecond = 1f,
             npcVisionRange = 4,
             powerUpPickupLifetimeSeconds = powerUpPickupLifetimeSeconds,
+            powerUpExpirationStaggerSeconds = powerUpExpirationStaggerSeconds,
             powerUpRespawnIntervalSeconds = powerUpRespawnIntervalSeconds,
             initialPowerUpTypes = initialPowerUpTypes
         )
