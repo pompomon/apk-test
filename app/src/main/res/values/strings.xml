@@ -32,13 +32,24 @@
     <string name="legend_close">Close</string>
 
     <!-- Setup screen -->
-    <string name="setup_title">Maze Escape — Setup</string>
+    <string name="setup_title">Maze Escape</string>
     <string name="setup_player_policy_label">Player policy</string>
     <string name="setup_npc_policy_label">NPC policy</string>
     <string name="setup_difficulty_label">Difficulty</string>
     <string name="start_game">Start</string>
     <string name="back_to_setup">Back to setup</string>
 
+    <!-- Start menu -->
+    <string name="menu_resume">Resume Game</string>
+    <string name="menu_new_game">New Game</string>
+    <string name="menu_difficulty">Difficulty: %1$s</string>
+    <string name="menu_player_strategy">Player: %1$s</string>
+    <string name="menu_npc_strategy">NPCs: %1$s</string>
+    <string name="menu_pick_difficulty">Choose difficulty</string>
+    <string name="menu_pick_player_strategy">Choose player strategy</string>
+    <string name="menu_pick_npc_strategy">Choose NPC strategy</string>
+
     <!-- Game menu (hamburger) -->
     <string name="menu_button_description">Open game menu</string>
+    <string name="pause_and_exit">Pause &amp; Exit</string>
 </resources>

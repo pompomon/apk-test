@@ -28,6 +28,7 @@ import com.example.apktest.ui.LegendDialog
 class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private var menuPopover: GameMenuPopover? = null
     private lateinit var menuButton: ImageButton
+    private lateinit var stateStore: GameStateStore
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal var resolvedSwipeCount: Int = 0
@@ -70,6 +71,8 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
 
+        stateStore = GameStateStore(this)
+
         val root = findViewById<View>(R.id.root)
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -93,8 +96,24 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     }
 
     private fun buildGameFragmentArgs(intent: Intent): Bundle {
-        // Resolve selections from the launching intent; fall back to safe
-        // defaults so the activity remains usable if launched directly.
+        // If the launcher asked us to resume, pull the saved snapshot's JSON
+        // straight into the fragment args so the engine can restore it
+        // before the first render tick. Falls back to a fresh game (using
+        // the intent's policy/difficulty extras) when no snapshot exists.
+        val resume = intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false)
+        val resumeJson = if (resume) {
+            // We don't go through the parsed snapshot here; the raw JSON is
+            // re-parsed in the fragment so its in-memory copy stays the
+            // single source of truth and we don't depend on Parcelable.
+            stateStore.load()?.toJson()
+        } else null
+
+        if (resumeJson != null) {
+            return Bundle().apply {
+                putString(GameFragment.ARG_RESUME_SNAPSHOT_JSON, resumeJson)
+            }
+        }
+
         val player = enumOrDefault(
             intent.getStringExtra(SetupActivity.EXTRA_PLAYER_POLICY),
             PlayerPolicyType.MANUAL
@@ -130,6 +149,14 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     override fun onPause() {
         hudHandler.removeCallbacks(hudRefreshRunnable)
         menuPopover?.dismiss()
+        // Autosave so the user can resume after a process death, switching
+        // away, or just to be safe before any incidental finish(). Skip
+        // terminal states (WIN/LOSE) so re-launching doesn't drop the
+        // player straight back into the end-of-game overlay.
+        val hud = gameFragment()?.hudState()
+        if (hud != null && (hud.status == GameStatus.RUNNING || hud.status == GameStatus.PAUSED)) {
+            gameFragment()?.captureSnapshot()?.let { stateStore.save(it) }
+        }
         super.onPause()
     }
 
@@ -160,7 +187,14 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
                     LegendDialog.show(this@MainActivity)
                 }
 
-                override fun onBackToSetup() {
+                override fun onPauseAndExit() {
+                    // Pause first so the snapshot reflects PAUSED status;
+                    // captureSnapshot() blocks briefly on the GL thread.
+                    val hud = gameFragment()?.hudState()
+                    if (hud?.status == GameStatus.RUNNING) {
+                        gameFragment()?.togglePause()
+                    }
+                    gameFragment()?.captureSnapshot()?.let { stateStore.save(it) }
                     val intent = Intent(this@MainActivity, SetupActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     }

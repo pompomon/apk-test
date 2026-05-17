@@ -8,4 +8,10 @@
     <dimen name="maze_menu_button_size">48dp</dimen>
     <dimen name="maze_menu_button_margin">8dp</dimen>
     <dimen name="maze_menu_button_padding">10dp</dimen>
+    <!-- Start menu (SetupActivity) button sizing. Overridden in
+         values-sw400dp for wider screens (same pattern as maze_dpad_*). -->
+    <dimen name="start_menu_button_min_height">52dp</dimen>
+    <dimen name="start_menu_button_text_size">16sp</dimen>
+    <dimen name="start_menu_button_gap">12dp</dimen>
+    <dimen name="start_menu_title_text_size">26sp</dimen>
 </resources>

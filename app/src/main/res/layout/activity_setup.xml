@@ -1,89 +1,127 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/maze_root_background"
     android:fillViewport="true">
 
-    <LinearLayout
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/setupRoot"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
+        android:layout_height="match_parent"
         android:padding="24dp">
 
+        <!-- Centre column: buttons fill 70% of horizontal space via these
+             guidelines (15% / 85%). Switching to ConstraintLayout lets us
+             scale the buttons responsively without per-screen layout
+             variants. -->
+        <androidx.constraintlayout.widget.Guideline
+            android:id="@+id/guidelineStart"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            app:layout_constraintGuide_percent="0.15" />
+
+        <androidx.constraintlayout.widget.Guideline
+            android:id="@+id/guidelineEnd"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            app:layout_constraintGuide_percent="0.85" />
+
         <TextView
-            android:layout_width="match_parent"
+            android:id="@+id/setupTitle"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:paddingBottom="24dp"
+            android:paddingBottom="32dp"
             android:text="@string/setup_title"
             android:textColor="@color/maze_status_text"
-            android:textSize="22sp"
-            android:textStyle="bold" />
+            android:textSize="@dimen/start_menu_title_text_size"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toStartOf="@id/guidelineEnd"
+            app:layout_constraintStart_toEndOf="@id/guidelineStart"
+            app:layout_constraintTop_toTopOf="parent" />
 
-        <TextView
-            android:layout_width="match_parent"
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/startMenuButtonColumn"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:paddingTop="8dp"
-            android:text="@string/setup_player_policy_label"
-            android:textColor="@color/maze_speed_text"
-            android:textSize="14sp" />
-
-        <Spinner
-            android:id="@+id/spinnerPlayerPolicy"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:contentDescription="@string/spinner_player_policy_description" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="12dp"
-            android:text="@string/setup_npc_policy_label"
-            android:textColor="@color/maze_speed_text"
-            android:textSize="14sp" />
-
-        <Spinner
-            android:id="@+id/spinnerNpcPolicy"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:contentDescription="@string/spinner_npc_policy_description" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="12dp"
-            android:text="@string/setup_difficulty_label"
-            android:textColor="@color/maze_speed_text"
-            android:textSize="14sp" />
-
-        <Spinner
-            android:id="@+id/spinnerDifficulty"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:contentDescription="@string/spinner_difficulty_description" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:gravity="center"
-            android:orientation="horizontal">
+            android:orientation="vertical"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/guidelineEnd"
+            app:layout_constraintStart_toEndOf="@id/guidelineStart"
+            app:layout_constraintTop_toBottomOf="@id/setupTitle"
+            app:layout_constraintVertical_bias="0.1">
 
             <Button
-                android:id="@+id/buttonLegend"
-                android:layout_width="wrap_content"
+                android:id="@+id/buttonResume"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/legend" />
+                android:minHeight="@dimen/start_menu_button_min_height"
+                android:text="@string/menu_resume"
+                android:textSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMinTextSize="12sp"
+                app:autoSizeTextType="uniform" />
 
             <Button
                 android:id="@+id/buttonStart"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:text="@string/start_game" />
-        </LinearLayout>
-    </LinearLayout>
+                android:layout_marginTop="@dimen/start_menu_button_gap"
+                android:minHeight="@dimen/start_menu_button_min_height"
+                android:text="@string/menu_new_game"
+                android:textSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMinTextSize="12sp"
+                app:autoSizeTextType="uniform" />
+
+            <Button
+                android:id="@+id/buttonPickDifficulty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/start_menu_button_gap"
+                android:minHeight="@dimen/start_menu_button_min_height"
+                android:textSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMinTextSize="12sp"
+                app:autoSizeTextType="uniform" />
+
+            <Button
+                android:id="@+id/buttonPickPlayerStrategy"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/start_menu_button_gap"
+                android:minHeight="@dimen/start_menu_button_min_height"
+                android:textSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMinTextSize="12sp"
+                app:autoSizeTextType="uniform" />
+
+            <Button
+                android:id="@+id/buttonPickNpcStrategy"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/start_menu_button_gap"
+                android:minHeight="@dimen/start_menu_button_min_height"
+                android:textSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMinTextSize="12sp"
+                app:autoSizeTextType="uniform" />
+
+            <Button
+                android:id="@+id/buttonLegend"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/start_menu_button_gap"
+                android:minHeight="@dimen/start_menu_button_min_height"
+                android:text="@string/legend"
+                android:textSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMinTextSize="12sp"
+                app:autoSizeTextType="uniform" />
+        </androidx.appcompat.widget.LinearLayoutCompat>
+    </androidx.constraintlayout.widget.ConstraintLayout>
 </ScrollView>
