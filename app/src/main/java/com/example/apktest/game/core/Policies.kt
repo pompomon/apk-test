@@ -200,6 +200,13 @@ class AStarExitPolicy : RankedPlayerPolicy {
  *   guaranteed loss, whereas waiting is at worst the same outcome.
  */
 class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
+
+    // True for the two stateless exit-finding policies; false for all others.
+    // Used to decide whether to cache the path direction and skip a redundant
+    // path search inside passThroughMove.
+    private val isStatelessExitPolicy: Boolean =
+        inner is BfsExitPolicy || inner is AStarExitPolicy
+
     override fun nextMove(context: PlayerPolicyContext): Direction? {
         val deadly = computeDeadlyCells(context)
         val risky = computeRiskyCells(context, deadly)
@@ -214,11 +221,9 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
         // rankedMoves so per-tick state (visit counters) is updated
         // unconditionally, even on ticks where pickup-seeking or a winning
         // move short-circuits the ranked selection.
-        val exitDirection: Direction? = when (inner) {
-            is BfsExitPolicy, is AStarExitPolicy -> inner.nextMove(context)
-            else -> null
-        }
-        val ranked: List<Direction> = if (inner is BfsExitPolicy || inner is AStarExitPolicy) {
+        val exitDirection: Direction? =
+            if (isStatelessExitPolicy) inner.nextMove(context) else null
+        val ranked: List<Direction> = if (isStatelessExitPolicy) {
             // Build the ranked list from the already-computed exitDirection
             // without a second path search (replicates rankedExitMoves).
             val walkable = Direction.entries.filter { context.maze.canMove(from, it) }
@@ -290,7 +295,7 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
     private fun passThroughMove(
         ranked: List<Direction>,
         exitDirection: Direction? = null
-    ): Direction? = if (inner is BfsExitPolicy || inner is AStarExitPolicy) {
+    ): Direction? = if (isStatelessExitPolicy) {
         // Return the already-computed exit direction (null when no path
         // exists), preserving inner-policy semantics without a second path
         // search.
