@@ -320,6 +320,13 @@ class GameEngine(
         // intentionally also pause `elapsedSeconds` so power-up lifetimes
         // and HUD timers don't drain during the countdown.
         var effectiveDelta = deltaSeconds
+        // Tracks whether [goFlashRemainingSeconds] was armed during *this*
+        // update() call (i.e., the countdown finished on this very tick).
+        // We skip decay in this case so the full
+        // [COUNTDOWN_GO_FLASH_SECONDS] window survives the transition tick
+        // regardless of how large the incoming delta or leftover delta is
+        // (avoids the GO! frame being consumed by a single big delta).
+        var goFlashArmedThisTick = false
         if (countdownRemainingSeconds > 0f) {
             val consumed = effectiveDelta.coerceAtMost(countdownRemainingSeconds)
             countdownRemainingSeconds -= consumed
@@ -331,10 +338,11 @@ class GameEngine(
             // [countdownRemainingSeconds] is already zero by this point.
             if (countdownRemainingSeconds == 0f) {
                 goFlashRemainingSeconds = COUNTDOWN_GO_FLASH_SECONDS
+                goFlashArmedThisTick = true
             }
             if (effectiveDelta <= 0f) return
         }
-        if (goFlashRemainingSeconds > 0f) {
+        if (goFlashRemainingSeconds > 0f && !goFlashArmedThisTick) {
             goFlashRemainingSeconds = (goFlashRemainingSeconds - effectiveDelta).coerceAtLeast(0f)
         }
 

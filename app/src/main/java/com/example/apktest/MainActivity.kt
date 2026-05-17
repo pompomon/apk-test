@@ -148,9 +148,17 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         // away, or just to be safe before any incidental finish(). Skip
         // terminal states (WIN/LOSE) so re-launching doesn't drop the
         // player straight back into the end-of-game overlay.
+        //
+        // The snapshot capture is performed asynchronously on the GL
+        // thread: blocking the UI thread here risks ANR / jank on slower
+        // devices when the render loop is busy or starved. The state store
+        // write is hopped onto a background thread for the same reason
+        // (SharedPreferences#commit performs synchronous disk I/O).
         val hud = gameFragment()?.hudState()
         if (hud != null && (hud.status == GameStatus.RUNNING || hud.status == GameStatus.PAUSED)) {
-            gameFragment()?.captureSnapshot()?.let { stateStore.save(it) }
+            gameFragment()?.captureSnapshotAsync { snapshot ->
+                Thread { stateStore.save(snapshot) }.start()
+            }
         }
         super.onPause()
     }

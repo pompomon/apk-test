@@ -38,6 +38,24 @@ class SetupActivity : AppCompatActivity() {
 
         stateStore = GameStateStore(this)
 
+        // Restore selections across process death / config change so the
+        // user doesn't lose their picks if the OS recreates this activity.
+        if (savedInstanceState != null) {
+            savedInstanceState.getString(STATE_PLAYER_POLICY)?.let { name ->
+                selectedPlayerPolicy = PlayerPolicyType.entries
+                    .firstOrNull { it.name == name } ?: selectedPlayerPolicy
+            }
+            savedInstanceState.getString(STATE_NPC_POLICY)?.let { name ->
+                selectedNpcPolicy = NpcPolicyType.entries
+                    .firstOrNull { it.name == name } ?: selectedNpcPolicy
+            }
+            savedInstanceState.getString(STATE_DIFFICULTY)?.let { name ->
+                if (DifficultyPresets.all.any { it.name == name }) {
+                    selectedDifficultyName = name
+                }
+            }
+        }
+
         val root = findViewById<android.view.View>(R.id.setupRoot)
         val initialPaddingLeft = root.paddingLeft
         val initialPaddingTop = root.paddingTop
@@ -150,10 +168,21 @@ class SetupActivity : AppCompatActivity() {
             .show()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_PLAYER_POLICY, selectedPlayerPolicy.name)
+        outState.putString(STATE_NPC_POLICY, selectedNpcPolicy.name)
+        outState.putString(STATE_DIFFICULTY, selectedDifficultyName)
+    }
+
     companion object {
         const val EXTRA_PLAYER_POLICY = "extra_player_policy"
         const val EXTRA_NPC_POLICY = "extra_npc_policy"
         const val EXTRA_DIFFICULTY = "extra_difficulty"
         const val EXTRA_RESUME = "extra_resume"
+
+        private const val STATE_PLAYER_POLICY = "state_player_policy"
+        private const val STATE_NPC_POLICY = "state_npc_policy"
+        private const val STATE_DIFFICULTY = "state_difficulty"
     }
 }

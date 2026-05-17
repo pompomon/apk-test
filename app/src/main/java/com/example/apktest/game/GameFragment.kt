@@ -107,6 +107,20 @@ class GameFragment : AndroidFragmentApplication() {
      */
     fun captureSnapshot(): GameEngineSnapshot? = game?.snapshotBlocking()
 
+    /**
+     * Best-effort async snapshot: posts a request to the GL thread and
+     * invokes [callback] there when the snapshot is ready. Returns
+     * immediately without blocking the caller (intended for lifecycle
+     * callbacks like [android.app.Activity.onPause] where blocking the UI
+     * thread on the render loop risks ANR / jank). Returns `false` if the
+     * game isn't initialised and the request couldn't be queued.
+     */
+    fun captureSnapshotAsync(callback: (GameEngineSnapshot) -> Unit): Boolean {
+        val g = game ?: return false
+        g.snapshotAsync(callback)
+        return true
+    }
+
     fun hudState(): HudState? = game?.hudState()
 
     companion object {
