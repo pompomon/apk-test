@@ -21,7 +21,7 @@ class GameStateStore(context: Context) {
     /**
      * Like [save] but uses [android.content.SharedPreferences.Editor.commit]
      * so the snapshot is guaranteed to be flushed to disk before this call
-     * returns. Use this from explicit "Pause &amp; Exit" flows where the
+     * returns. Use this from explicit "Pause & Exit" flows where the
      * activity is about to be finished and a deferred [apply] write could
      * be lost. The caller is responsible for invoking this off the UI
      * thread when possible — [commit] performs synchronous disk I/O.
