@@ -405,23 +405,32 @@ class GameEngine(
 
     private fun updatePlayer() {
         val manualOverrideActive = elapsedSeconds < manualOverrideUntilSeconds
-        val requestedDirection = when {
-            playerPolicyType == PlayerPolicyType.MANUAL || manualOverrideActive ->
-                manualQueue.removeFirstOrNull()
-            else -> playerPolicy.nextMove(
-                PlayerPolicyContext(
-                    maze = maze,
-                    navigator = navigator,
-                    player = player,
-                    exit = maze.exit,
-                    npcs = npcs,
-                    playerInvisibleToNpcs = isEffectActive(PowerUpType.INVISIBILITY),
-                    npcsFrozen = isEffectActive(PowerUpType.FREEZE),
-                    spawnedPowerUps = spawnedPowerUpsView,
-                    pickupRadius = difficulty.automaticPickupRadius
-                )
-            )
-        } ?: return
+        // For MANUAL policy, only queued input drives movement. For an
+        // automated policy with an active override, prefer the queued
+        // manual direction if present, but fall back to the policy when
+        // the queue is empty so a single nudge can't freeze the player
+        // for the full override window.
+        val queued = if (playerPolicyType == PlayerPolicyType.MANUAL || manualOverrideActive) {
+            manualQueue.removeFirstOrNull()
+        } else null
+        val requestedDirection = queued
+            ?: if (playerPolicyType == PlayerPolicyType.MANUAL) {
+                return
+            } else {
+                playerPolicy.nextMove(
+                    PlayerPolicyContext(
+                        maze = maze,
+                        navigator = navigator,
+                        player = player,
+                        exit = maze.exit,
+                        npcs = npcs,
+                        playerInvisibleToNpcs = isEffectActive(PowerUpType.INVISIBILITY),
+                        npcsFrozen = isEffectActive(PowerUpType.FREEZE),
+                        spawnedPowerUps = spawnedPowerUpsView,
+                        pickupRadius = difficulty.automaticPickupRadius
+                    )
+                ) ?: return
+            }
 
         // GHOST_MODE lets the player walk through walls; NPCs intentionally do
         // not gain this ability (NpcPolicyContext is unchanged) so the power-up

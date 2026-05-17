@@ -161,7 +161,8 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         // GameStateStore.save uses apply(), the JSON serialisation
         // itself is non-trivial for larger snapshots).
         val hud = gameFragment()?.hudState()
-        if (hud != null && (hud.status == GameStatus.RUNNING || hud.status == GameStatus.PAUSED)) {
+        val status = hud?.status
+        if (status == GameStatus.RUNNING || status == GameStatus.PAUSED) {
             gameFragment()?.captureSnapshotAsync { snapshot ->
                 // captureSnapshotAsync's callback runs on the GL thread and may
                 // fire after onDestroy() has shut the executor down. Guard so a
@@ -173,6 +174,14 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
                 } catch (_: RejectedExecutionException) {
                     // Executor already shut down — drop the late autosave.
                 }
+            }
+        } else if (status == GameStatus.WIN || status == GameStatus.LOSE) {
+            // Clear any prior snapshot so Resume can't drop the user back into
+            // a stale mid-run state after a completed game.
+            try {
+                autosaveExecutor.execute { stateStore.clear() }
+            } catch (_: RejectedExecutionException) {
+                // Executor already shut down — best-effort clear.
             }
         }
         super.onPause()
@@ -228,7 +237,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
                             try {
                                 autosaveExecutor.submit {
                                     stateStore.saveBlocking(snapshot)
-                                }.get()
+                                }.get(PAUSE_EXIT_SAVE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
                             } catch (_: RejectedExecutionException) {
                                 // Fall back to a direct synchronous commit on the UI
                                 // thread if the executor is unavailable.
@@ -237,6 +246,12 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
                                 Thread.currentThread().interrupt()
                             } catch (_: java.util.concurrent.ExecutionException) {
                                 // Surface no further action; save failure is best-effort.
+                            } catch (_: java.util.concurrent.TimeoutException) {
+                                // Executor backed up or disk I/O stalled; avoid
+                                // ANR by giving up the wait. The submitted task
+                                // will still complete in the background if it
+                                // can, and a stale snapshot is preferable to a
+                                // frozen UI on exit.
                             }
                         }
                     } else if (status == GameStatus.WIN || status == GameStatus.LOSE) {
@@ -402,5 +417,8 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         private const val HUD_REFRESH_INTERVAL_MS = 250L
         // 4x touch slop requires a deliberate drag, reducing accidental move input from taps/jitter.
         private const val SWIPE_DISTANCE_TOUCH_SLOP_MULTIPLIER = 4
+        // Upper bound on how long Pause & Exit will wait for the snapshot
+        // commit() to flush before giving up to avoid an ANR.
+        private const val PAUSE_EXIT_SAVE_TIMEOUT_MS = 750L
     }
 }

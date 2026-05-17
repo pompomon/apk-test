@@ -114,9 +114,17 @@ class MazeGame : ApplicationAdapter() {
             holder.set(it)
             latch.countDown()
         }
-        return if (latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)) {
-            holder.get()
-        } else null
+        return try {
+            if (latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                holder.get()
+            } else null
+        } catch (_: InterruptedException) {
+            // Preserve interrupt status for callers further up the stack and
+            // signal "no snapshot available" rather than propagating the
+            // checked exception (which would crash UI callers).
+            Thread.currentThread().interrupt()
+            null
+        }
     }
 
     fun hudState(): HudState = lastHudState
