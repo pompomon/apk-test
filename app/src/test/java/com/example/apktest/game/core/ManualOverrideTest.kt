@@ -31,9 +31,12 @@ class ManualOverrideTest {
         // HUD reflects the override before any time has elapsed.
         val hud = engine.hudState()
         assertNotNull("manual override HUD entry should be set", hud.manualOverrideRemainingSeconds)
+        // Derive the lower bound from the production constant so this test
+        // doesn't go stale if MANUAL_OVERRIDE_DURATION_SECONDS is tuned.
+        val minRemaining = GameEngine.MANUAL_OVERRIDE_DURATION_SECONDS - 0.1f
         assertTrue(
             "override should be ~MANUAL_OVERRIDE_DURATION_SECONDS",
-            hud.manualOverrideRemainingSeconds!! > 2.9f
+            hud.manualOverrideRemainingSeconds!! > minRemaining
         )
 
         // Step the engine just long enough to consume one player tick.

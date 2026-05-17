@@ -18,6 +18,18 @@ class GameStateStore(context: Context) {
         prefs.edit().putString(KEY_STATE_JSON, snapshot.toJson()).apply()
     }
 
+    /**
+     * Like [save] but uses [android.content.SharedPreferences.Editor.commit]
+     * so the snapshot is guaranteed to be flushed to disk before this call
+     * returns. Use this from explicit "Pause &amp; Exit" flows where the
+     * activity is about to be finished and a deferred [apply] write could
+     * be lost. The caller is responsible for invoking this off the UI
+     * thread when possible — [commit] performs synchronous disk I/O.
+     */
+    fun saveBlocking(snapshot: GameEngineSnapshot): Boolean {
+        return prefs.edit().putString(KEY_STATE_JSON, snapshot.toJson()).commit()
+    }
+
     fun load(): GameEngineSnapshot? {
         val json = prefs.getString(KEY_STATE_JSON, null) ?: return null
         val snapshot = GameEngineSnapshot.fromJson(json)

@@ -26,6 +26,7 @@ import com.example.apktest.ui.GameMenuPopover
 import com.example.apktest.ui.LegendDialog
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private var menuPopover: GameMenuPopover? = null
@@ -154,14 +155,23 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         //
         // The snapshot capture is performed asynchronously on the GL
         // thread: blocking the UI thread here risks ANR / jank on slower
-        // devices when the render loop is busy or starved. The state store
-        // write is hopped onto a background thread for the same reason
-        // (SharedPreferences#commit performs synchronous disk I/O).
+        // devices when the render loop is busy or starved. The state
+        // store write is hopped onto a background executor so we never
+        // touch the prefs editor on the UI thread either (even though
+        // GameStateStore.save uses apply(), the JSON serialisation
+        // itself is non-trivial for larger snapshots).
         val hud = gameFragment()?.hudState()
         if (hud != null && (hud.status == GameStatus.RUNNING || hud.status == GameStatus.PAUSED)) {
             gameFragment()?.captureSnapshotAsync { snapshot ->
-                autosaveExecutor.execute {
-                    stateStore.save(snapshot)
+                // captureSnapshotAsync's callback runs on the GL thread and may
+                // fire after onDestroy() has shut the executor down. Guard so a
+                // late snapshot doesn't crash with RejectedExecutionException.
+                try {
+                    autosaveExecutor.execute {
+                        stateStore.save(snapshot)
+                    }
+                } catch (_: RejectedExecutionException) {
+                    // Executor already shut down — drop the late autosave.
                 }
             }
         }
@@ -209,7 +219,26 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
                     }
                     val status = hud?.status
                     if (status == GameStatus.RUNNING || status == GameStatus.PAUSED) {
-                        gameFragment()?.captureSnapshot()?.let { stateStore.save(it) }
+                        val snapshot = gameFragment()?.captureSnapshot()
+                        if (snapshot != null) {
+                            // Use the commit()-based path off the UI thread so the
+                            // snapshot is durably on disk before we finish() —
+                            // apply()'s deferred write could otherwise be lost when
+                            // the activity exits immediately after.
+                            try {
+                                autosaveExecutor.submit {
+                                    stateStore.saveBlocking(snapshot)
+                                }.get()
+                            } catch (_: RejectedExecutionException) {
+                                // Fall back to a direct synchronous commit on the UI
+                                // thread if the executor is unavailable.
+                                stateStore.saveBlocking(snapshot)
+                            } catch (_: InterruptedException) {
+                                Thread.currentThread().interrupt()
+                            } catch (_: java.util.concurrent.ExecutionException) {
+                                // Surface no further action; save failure is best-effort.
+                            }
+                        }
                     } else if (status == GameStatus.WIN || status == GameStatus.LOSE) {
                         stateStore.clear()
                     }
