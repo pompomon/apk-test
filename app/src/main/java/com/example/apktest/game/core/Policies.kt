@@ -232,11 +232,11 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
         }
 
         if (context.playerInvisibleToNpcs || context.npcs.isEmpty()) {
-            return ranked.firstOrNull()
+            return passThroughMove(context, ranked)
         }
 
         if (deadly.isEmpty() && risky.isEmpty()) {
-            return ranked.firstOrNull()
+            return passThroughMove(context, ranked)
         }
 
         // For exit-finding policies, try an avoidance-aware path first so the
@@ -265,6 +265,21 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
         // not move onto the player's cell), so we always skip rather than
         // commit to a guaranteed loss.
         return null
+    }
+
+    private fun passThroughMove(
+        context: PlayerPolicyContext,
+        ranked: List<Direction>
+    ): Direction? = when (inner) {
+        is BfsExitPolicy -> nextDirection(
+            context.player.position,
+            context.navigator.bfsPath(context.player.position, context.exit)
+        )
+        is AStarExitPolicy -> nextDirection(
+            context.player.position,
+            context.navigator.aStarPath(context.player.position, context.exit)
+        )
+        else -> ranked.firstOrNull()
     }
 
     override fun reset() {

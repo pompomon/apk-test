@@ -314,6 +314,37 @@ class PlayerPickupSeekingTest {
     }
 
     @Test
+    fun noNpcNoPickup_bfsNoPath_preservesInnerNull() {
+        // Only EAST from (0,0) is open; exit (0,1) is unreachable. Raw BFS
+        // nextMove is null, so wrapper pass-through must also return null.
+        val maze = Maze(
+            width = 2,
+            height = 2,
+            cells = IntArray(4) { Maze.ALL_WALLS },
+            start = GridPos(0, 0),
+            exit = GridPos(0, 1)
+        )
+        maze.removeWall(GridPos(0, 0), Direction.EAST)
+        val navigator = MazeNavigator(maze)
+        val policy = AvoidanceWrapperPolicy(BfsExitPolicy())
+        val player = Player(position = GridPos(0, 0), facing = Direction.EAST)
+
+        val move = policy.nextMove(
+            PlayerPolicyContext(
+                maze = maze,
+                navigator = navigator,
+                player = player,
+                exit = GridPos(0, 1),
+                npcs = emptyList(),
+                spawnedPowerUps = emptyList(),
+                pickupRadius = 0
+            )
+        )
+
+        assertNull(move)
+    }
+
+    @Test
     fun manualPolicy_remainsNullEvenWithNearbyPickup() {
         // ManualPolicy is not wrapped; it should still return null (deferring
         // to the engine's manual queue) regardless of context state.
