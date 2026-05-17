@@ -20,10 +20,12 @@ class ManualOverrideTest {
         engine.setPlayerPolicy(PlayerPolicyType.BFS_EXIT)
         val start = engine.player.position
 
-        // Pick a manual direction that is walkable from the start; fall
-        // back to any walkable neighbour if NORTH isn't reachable in this
+        // Pick a manual direction that is walkable from the start: prefer
+        // NORTH so the test reads obviously, but fall back to any other
+        // walkable neighbour if NORTH happens not to be reachable in this
         // seeded maze.
-        val walkable = Direction.entries.firstOrNull { engine.maze.canMove(start, it) }
+        val walkable = Direction.NORTH.takeIf { engine.maze.canMove(start, it) }
+            ?: Direction.entries.firstOrNull { engine.maze.canMove(start, it) }
             ?: error("No walkable neighbour from start in seeded maze")
         engine.queueManualMove(walkable)
 
@@ -50,7 +52,8 @@ class ManualOverrideTest {
         val engine = GameEngine(testPreset(), seed)
         engine.setPlayerPolicy(PlayerPolicyType.BFS_EXIT)
         val start = engine.player.position
-        val walkable = Direction.entries.firstOrNull { engine.maze.canMove(start, it) }
+        val walkable = Direction.NORTH.takeIf { engine.maze.canMove(start, it) }
+            ?: Direction.entries.firstOrNull { engine.maze.canMove(start, it) }
             ?: error("No walkable neighbour from start in seeded maze")
         engine.queueManualMove(walkable)
 

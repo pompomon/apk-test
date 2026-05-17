@@ -109,10 +109,11 @@ data class GameEngineSnapshot(
         private const val KEY_MANUAL_QUEUE = "manualQueue"
         private const val KEY_MANUAL_OVERRIDE = "manualOverrideRem"
 
-        fun fromJson(json: String): GameEngineSnapshot? = try {
+        fun fromJson(json: String): GameEngineSnapshot? {
+          return try {
             val obj = JSONObject(json)
             val version = obj.optInt(KEY_VERSION, 0)
-            if (version != SCHEMA_VERSION) return@fromJson null
+            if (version != SCHEMA_VERSION) return null
             val player = obj.getJSONObject(KEY_PLAYER).let { p ->
                 PlayerSnapshot(
                     x = p.getInt("x"),
@@ -173,8 +174,9 @@ data class GameEngineSnapshot(
                 manualQueue = manualQueue,
                 manualOverrideRemainingSeconds = obj.optDouble(KEY_MANUAL_OVERRIDE, 0.0).toFloat()
             )
-        } catch (_: Throwable) {
+          } catch (_: Throwable) {
             null
+          }
         }
     }
 }

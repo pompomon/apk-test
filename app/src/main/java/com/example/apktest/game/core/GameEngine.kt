@@ -34,6 +34,16 @@ class GameEngine(
         private set
 
     /**
+     * Seconds remaining on the post-countdown "GO!" flash. Set to
+     * [COUNTDOWN_GO_FLASH_SECONDS] on the tick where [countdownRemainingSeconds]
+     * transitions from positive to zero, and decayed by subsequent
+     * [update] deltas. Renderers display the "GO!" overlay while this is
+     * positive (the countdown numeric value itself is already zero by then).
+     */
+    var goFlashRemainingSeconds: Float = 0f
+        private set
+
+    /**
      * Seconds remaining on a manual-input override. While positive (and the
      * player policy is not [PlayerPolicyType.MANUAL]), [updatePlayer]
      * consumes queued manual directions instead of consulting the active
@@ -111,6 +121,7 @@ class GameEngine(
         elapsedSeconds = 0f
         steps = 0
         countdownRemainingSeconds = 0f
+        goFlashRemainingSeconds = 0f
         manualOverrideUntilSeconds = 0f
         playerAccumulator = 0f
         npcAccumulator = 0f
@@ -216,6 +227,7 @@ class GameEngine(
         elapsedSeconds = snapshot.elapsedSeconds
         steps = snapshot.steps
         countdownRemainingSeconds = 0f
+        goFlashRemainingSeconds = 0f
 
         player = Player(
             position = GridPos(snapshot.player.x, snapshot.player.y),
@@ -313,7 +325,17 @@ class GameEngine(
             countdownRemainingSeconds -= consumed
             if (countdownRemainingSeconds < 0f) countdownRemainingSeconds = 0f
             effectiveDelta -= consumed
+            // Arm the post-countdown "GO!" flash on the exact tick the
+            // countdown reaches zero, so the renderer has a visible window
+            // (~[COUNTDOWN_GO_FLASH_SECONDS]) to display "GO!" even though
+            // [countdownRemainingSeconds] is already zero by this point.
+            if (countdownRemainingSeconds == 0f) {
+                goFlashRemainingSeconds = COUNTDOWN_GO_FLASH_SECONDS
+            }
             if (effectiveDelta <= 0f) return
+        }
+        if (goFlashRemainingSeconds > 0f) {
+            goFlashRemainingSeconds = (goFlashRemainingSeconds - effectiveDelta).coerceAtLeast(0f)
         }
 
         elapsedSeconds += effectiveDelta
@@ -721,6 +743,8 @@ class GameEngine(
         const val MANUAL_OVERRIDE_DURATION_SECONDS = 3f
         /** Default duration of the pre-game countdown (see [startCountdown]). */
         const val COUNTDOWN_DEFAULT_SECONDS = 3f
+        /** How long the post-countdown "GO!" flash stays visible. */
+        const val COUNTDOWN_GO_FLASH_SECONDS = 0.6f
         // Arbitrary mix constant so the NPC policy RNG stream is decoupled from
         // (but still deterministically derived from) the engine seed. Written
         // as a signed-Long literal because Kotlin `const val` initializers must

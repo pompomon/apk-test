@@ -378,8 +378,9 @@ class MazeRenderer {
      */
     private fun drawCountdownOverlay(engine: GameEngine) {
         val remaining = engine.countdownRemainingSeconds
-        if (remaining <= 0f) return
-        val text = countdownLabel(remaining)
+        val goFlash = engine.goFlashRemainingSeconds
+        if (remaining <= 0f && goFlash <= 0f) return
+        val text = if (remaining > 0f) countdownLabel(remaining) else "GO!"
         val glyphSize = (viewport.worldWidth.coerceAtMost(viewport.worldHeight)) * 0.18f
         val glyphGap = glyphSize * 0.18f
         val cx = viewport.worldWidth / 2f
@@ -402,8 +403,7 @@ class MazeRenderer {
     private fun countdownLabel(remaining: Float): String = when {
         remaining > 2f -> "3"
         remaining > 1f -> "2"
-        remaining > 0.001f -> "1"
-        else -> "GO!"
+        else -> "1"
     }
 
     /**

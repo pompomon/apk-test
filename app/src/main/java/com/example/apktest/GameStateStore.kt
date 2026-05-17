@@ -30,13 +30,22 @@ class GameStateStore(context: Context) {
     }
 
     /**
-     * Returns the raw saved JSON string without parsing/re-serialising.
-     * Useful for forwarding the snapshot through a Bundle/Intent to the
-     * fragment without the round-trip cost of [load] → [GameEngineSnapshot.toJson].
+     * Returns the raw saved JSON string without the cost of re-serialising,
+     * but only after validating the payload via [GameEngineSnapshot.fromJson]
+     * so unreadable/stale snapshots are dropped consistently with [load]
+     * (a corrupt blob would otherwise keep "Resume" enabled and silently
+     * fall through to a default new run in the fragment).
      */
-    fun loadRawJson(): String? = prefs.getString(KEY_STATE_JSON, null)
+    fun loadRawJson(): String? {
+        val json = prefs.getString(KEY_STATE_JSON, null) ?: return null
+        if (GameEngineSnapshot.fromJson(json) == null) {
+            clear()
+            return null
+        }
+        return json
+    }
 
-    fun hasSavedState(): Boolean = prefs.contains(KEY_STATE_JSON)
+    fun hasSavedState(): Boolean = load() != null
 
     fun clear() {
         prefs.edit().remove(KEY_STATE_JSON).apply()
