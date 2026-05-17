@@ -33,6 +33,13 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     internal var resolvedSwipeCount: Int = 0
         private set
 
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun isMenuPopoverShowingForTesting(): Boolean = menuPopover?.isShowing == true
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun menuPopoverTextSnapshotForTesting(): List<String> =
+        menuPopover?.textSnapshotForTesting().orEmpty()
+
     /**
      * Feeds a MotionEvent directly into the swipe gesture detector, bypassing
      * `dispatchTouchEvent`'s hit-testing. Used by instrumentation tests to verify swipe

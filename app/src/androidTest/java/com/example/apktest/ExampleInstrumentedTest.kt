@@ -2,20 +2,12 @@ package com.example.apktest
 
 import android.os.SystemClock
 import android.view.MotionEvent
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.assertion.ViewAssertions.matches
-import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
-import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.apktest.BuildConfig
 import com.example.apktest.game.GameFragment
 import java.util.concurrent.atomic.AtomicInteger
-import org.hamcrest.Matchers.allOf
-import org.hamcrest.Matchers.containsString
-import org.hamcrest.Matchers.startsWith
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -193,44 +185,57 @@ class ExampleInstrumentedTest {
             scenario.onActivity { activity ->
                 val gameFragment = attachedGameFragment(activity)
                 assertTrue("Game fragment should be added before opening menu", gameFragment.isAdded)
+            }
+            scenario.onActivity { activity ->
                 activity.findViewById<android.view.View>(R.id.buttonMenu).performClick()
             }
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
 
-            onView(withText(R.string.pause_resume)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
-            onView(withText(R.string.restart)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
-            onView(withText(R.string.legend)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
-            onView(withText(R.string.back_to_setup)).inRoot(isPlatformPopup()).check(matches(isDisplayed()))
-            onView(withText(startsWith(localizedPrefix(R.string.status_template))))
-                .inRoot(isPlatformPopup())
-                .check(
-                    matches(
-                        allOf(
-                            isDisplayed(),
-                            withText(containsString(localizedTokenAfterPipes(R.string.status_template, 1)))
-                        )
-                    )
+            scenario.onActivity { activity ->
+                val isShowing = activity.isMenuPopoverShowingForTesting()
+                assertTrue(
+                    "Expected menu popover to be visible after tapping menu button, but isShowing returned $isShowing",
+                    isShowing
                 )
-            onView(withText(startsWith(localizedPrefix(R.string.speed_detail_template))))
-                .inRoot(isPlatformPopup())
-                .check(
-                    matches(
-                        allOf(
-                            isDisplayed(),
-                            withText(containsString(localizedTokenAfterPipes(R.string.speed_detail_template, 2)))
-                        )
-                    )
+                val snapshot = activity.menuPopoverTextSnapshotForTesting()
+                assertTrue(
+                    "Expected snapshot to contain pause/resume button text",
+                    snapshot.contains(activity.getString(R.string.pause_resume))
                 )
-            onView(withText(startsWith(localizedPrefix(R.string.powerups_detail_template))))
-                .inRoot(isPlatformPopup())
-                .check(
-                    matches(
-                        allOf(
-                            isDisplayed(),
-                            withText(containsString(localizedTokenAfterPipes(R.string.powerups_detail_template, 1)))
-                        )
-                    )
+                assertTrue(
+                    "Expected snapshot to contain restart button text",
+                    snapshot.contains(activity.getString(R.string.restart))
                 )
+                assertTrue(
+                    "Expected snapshot to contain legend button text",
+                    snapshot.contains(activity.getString(R.string.legend))
+                )
+                assertTrue(
+                    "Expected snapshot to contain back-to-setup button text",
+                    snapshot.contains(activity.getString(R.string.back_to_setup))
+                )
+                assertTrue(
+                    "Expected snapshot to include status HUD text",
+                    snapshot.any { text ->
+                        text.startsWith(localizedPrefix(R.string.status_template)) &&
+                            text.contains(localizedTokenAfterPipes(R.string.status_template, 1))
+                    }
+                )
+                assertTrue(
+                    "Expected snapshot to include speed HUD text",
+                    snapshot.any { text ->
+                        text.startsWith(localizedPrefix(R.string.speed_detail_template)) &&
+                            text.contains(localizedTokenAfterPipes(R.string.speed_detail_template, 2))
+                    }
+                )
+                assertTrue(
+                    "Expected snapshot to include power-ups HUD text",
+                    snapshot.any { text ->
+                        text.startsWith(localizedPrefix(R.string.powerups_detail_template)) &&
+                            text.contains(localizedTokenAfterPipes(R.string.powerups_detail_template, 1))
+                    }
+                )
+            }
         }
     }
 

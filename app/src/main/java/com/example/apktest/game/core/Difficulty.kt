@@ -11,13 +11,25 @@ data class DifficultyPreset(
     val balanceRule: NpcSpeedBalanceRule = NpcSpeedBalanceRule.NONE,
     val powerUpPickupLifetimeSeconds: Float = 10f,
     val powerUpRespawnIntervalSeconds: Float? = null,
-    val initialPowerUpTypes: List<PowerUpType> = PowerUpType.entries
+    val initialPowerUpTypes: List<PowerUpType> = PowerUpType.entries,
+    /**
+     * Chebyshev (king-move) cell radius around the player within which
+     * automated (non-`MANUAL`) player policies will divert one step to pick
+     * up a nearby power-up, provided a walkable path of length ≤ this radius
+     * exists and the detour is safe. `0` disables the behaviour (policies
+     * will only collect a power-up by stepping onto it as part of their
+     * normal route).
+     */
+    val automaticPickupRadius: Int = 1
 ) {
     init {
         if (balanceRule == NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER) {
             require(npcMovesPerSecond < playerMovesPerSecond) {
                 "NPC speed ($npcMovesPerSecond) must be lower than player speed ($playerMovesPerSecond) for $name."
             }
+        }
+        require(automaticPickupRadius >= 0) {
+            "automaticPickupRadius ($automaticPickupRadius) must be >= 0 for $name."
         }
     }
 }

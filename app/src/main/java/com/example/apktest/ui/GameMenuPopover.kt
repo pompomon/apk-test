@@ -11,6 +11,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
+import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import com.example.apktest.R
 
@@ -115,6 +116,28 @@ class GameMenuPopover(
         statusText.text = status
         speedText.text = speed
         powerUpText.text = powerUps
+    }
+
+    /**
+     * Returns a snapshot of all TextView/Button text currently present in the popover content
+     * view, collected in traversal order from the view hierarchy.
+     */
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun textSnapshotForTesting(): List<String> {
+        val texts = mutableListOf<String>()
+        collectText(rootView = popup.contentView, out = texts)
+        return texts
+    }
+
+    private fun collectText(rootView: View, out: MutableList<String>) {
+        when (rootView) {
+            is TextView -> out.add(rootView.text.toString())
+            is ViewGroup -> {
+                for (index in 0 until rootView.childCount) {
+                    collectText(rootView.getChildAt(index), out)
+                }
+            }
+        }
     }
 
     private fun actionButton(textRes: Int, onClick: () -> Unit): Button {

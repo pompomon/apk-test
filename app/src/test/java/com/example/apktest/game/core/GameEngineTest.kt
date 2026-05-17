@@ -198,6 +198,41 @@ class GameEngineTest {
     }
 
     @Test
+    fun automaticPolicy_collectsAdjacentPickupViaEngineContextWiring() {
+        val engine = GameEngine(
+            testPreset(
+                npcCount = 0,
+                initialPowerUpTypes = listOf(PowerUpType.SPEED_UP)
+            ),
+            seed
+        )
+        engine.setPlayerPolicy(PlayerPolicyType.BFS_EXIT)
+        val pickup = engine.spawnedPowerUps.first { it.type == PowerUpType.SPEED_UP }
+
+        var configured = false
+        for (direction in Direction.entries) {
+            val start = pickup.position.moved(direction.opposite())
+            if (!engine.maze.inBounds(start)) continue
+            if (start == engine.maze.exit) continue
+            if (!engine.maze.canMove(start, direction)) continue
+            val hasWinningStep = Direction.entries.any { step ->
+                engine.maze.canMove(start, step) && start.moved(step) == engine.maze.exit
+            }
+            if (hasWinningStep) continue
+            engine.player.position = start
+            engine.player.facing = direction
+            configured = true
+            break
+        }
+        assertTrue("expected a valid adjacent setup for pickup detour", configured)
+
+        engine.update(1f / engine.difficulty.playerMovesPerSecond + 0.001f)
+
+        assertEquals(pickup.position, engine.player.position)
+        assertFalse(engine.spawnedPowerUps.any { it.position == pickup.position })
+    }
+
+    @Test
     fun blast_removesWallsAroundPlayerCell() {
         val blastPreset = testPreset(
             mazeWidth = 6,
