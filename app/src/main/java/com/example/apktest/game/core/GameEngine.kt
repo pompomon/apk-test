@@ -307,30 +307,32 @@ class GameEngine(
         // the player has time to read the maze before NPCs move. We
         // intentionally also pause `elapsedSeconds` so power-up lifetimes
         // and HUD timers don't drain during the countdown.
+        var effectiveDelta = deltaSeconds
         if (countdownRemainingSeconds > 0f) {
-            val consumed = deltaSeconds.coerceAtMost(countdownRemainingSeconds)
+            val consumed = effectiveDelta.coerceAtMost(countdownRemainingSeconds)
             countdownRemainingSeconds -= consumed
             if (countdownRemainingSeconds < 0f) countdownRemainingSeconds = 0f
-            return
+            effectiveDelta -= consumed
+            if (effectiveDelta <= 0f) return
         }
 
-        elapsedSeconds += deltaSeconds
+        elapsedSeconds += effectiveDelta
         // Pause player time accumulation while the NPC-induced FREEZE is
         // active so the player can't be moved by manual input or by automated
         // policies, and so no burst of accumulated moves fires after thaw.
         // Mirrors the symmetric NPC accumulator gate below.
         if (!isPlayerFrozenByNpc()) {
-            playerAccumulator += deltaSeconds
+            playerAccumulator += effectiveDelta
         }
         // Pause NPC time accumulation while FREEZE is active so freezing truly
         // pauses NPC movement. Preserve the existing accumulator value so any
         // partial progress made before FREEZE started is not discarded
         // (avoids forcing an extra full interval after FREEZE expires).
         if (!isEffectActive(PowerUpType.FREEZE)) {
-            npcAccumulator += deltaSeconds
+            npcAccumulator += effectiveDelta
         }
 
-        processPowerUpLifecycles(deltaSeconds)
+        processPowerUpLifecycles(effectiveDelta)
 
         val playerInterval = 1f / effectivePlayerMovesPerSecond()
         while (

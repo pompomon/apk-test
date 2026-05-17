@@ -101,12 +101,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         // before the first render tick. Falls back to a fresh game (using
         // the intent's policy/difficulty extras) when no snapshot exists.
         val resume = intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false)
-        val resumeJson = if (resume) {
-            // We don't go through the parsed snapshot here; the raw JSON is
-            // re-parsed in the fragment so its in-memory copy stays the
-            // single source of truth and we don't depend on Parcelable.
-            stateStore.load()?.toJson()
-        } else null
+        val resumeJson = if (resume) stateStore.loadRawJson() else null
 
         if (resumeJson != null) {
             return Bundle().apply {

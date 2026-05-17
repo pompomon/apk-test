@@ -29,6 +29,13 @@ class GameStateStore(context: Context) {
         return snapshot
     }
 
+    /**
+     * Returns the raw saved JSON string without parsing/re-serialising.
+     * Useful for forwarding the snapshot through a Bundle/Intent to the
+     * fragment without the round-trip cost of [load] → [GameEngineSnapshot.toJson].
+     */
+    fun loadRawJson(): String? = prefs.getString(KEY_STATE_JSON, null)
+
     fun hasSavedState(): Boolean = prefs.contains(KEY_STATE_JSON)
 
     fun clear() {

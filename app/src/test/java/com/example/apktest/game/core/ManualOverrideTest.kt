@@ -54,13 +54,11 @@ class ManualOverrideTest {
             ?: error("No walkable neighbour from start in seeded maze")
         engine.queueManualMove(walkable)
 
-        // Run for >MANUAL_OVERRIDE_DURATION_SECONDS in small ticks. By the
-        // end the override should have expired.
-        var t = 0f
-        while (t < GameEngine.MANUAL_OVERRIDE_DURATION_SECONDS + 0.5f) {
-            engine.update(1f / 30f)
-            t += 1f / 30f
-        }
+        // Use one large delta so elapsedSeconds is guaranteed to surpass
+        // the override window even if the BFS player races to the exit
+        // mid-tick and the engine early-returns on WIN. elapsedSeconds is
+        // bumped unconditionally at the top of update().
+        engine.update(GameEngine.MANUAL_OVERRIDE_DURATION_SECONDS + 0.5f)
         assertEquals(0f, engine.manualOverrideRemainingSeconds, 0.0001f)
         assertEquals(null, engine.hudState().manualOverrideRemainingSeconds)
     }
