@@ -230,7 +230,13 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
             val others = walkable
                 .filter { it != exitDirection }
                 .sortedBy { manhattanDistance(from.moved(it), context.exit) }
-            if (exitDirection != null && exitDirection in walkable) listOf(exitDirection) + others else others
+            // Prepend the path-step direction only when it is actually walkable
+            // from the current cell (smart-casts exitDirection to non-null).
+            if (exitDirection != null && context.maze.canMove(from, exitDirection)) {
+                listOf(exitDirection) + others
+            } else {
+                others
+            }
         } else {
             (inner as? RankedPlayerPolicy)?.rankedMoves(context)
                 ?: listOfNotNull(inner.nextMove(context))
