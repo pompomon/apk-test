@@ -361,6 +361,7 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
             if (pos == from || pos == exit) continue
             val chebyshev = maxOf(abs(pos.x - from.x), abs(pos.y - from.y))
             if (chebyshev > radius) continue
+            if (pos in deadlyAndRisky) continue
 
             // Prefer an avoidance-aware path that skirts both deadly and
             // risky cells. Only fall back to a deadly-avoiding path when no

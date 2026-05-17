@@ -479,4 +479,32 @@ class PlayerPickupSeekingTest {
         // choice.
         assertEquals(Direction.EAST, move)
     }
+
+    @Test
+    fun riskyPickupTargetCell_isIgnored() {
+        // Pickup at (2,0) is threatened by NPC at (3,0), so the target cell
+        // itself is risky even though the first step toward it (EAST to 1,0)
+        // is safe. The wrapper must ignore that pickup target.
+        val maze = Maze.openGrid(5, 5)
+        val navigator = MazeNavigator(maze)
+        val policy = AvoidanceWrapperPolicy(BfsExitPolicy())
+        val player = Player(position = GridPos(0, 0), facing = Direction.EAST)
+        val pickup = spawnedPowerUp(PowerUpType.SPEED_UP, GridPos(2, 0))
+        val npc = Npc(id = 1, position = GridPos(3, 0))
+
+        val move = policy.nextMove(
+            PlayerPolicyContext(
+                maze = maze,
+                navigator = navigator,
+                player = player,
+                exit = GridPos(0, 4),
+                npcs = listOf(npc),
+                spawnedPowerUps = listOf(pickup),
+                pickupRadius = 3
+            )
+        )
+
+        // Ignore risky pickup target and follow inner BFS toward exit.
+        assertEquals(Direction.NORTH, move)
+    }
 }
