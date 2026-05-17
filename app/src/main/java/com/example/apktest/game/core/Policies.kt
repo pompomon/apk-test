@@ -205,11 +205,31 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
         val risky = computeRiskyCells(context, deadly)
         val from = context.player.position
 
-        // Always ask the wrapped policy for candidates first so ranked
-        // policies can update their per-tick state (e.g. Random+Memory visit
-        // counters), even on ticks where pickup-seeking wins.
-        val ranked = (inner as? RankedPlayerPolicy)?.rankedMoves(context)
-            ?: listOfNotNull(inner.nextMove(context))
+        // For stateless exit policies, compute the plain path once via
+        // nextMove and cache the resulting direction. The cached direction is
+        // then reused when building the ranked-moves list and again in the
+        // pass-through branch, so BFS/A* is searched at most once per tick
+        // for these policies (avoiding a redundant search in passThroughMove).
+        // For stateful policies (e.g. RandomWalkMemoryPolicy) always call
+        // rankedMoves so per-tick state (visit counters) is updated
+        // unconditionally, even on ticks where pickup-seeking or a winning
+        // move short-circuits the ranked selection.
+        val exitDirection: Direction? = when (inner) {
+            is BfsExitPolicy, is AStarExitPolicy -> inner.nextMove(context)
+            else -> null
+        }
+        val ranked: List<Direction> = if (inner is BfsExitPolicy || inner is AStarExitPolicy) {
+            // Build the ranked list from the already-computed exitDirection
+            // without a second path search (replicates rankedExitMoves).
+            val walkable = Direction.entries.filter { context.maze.canMove(from, it) }
+            val others = walkable
+                .filter { it != exitDirection }
+                .sortedBy { manhattanDistance(from.moved(it), context.exit) }
+            if (exitDirection != null && exitDirection in walkable) listOf(exitDirection) + others else others
+        } else {
+            (inner as? RankedPlayerPolicy)?.rankedMoves(context)
+                ?: listOfNotNull(inner.nextMove(context))
+        }
         if (ranked.isEmpty()) return null
 
         // A move that wins the game this tick is always preferred, even if
@@ -232,11 +252,11 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
         }
 
         if (context.playerInvisibleToNpcs || context.npcs.isEmpty()) {
-            return passThroughMove(context, ranked)
+            return passThroughMove(ranked, exitDirection)
         }
 
         if (deadly.isEmpty() && risky.isEmpty()) {
-            return passThroughMove(context, ranked)
+            return passThroughMove(ranked, exitDirection)
         }
 
         // For exit-finding policies, try an avoidance-aware path first so the
@@ -268,18 +288,15 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
     }
 
     private fun passThroughMove(
-        context: PlayerPolicyContext,
-        ranked: List<Direction>
-    ): Direction? = when (inner) {
-        is BfsExitPolicy -> nextDirection(
-            context.player.position,
-            context.navigator.bfsPath(context.player.position, context.exit)
-        )
-        is AStarExitPolicy -> nextDirection(
-            context.player.position,
-            context.navigator.aStarPath(context.player.position, context.exit)
-        )
-        else -> ranked.firstOrNull()
+        ranked: List<Direction>,
+        exitDirection: Direction? = null
+    ): Direction? = if (inner is BfsExitPolicy || inner is AStarExitPolicy) {
+        // Return the already-computed exit direction (null when no path
+        // exists), preserving inner-policy semantics without a second path
+        // search.
+        exitDirection
+    } else {
+        ranked.firstOrNull()
     }
 
     override fun reset() {
