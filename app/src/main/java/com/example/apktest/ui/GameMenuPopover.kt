@@ -118,6 +118,10 @@ class GameMenuPopover(
         powerUpText.text = powerUps
     }
 
+    /**
+     * Returns a snapshot of all TextView/Button text currently present in the popover content
+     * view, collected in traversal order from the view hierarchy.
+     */
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun textSnapshotForTesting(): List<String> {
         val texts = mutableListOf<String>()

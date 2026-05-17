@@ -192,25 +192,44 @@ class ExampleInstrumentedTest {
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
 
             scenario.onActivity { activity ->
-                assertTrue("Menu popover should be visible after tapping the menu button", activity.isMenuPopoverShowingForTesting())
-                val snapshot = activity.menuPopoverTextSnapshotForTesting()
-                assertTrue(snapshot.contains(activity.getString(R.string.pause_resume)))
-                assertTrue(snapshot.contains(activity.getString(R.string.restart)))
-                assertTrue(snapshot.contains(activity.getString(R.string.legend)))
-                assertTrue(snapshot.contains(activity.getString(R.string.back_to_setup)))
+                val isShowing = activity.isMenuPopoverShowingForTesting()
                 assertTrue(
+                    "Expected menu popover to be visible after tapping menu button, but isShowing returned $isShowing",
+                    isShowing
+                )
+                val snapshot = activity.menuPopoverTextSnapshotForTesting()
+                assertTrue(
+                    "Expected snapshot to contain pause/resume button text",
+                    snapshot.contains(activity.getString(R.string.pause_resume))
+                )
+                assertTrue(
+                    "Expected snapshot to contain restart button text",
+                    snapshot.contains(activity.getString(R.string.restart))
+                )
+                assertTrue(
+                    "Expected snapshot to contain legend button text",
+                    snapshot.contains(activity.getString(R.string.legend))
+                )
+                assertTrue(
+                    "Expected snapshot to contain back-to-setup button text",
+                    snapshot.contains(activity.getString(R.string.back_to_setup))
+                )
+                assertTrue(
+                    "Expected snapshot to include status HUD text",
                     snapshot.any { text ->
                         text.startsWith(localizedPrefix(R.string.status_template)) &&
                             text.contains(localizedTokenAfterPipes(R.string.status_template, 1))
                     }
                 )
                 assertTrue(
+                    "Expected snapshot to include speed HUD text",
                     snapshot.any { text ->
                         text.startsWith(localizedPrefix(R.string.speed_detail_template)) &&
                             text.contains(localizedTokenAfterPipes(R.string.speed_detail_template, 2))
                     }
                 )
                 assertTrue(
+                    "Expected snapshot to include power-ups HUD text",
                     snapshot.any { text ->
                         text.startsWith(localizedPrefix(R.string.powerups_detail_template)) &&
                             text.contains(localizedTokenAfterPipes(R.string.powerups_detail_template, 1))
