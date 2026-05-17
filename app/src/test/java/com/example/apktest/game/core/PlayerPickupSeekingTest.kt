@@ -444,4 +444,39 @@ class PlayerPickupSeekingTest {
 
         assertEquals(Direction.WEST, move)
     }
+
+    @Test
+    fun pickupReachableViaSafeDetour_isNotDroppedWhenPlainBfsFirstStepIsDeadly() {
+        // Player (0,0), pickup at (2,2), radius 4. An NPC at (0,1) makes
+        // (0,1) deadly. Plain BFS from (0,0) to (2,2) is free to walk through
+        // (0,1) and (Direction.NORTH starts the iteration order) may return
+        // a path whose first step lands on the NPC. The wrapper must instead
+        // find an alternative shortest path that skirts the deadly cell —
+        // e.g. (0,0)→(1,0)→(2,0)→(2,1)→(2,2) — and take its safe first
+        // step (EAST) rather than dropping the pickup entirely.
+        val maze = Maze.openGrid(5, 5)
+        val navigator = MazeNavigator(maze)
+        val policy = AvoidanceWrapperPolicy(BfsExitPolicy())
+        val player = Player(position = GridPos(0, 0), facing = Direction.EAST)
+        val pickup = spawnedPowerUp(PowerUpType.SPEED_UP, GridPos(2, 2))
+        val npc = Npc(id = 1, position = GridPos(0, 1))
+
+        val move = policy.nextMove(
+            PlayerPolicyContext(
+                maze = maze,
+                navigator = navigator,
+                player = player,
+                exit = GridPos(4, 4),
+                npcs = listOf(npc),
+                spawnedPowerUps = listOf(pickup),
+                pickupRadius = 4
+            )
+        )
+
+        // EAST routes around the NPC toward the pickup; NORTH would step
+        // onto the NPC (deadly) and any return value other than EAST means
+        // the wrapper either skipped the reachable pickup or made an unsafe
+        // choice.
+        assertEquals(Direction.EAST, move)
+    }
 }

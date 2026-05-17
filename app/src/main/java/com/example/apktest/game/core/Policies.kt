@@ -310,8 +310,16 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
      * - a winning step (walkable adjacent direction onto [PlayerPolicyContext.exit])
      *   is available — taking the exit always beats picking up,
      * - no candidate pickup is reachable by a walkable path of length
-     *   `1..pickupRadius` whose first step is not currently NPC-occupied
+     *   `1..pickupRadius` whose cells are not currently NPC-occupied
      *   (`deadly`).
+     *
+     * Risk classification searches for an avoidance-aware path per pickup:
+     * a path that avoids both deadly *and* risky cells is preferred (and
+     * classifies the pickup as non-risky); only if no such path exists
+     * within the radius do we fall back to a deadly-avoiding (risky) path.
+     * This prevents a pickup with multiple shortest paths from being
+     * incorrectly skipped or mis-classified just because plain BFS happened
+     * to pick a deadly/risky first step.
      *
      * Candidate ordering: non-risky first, then by graph distance ascending,
      * then by [PowerUpType.ordinal], pickup position, and direction for
@@ -346,21 +354,33 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
         var bestY = Int.MAX_VALUE
         var bestDirectionOrdinal = Int.MAX_VALUE
 
+        val deadlyAndRisky: Set<GridPos> = if (risky.isEmpty()) deadly else deadly + risky
+
         for (pickup in context.spawnedPowerUps) {
             val pos = pickup.position
             if (pos == from || pos == exit) continue
             val chebyshev = maxOf(abs(pos.x - from.x), abs(pos.y - from.y))
             if (chebyshev > radius) continue
 
-            val path = context.navigator.bfsPath(from, pos)
-            val steps = path.size - 1
-            if (steps <= 0 || steps > radius) continue
+            // Prefer an avoidance-aware path that skirts both deadly and
+            // risky cells. Only fall back to a deadly-avoiding path when no
+            // fully-safe path of length ≤ radius exists. Risk classification
+            // is based on whether the chosen first step itself lands in a
+            // risky cell, so a pickup whose only adjacent approach is risky
+            // is still classified as risky.
+            var path = context.navigator.bfsPath(from, pos, deadlyAndRisky)
+            var steps = path.size - 1
+            if (steps <= 0 || steps > radius) {
+                if (risky.isEmpty()) continue
+                path = context.navigator.bfsPath(from, pos, deadly)
+                steps = path.size - 1
+                if (steps <= 0 || steps > radius) continue
+            }
 
             val direction = nextDirection(from, path) ?: continue
             if (!context.maze.canMove(from, direction)) continue
             val dest = from.moved(direction)
             if (dest in deadly) continue
-
             val candidateRisky = dest in risky
             val candidateOrdinal = pickup.type.ordinal
             val candidateDirectionOrdinal = direction.ordinal
