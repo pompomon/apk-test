@@ -209,10 +209,14 @@ class MazeRenderer {
                         val px = cellX.toFloat() + col * pixelSize
                         when (rowColors[col]) {
                             FloorTextures.accent -> {
-                                accentX[ai] = px; accentY[ai] = py; ai++
+                                accentX[ai] = px
+                                accentY[ai] = py
+                                ai++
                             }
                             FloorTextures.highlight -> {
-                                highlightX[hi] = px; highlightY[hi] = py; hi++
+                                highlightX[hi] = px
+                                highlightY[hi] = py
+                                hi++
                             }
                             // base pixels are covered by the maze-sized base rect.
                         }
