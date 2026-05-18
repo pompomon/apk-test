@@ -7,7 +7,7 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer
  * Tiny 5×5 pixel-art font that covers exactly the glyphs needed by the
  * countdown and end-of-game overlays: digits 1/2/3, the letters used in
  * "YOU WIN!" and "GAME OVER", and an exclamation mark / space. Glyphs are
- * stored top-down for readability; [drawText] flips Y when emitting rects
+ * stored top-down for readability; [drawCentered] flips Y when emitting rects
  * because `ShapeRenderer` is Y-up.
  *
  * Drawn via `ShapeRenderer.ShapeType.Filled` rects (one per non-`'.'`

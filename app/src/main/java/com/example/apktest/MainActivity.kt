@@ -257,7 +257,16 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
                     val status = hud?.status
                     if (status == GameStatus.RUNNING || status == GameStatus.PAUSED) {
                         val snapshot = gameFragment()?.captureSnapshot()
-                        if (snapshot != null) {
+                        // Re-check the post-capture status: the game may have
+                        // transitioned to WIN/LOSE between the UI-thread HUD
+                        // read above and the synchronous capture below. In
+                        // that case fall through to the clear path so a
+                        // terminal snapshot is never persisted (and Resume
+                        // can't resurrect a completed run on relaunch).
+                        val postStatus = snapshot?.status
+                        if (snapshot != null &&
+                            postStatus != GameStatus.WIN &&
+                            postStatus != GameStatus.LOSE) {
                             // Use the commit()-based path off the UI thread so the
                             // snapshot is durably on disk before we finish() —
                             // apply()'s deferred write could otherwise be lost when
@@ -281,26 +290,11 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
                                 // can, and a stale snapshot is preferable to a
                                 // frozen UI on exit.
                             }
+                        } else if (postStatus == GameStatus.WIN || postStatus == GameStatus.LOSE) {
+                            clearSavedStateBlocking()
                         }
                     } else if (status == GameStatus.WIN || status == GameStatus.LOSE) {
-                        // Use commit()-based clear off the UI thread (with the
-                        // same bounded-wait pattern as the save path) so the
-                        // removal is durably on disk before we finish() and
-                        // Resume can't resurrect a completed run on relaunch.
-                        try {
-                            autosaveExecutor.submit {
-                                stateStore.clearBlocking()
-                            }.get(PAUSE_EXIT_SAVE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
-                        } catch (_: RejectedExecutionException) {
-                            stateStore.clearBlocking()
-                        } catch (_: InterruptedException) {
-                            Thread.currentThread().interrupt()
-                        } catch (_: java.util.concurrent.ExecutionException) {
-                            // Best-effort; nothing further to do.
-                        } catch (_: java.util.concurrent.TimeoutException) {
-                            // Avoid ANR by giving up the wait; submitted
-                            // task will still complete in the background.
-                        }
+                        clearSavedStateBlocking()
                     }
                     val intent = Intent(this@MainActivity, SetupActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -320,6 +314,27 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         refreshHudSnapshot()
         hudHandler.removeCallbacks(hudRefreshRunnable)
         hudHandler.postDelayed(hudRefreshRunnable, HUD_REFRESH_INTERVAL_MS)
+    }
+
+    private fun clearSavedStateBlocking() {
+        // Use commit()-based clear off the UI thread (with the same
+        // bounded-wait pattern as the save path) so the removal is
+        // durably on disk before we finish() and Resume can't resurrect
+        // a completed run on relaunch.
+        try {
+            autosaveExecutor.submit {
+                stateStore.clearBlocking()
+            }.get(PAUSE_EXIT_SAVE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (_: RejectedExecutionException) {
+            stateStore.clearBlocking()
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        } catch (_: java.util.concurrent.ExecutionException) {
+            // Best-effort; nothing further to do.
+        } catch (_: java.util.concurrent.TimeoutException) {
+            // Avoid ANR by giving up the wait; submitted
+            // task will still complete in the background.
+        }
     }
 
     private fun move(direction: Direction) {
