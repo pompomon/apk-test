@@ -45,7 +45,13 @@ class CountdownTest {
         assertEquals(0f, engine.elapsedSeconds, 0.0001f)
         assertEquals(0, engine.steps)
         assertEquals(startPos, engine.player.position)
-        assertTrue(engine.countdownRemainingSeconds > 1.9f)
+        // After a 1s update the remaining time should be approximately
+        // COUNTDOWN_DEFAULT_SECONDS - 1; derive the threshold from the
+        // production constant (with a small epsilon) so this stays
+        // aligned if the default is tuned later.
+        assertTrue(
+            engine.countdownRemainingSeconds > GameEngine.COUNTDOWN_DEFAULT_SECONDS - 1.1f
+        )
     }
 
     /**

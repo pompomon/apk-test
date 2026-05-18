@@ -116,7 +116,11 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun refreshResumeButtonState() {
-        buttonResume.isEnabled = stateStore.hasSavedState()
+        // Cheap presence check only — full validation / stale-blob
+        // cleanup happens lazily inside MainActivity when the user
+        // actually taps Resume, so we don't parse JSON on the UI thread
+        // every time this start menu is shown.
+        buttonResume.isEnabled = stateStore.hasRawState()
     }
 
     private fun refreshSelectionLabels() {

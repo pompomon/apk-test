@@ -100,16 +100,21 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     }
 
     private fun buildGameFragmentArgs(intent: Intent): Bundle {
-        // If the launcher asked us to resume, pull the saved snapshot's JSON
-        // straight into the fragment args so the engine can restore it
-        // before the first render tick. Falls back to a fresh game (using
-        // the intent's policy/difficulty extras) when no snapshot exists.
+        // If the launcher asked us to resume, load+validate the saved
+        // snapshot once here and hand the parsed object directly to the
+        // fragment (avoiding a redundant JSON parse on the GL thread).
+        // We still embed the JSON in args so a process-death recreation
+        // — where the static handoff is wiped but the fragment Bundle
+        // survives — can restore from the bundle. Falls back to a fresh
+        // game (using the intent's policy/difficulty extras) when no
+        // valid snapshot exists.
         val resume = intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false)
-        val resumeJson = if (resume) stateStore.loadRawJson() else null
+        val resumeSnapshot = if (resume) stateStore.load() else null
 
-        if (resumeJson != null) {
+        if (resumeSnapshot != null) {
+            GameFragment.pendingResumeSnapshot = resumeSnapshot
             return Bundle().apply {
-                putString(GameFragment.ARG_RESUME_SNAPSHOT_JSON, resumeJson)
+                putString(GameFragment.ARG_RESUME_SNAPSHOT_JSON, resumeSnapshot.toJson())
             }
         }
 
@@ -177,9 +182,13 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             }
         } else if (status == GameStatus.WIN || status == GameStatus.LOSE) {
             // Clear any prior snapshot so Resume can't drop the user back into
-            // a stale mid-run state after a completed game.
+            // a stale mid-run state after a completed game. Use the
+            // commit()-based clearBlocking on the background executor so
+            // the removal is durably flushed even if the process is killed
+            // shortly after pausing (apply()'s deferred write could
+            // otherwise be lost and resurrect a finished game on relaunch).
             try {
-                autosaveExecutor.execute { stateStore.clear() }
+                autosaveExecutor.execute { stateStore.clearBlocking() }
             } catch (_: RejectedExecutionException) {
                 // Executor already shut down — best-effort clear.
             }
@@ -255,7 +264,24 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
                             }
                         }
                     } else if (status == GameStatus.WIN || status == GameStatus.LOSE) {
-                        stateStore.clear()
+                        // Use commit()-based clear off the UI thread (with the
+                        // same bounded-wait pattern as the save path) so the
+                        // removal is durably on disk before we finish() and
+                        // Resume can't resurrect a completed run on relaunch.
+                        try {
+                            autosaveExecutor.submit {
+                                stateStore.clearBlocking()
+                            }.get(PAUSE_EXIT_SAVE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+                        } catch (_: RejectedExecutionException) {
+                            stateStore.clearBlocking()
+                        } catch (_: InterruptedException) {
+                            Thread.currentThread().interrupt()
+                        } catch (_: java.util.concurrent.ExecutionException) {
+                            // Best-effort; nothing further to do.
+                        } catch (_: java.util.concurrent.TimeoutException) {
+                            // Avoid ANR by giving up the wait; submitted
+                            // task will still complete in the background.
+                        }
                     }
                     val intent = Intent(this@MainActivity, SetupActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)

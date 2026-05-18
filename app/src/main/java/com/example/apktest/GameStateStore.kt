@@ -30,6 +30,12 @@ class GameStateStore(context: Context) {
         return prefs.edit().putString(KEY_STATE_JSON, snapshot.toJson()).commit()
     }
 
+    /**
+     * Returns the parsed snapshot, or `null` if no payload exists or the
+     * payload is unreadable/stale. Stale blobs (e.g., post-schema bump)
+     * are dropped from preferences as a side effect so they don't keep
+     * "Resume" enabled or fall through to a default new run.
+     */
     fun load(): GameEngineSnapshot? {
         val json = prefs.getString(KEY_STATE_JSON, null) ?: return null
         val snapshot = GameEngineSnapshot.fromJson(json)
@@ -42,25 +48,31 @@ class GameStateStore(context: Context) {
     }
 
     /**
-     * Returns the raw saved JSON string without the cost of re-serialising,
-     * but only after validating the payload via [GameEngineSnapshot.fromJson]
-     * so unreadable/stale snapshots are dropped consistently with [load]
-     * (a corrupt blob would otherwise keep "Resume" enabled and silently
-     * fall through to a default new run in the fragment).
+     * Cheap presence check — only verifies that a snapshot key exists in
+     * preferences, without parsing/validating the JSON payload. Suitable
+     * for UI affordances (e.g., enabling a "Resume" button on the start
+     * menu) that should not pay the JSON-parse cost on the UI thread.
+     *
+     * The payload is validated and stale blobs are dropped lazily by
+     * [load] when the user actually requests a resume.
      */
-    fun loadRawJson(): String? {
-        val json = prefs.getString(KEY_STATE_JSON, null) ?: return null
-        if (GameEngineSnapshot.fromJson(json) == null) {
-            clear()
-            return null
-        }
-        return json
-    }
-
-    fun hasSavedState(): Boolean = load() != null
+    fun hasRawState(): Boolean = prefs.contains(KEY_STATE_JSON)
 
     fun clear() {
         prefs.edit().remove(KEY_STATE_JSON).apply()
+    }
+
+    /**
+     * Like [clear] but uses [android.content.SharedPreferences.Editor.commit]
+     * so the removal is guaranteed to be flushed to disk before this call
+     * returns. Use this from terminal-state ("Pause & Exit" / WIN / LOSE)
+     * flows where the activity is about to be finished and a deferred
+     * [apply] write could be lost — otherwise Resume could resurrect an
+     * already-finished game on next launch. The caller is responsible
+     * for invoking this off the UI thread when possible.
+     */
+    fun clearBlocking(): Boolean {
+        return prefs.edit().remove(KEY_STATE_JSON).commit()
     }
 
     companion object {

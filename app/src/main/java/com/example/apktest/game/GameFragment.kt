@@ -23,6 +23,16 @@ class GameFragment : AndroidFragmentApplication() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Prefer the in-memory parsed-snapshot handoff (set by
+        // MainActivity when the user taps Resume) so we don't re-parse
+        // the snapshot JSON the state store already parsed for
+        // validation. The arg-based JSON fallback below is still used
+        // for process-death recreations where the static field has been
+        // wiped but the Bundle survives.
+        pendingResumeSnapshot?.let {
+            pendingSnapshot = it
+            pendingResumeSnapshot = null
+        }
         arguments?.let { args ->
             args.getString(ARG_PLAYER_POLICY)?.let { name ->
                 pendingPlayerPolicy = PlayerPolicyType.entries.firstOrNull { it.name == name }
@@ -33,8 +43,10 @@ class GameFragment : AndroidFragmentApplication() {
                     ?: pendingNpcPolicy
             }
             args.getString(ARG_DIFFICULTY)?.let { pendingDifficulty = it }
-            args.getString(ARG_RESUME_SNAPSHOT_JSON)?.let { json ->
-                pendingSnapshot = GameEngineSnapshot.fromJson(json)
+            if (pendingSnapshot == null) {
+                args.getString(ARG_RESUME_SNAPSHOT_JSON)?.let { json ->
+                    pendingSnapshot = GameEngineSnapshot.fromJson(json)
+                }
             }
         }
     }
@@ -128,5 +140,22 @@ class GameFragment : AndroidFragmentApplication() {
         const val ARG_NPC_POLICY = "arg_npc_policy"
         const val ARG_DIFFICULTY = "arg_difficulty"
         const val ARG_RESUME_SNAPSHOT_JSON = "arg_resume_snapshot_json"
+
+        /**
+         * In-memory handoff for an already-parsed resume snapshot. Set by
+         * [com.example.apktest.MainActivity] just before attaching this
+         * fragment so we can skip re-parsing the same JSON the state
+         * store already parsed for validation. Consumed (and cleared)
+         * exactly once in [onCreate]. The arg-based JSON path remains
+         * the durable fallback for process-death restoration where this
+         * field is wiped but the fragment's Bundle survives.
+         *
+         * Reads and writes are expected to happen on the main thread
+         * (Activity / Fragment lifecycle callbacks); [Volatile] is used
+         * only for visibility safety, not to support concurrent access.
+         */
+        @JvmStatic
+        @Volatile
+        var pendingResumeSnapshot: GameEngineSnapshot? = null
     }
 }
