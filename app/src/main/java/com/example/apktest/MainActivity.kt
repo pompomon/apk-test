@@ -183,11 +183,12 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         // fresh-game resume by clearing any prior snapshot instead.
         if (hud?.countdownRemainingSeconds != null &&
             (status == GameStatus.RUNNING || status == GameStatus.PAUSED)) {
-            try {
-                autosaveExecutor.execute { stateStore.clearBlocking() }
-            } catch (_: RejectedExecutionException) {
-                // Executor already shut down — best-effort clear.
-            }
+            // Bounded-wait clear so the removal is durably flushed before
+            // we return from onPause(); a fire-and-forget execute() could
+            // be lost if the process is killed shortly after pausing,
+            // leaving an older snapshot on disk that would resume into a
+            // live game and skip the countdown the player just saw.
+            clearSavedStateBlocking()
             super.onPause()
             return
         }
@@ -218,15 +219,12 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         } else if (status == GameStatus.WIN || status == GameStatus.LOSE) {
             // Clear any prior snapshot so Resume can't drop the user back into
             // a stale mid-run state after a completed game. Use the
-            // commit()-based clearBlocking on the background executor so
-            // the removal is durably flushed even if the process is killed
-            // shortly after pausing (apply()'s deferred write could
-            // otherwise be lost and resurrect a finished game on relaunch).
-            try {
-                autosaveExecutor.execute { stateStore.clearBlocking() }
-            } catch (_: RejectedExecutionException) {
-                // Executor already shut down — best-effort clear.
-            }
+            // bounded-wait commit()-based helper so the removal is durably
+            // flushed to disk before we return from onPause(); a
+            // fire-and-forget execute() could be lost if the process is
+            // killed shortly after pausing and resurrect a finished game
+            // on relaunch.
+            clearSavedStateBlocking()
         }
         super.onPause()
     }

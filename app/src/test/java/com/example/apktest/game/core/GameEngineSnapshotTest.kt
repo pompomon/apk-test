@@ -155,4 +155,63 @@ class GameEngineSnapshotTest {
         )
         assertEquals(true, snap.isWithinBounds(oddPreset))
     }
+
+    /**
+     * Gameplay can permanently mutate the maze (e.g., a BLAST power-up
+     * removing the four walls around the player). A save/resume round-
+     * trip must preserve those mutations: a freshly-regenerated baseline
+     * maze from the seed alone would restore the original walls and
+     * could trap or free entities differently than the player saw.
+     * Removes a wall, snapshots, restores into a fresh engine, and
+     * asserts the restored maze's wall state matches cell-for-cell.
+     */
+    @Test
+    fun roundTrip_preservesRemovedWalls() {
+        val original = GameEngine(DifficultyPresets.MEDIUM, seed)
+        // Find any interior wall and remove it so the baseline (regenerated
+        // from the seed) and the mutated maze differ — exercising the
+        // removedWalls round-trip rather than the no-mutation fast path.
+        val maze = original.maze
+        var removed: Pair<GridPos, Direction>? = null
+        outer@ for (y in 0 until maze.height) {
+            for (x in 0 until maze.width) {
+                val pos = GridPos(x, y)
+                for (dir in listOf(Direction.EAST, Direction.NORTH)) {
+                    val next = pos.moved(dir)
+                    if (maze.inBounds(next) && maze.hasWall(pos, dir)) {
+                        maze.removeWall(pos, dir)
+                        removed = pos to dir
+                        break@outer
+                    }
+                }
+            }
+        }
+        // The MEDIUM maze always has at least one interior wall to remove.
+        assertEquals(false, removed == null)
+        val (pos, dir) = removed!!
+        // Confirm the mutation took effect on both shared sides before snapshotting.
+        assertEquals(false, original.maze.hasWall(pos, dir))
+        assertEquals(false, original.maze.hasWall(pos.moved(dir), dir.opposite()))
+
+        val snap = original.snapshot()
+        val other = GameEngine(DifficultyPresets.MEDIUM, seed + 7)
+        other.restore(snap)
+
+        // The restored maze must mirror the mutated original cell-for-cell,
+        // including the removed wall (and its opposite side), so a resumed
+        // game cannot resurrect walls the player already destroyed.
+        assertEquals(false, other.maze.hasWall(pos, dir))
+        assertEquals(false, other.maze.hasWall(pos.moved(dir), dir.opposite()))
+        for (y in 0 until original.maze.height) {
+            for (x in 0 until original.maze.width) {
+                for (d in Direction.entries) {
+                    assertEquals(
+                        "wall mismatch at ($x,$y,$d) after removeWall + restore",
+                        original.maze.hasWall(x, y, d),
+                        other.maze.hasWall(x, y, d)
+                    )
+                }
+            }
+        }
+    }
 }

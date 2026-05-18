@@ -5,13 +5,16 @@ import org.json.JSONObject
 
 /**
  * Pure-data snapshot of a [GameEngine]'s observable state, sufficient to
- * resume the game later. The maze itself is not stored because
+ * resume the game later. The maze layout is not stored verbatim because
  * [MazeGenerator] is deterministic given the seed (`difficultyName` plus
- * [seed] reproduce the same maze on restore). Per-frame transient values
- * such as accumulators and RNG state are intentionally omitted: the engine
- * is restored to a "ready to step" state and ticks resume normally from
- * there. This is acceptable for a save/resume feature and keeps the
- * persisted payload small and stable across engine refactors.
+ * [seed] reproduce the same baseline maze on restore); only walls that
+ * gameplay has permanently mutated (e.g., removed by a BLAST power-up)
+ * are persisted in [removedWalls] and re-applied on restore so a resumed
+ * game preserves any mid-run wall destruction. Per-frame transient
+ * values such as accumulators and RNG state are intentionally omitted:
+ * the engine is restored to a "ready to step" state and ticks resume
+ * normally from there. This is acceptable for a save/resume feature and
+ * keeps the persisted payload small and stable across engine refactors.
  */
 data class GameEngineSnapshot(
     val schemaVersion: Int = SCHEMA_VERSION,
@@ -29,10 +32,19 @@ data class GameEngineSnapshot(
     /** Remaining seconds on an NPC-induced player freeze, or `null` if none. */
     val npcInducedPlayerFreezeRemainingSeconds: Float?,
     val manualQueue: List<Direction>,
-    val manualOverrideRemainingSeconds: Float
+    val manualOverrideRemainingSeconds: Float,
+    /**
+     * Walls that have been removed by gameplay (e.g., BLAST power-up)
+     * relative to the baseline maze that [MazeGenerator] produces for
+     * [seed]. Restored mazes re-apply these edges so wall mutations
+     * survive a save/resume round-trip. Each entry is canonical (a wall
+     * shared between two cells is recorded only once).
+     */
+    val removedWalls: List<RemovedWallSnapshot> = emptyList()
 ) {
     data class PlayerSnapshot(val x: Int, val y: Int, val facing: Direction)
     data class NpcSnapshot(val id: Int, val x: Int, val y: Int, val facing: Direction)
+    data class RemovedWallSnapshot(val x: Int, val y: Int, val direction: Direction)
     data class SpawnedPowerUpSnapshot(
         val type: PowerUpType,
         val x: Int,
@@ -125,10 +137,17 @@ data class GameEngineSnapshot(
             manualQueue.forEach { put(it.name) }
         })
         put(KEY_MANUAL_OVERRIDE, manualOverrideRemainingSeconds.toDouble())
+        put(KEY_REMOVED_WALLS, JSONArray().apply {
+            removedWalls.forEach { w ->
+                put(JSONObject().apply {
+                    put("x", w.x); put("y", w.y); put("d", w.direction.name)
+                })
+            }
+        })
     }.toString()
 
     companion object {
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
 
         private const val KEY_VERSION = "v"
         private const val KEY_DIFFICULTY = "difficulty"
@@ -145,6 +164,7 @@ data class GameEngineSnapshot(
         private const val KEY_NPC_FREEZE = "npcFreezeRem"
         private const val KEY_MANUAL_QUEUE = "manualQueue"
         private const val KEY_MANUAL_OVERRIDE = "manualOverrideRem"
+        private const val KEY_REMOVED_WALLS = "removedWalls"
 
         fun fromJson(json: String): GameEngineSnapshot? {
             return try {
@@ -192,6 +212,18 @@ data class GameEngineSnapshot(
                 val manualQueue = obj.getJSONArray(KEY_MANUAL_QUEUE).let { arr ->
                     List(arr.length()) { i -> Direction.valueOf(arr.getString(i)) }
                 }
+                val removedWalls = if (obj.has(KEY_REMOVED_WALLS)) {
+                    obj.getJSONArray(KEY_REMOVED_WALLS).let { arr ->
+                        List(arr.length()) { i ->
+                            val w = arr.getJSONObject(i)
+                            RemovedWallSnapshot(
+                                x = w.getInt("x"),
+                                y = w.getInt("y"),
+                                direction = Direction.valueOf(w.getString("d"))
+                            )
+                        }
+                    }
+                } else emptyList()
                 val snapshot = GameEngineSnapshot(
                     schemaVersion = version,
                     difficultyName = obj.getString(KEY_DIFFICULTY),
@@ -209,7 +241,8 @@ data class GameEngineSnapshot(
                         obj.getDouble(KEY_NPC_FREEZE).toFloat()
                     } else null,
                     manualQueue = manualQueue,
-                    manualOverrideRemainingSeconds = obj.optDouble(KEY_MANUAL_OVERRIDE, 0.0).toFloat()
+                    manualOverrideRemainingSeconds = obj.optDouble(KEY_MANUAL_OVERRIDE, 0.0).toFloat(),
+                    removedWalls = removedWalls
                 )
                 // Reject snapshots whose difficulty name doesn't match a
                 // known preset exactly (DifficultyPresets.byName silently

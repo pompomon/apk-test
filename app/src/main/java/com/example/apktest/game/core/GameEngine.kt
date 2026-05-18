@@ -199,8 +199,42 @@ class GameEngine(
         npcInducedPlayerFreezeRemainingSeconds = npcInducedPlayerFreeze?.endsAtSeconds
             ?.let { (it - elapsedSeconds).coerceAtLeast(0f) },
         manualQueue = manualQueue.toList(),
-        manualOverrideRemainingSeconds = manualOverrideRemainingSeconds
+        manualOverrideRemainingSeconds = manualOverrideRemainingSeconds,
+        removedWalls = computeRemovedWalls()
     )
+
+    /**
+     * Returns the set of walls that gameplay has removed relative to the
+     * baseline maze [MazeGenerator] produces for [currentSeed]. Each shared
+     * wall is emitted once (using EAST for the cell with the smaller x and
+     * NORTH for the cell with the smaller y) so the persisted list is
+     * compact and round-trips through [restore] without duplicates.
+     */
+    private fun computeRemovedWalls(): List<GameEngineSnapshot.RemovedWallSnapshot> {
+        val baseline = MazeGenerator.generate(difficulty.mazeWidth, difficulty.mazeHeight, currentSeed)
+        // Defensive: if the regenerated baseline ever stopped matching the
+        // installed maze's dimensions, abandon the diff rather than risk
+        // an indexing crash — restore will still produce a playable maze
+        // from the seed, just without preserving mid-run wall mutations.
+        if (baseline.width != maze.width || baseline.height != maze.height) return emptyList()
+        val baselineCells = baseline.copyCells()
+        val currentCells = maze.copyCells()
+        val result = mutableListOf<GameEngineSnapshot.RemovedWallSnapshot>()
+        for (y in 0 until maze.height) {
+            for (x in 0 until maze.width) {
+                val i = y * maze.width + x
+                // Bits set in baseline but cleared in current = removed walls.
+                val diff = baselineCells[i] and currentCells[i].inv()
+                if (diff and Maze.WALL_EAST != 0 && x + 1 < maze.width) {
+                    result.add(GameEngineSnapshot.RemovedWallSnapshot(x, y, Direction.EAST))
+                }
+                if (diff and Maze.WALL_NORTH != 0 && y + 1 < maze.height) {
+                    result.add(GameEngineSnapshot.RemovedWallSnapshot(x, y, Direction.NORTH))
+                }
+            }
+        }
+        return result
+    }
 
     /**
      * Restore engine state from a [GameEngineSnapshot]. Regenerates the
@@ -238,6 +272,14 @@ class GameEngine(
         playerPolicy = PolicyFactory.player(playerPolicyType)
         currentSeed = snapshot.seed
         maze = MazeGenerator.generate(difficulty.mazeWidth, difficulty.mazeHeight, currentSeed)
+        // Re-apply any walls that gameplay had removed (e.g., via BLAST)
+        // before the snapshot was taken, so a resumed game preserves
+        // mid-run wall destruction instead of restoring the pristine
+        // seeded layout. Maze.removeWall is bounds-checked and idempotent.
+        snapshot.removedWalls.forEach { w ->
+            val pos = GridPos(w.x, w.y)
+            if (maze.inBounds(pos)) maze.removeWall(pos, w.direction)
+        }
         navigator = MazeNavigator(maze)
         random = Random(currentSeed)
         npcRandom = Random(currentSeed xor NPC_RANDOM_SEED_MIX)
