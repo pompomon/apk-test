@@ -37,8 +37,6 @@
     <string name="setup_npc_policy_label">NPC policy</string>
     <string name="setup_difficulty_label">Difficulty</string>
     <string name="start_game">Start</string>
-    <string name="back_to_setup">Back to setup</string>
-
     <!-- Start menu -->
     <string name="menu_resume">Resume Game</string>
     <string name="menu_new_game">New Game</string>

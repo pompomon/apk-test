@@ -110,73 +110,73 @@ data class GameEngineSnapshot(
         private const val KEY_MANUAL_OVERRIDE = "manualOverrideRem"
 
         fun fromJson(json: String): GameEngineSnapshot? {
-          return try {
-            val obj = JSONObject(json)
-            val version = obj.optInt(KEY_VERSION, 0)
-            if (version != SCHEMA_VERSION) return null
-            val player = obj.getJSONObject(KEY_PLAYER).let { p ->
-                PlayerSnapshot(
-                    x = p.getInt("x"),
-                    y = p.getInt("y"),
-                    facing = Direction.valueOf(p.getString("facing"))
-                )
-            }
-            val npcs = obj.getJSONArray(KEY_NPCS).let { arr ->
-                List(arr.length()) { i ->
-                    val n = arr.getJSONObject(i)
-                    NpcSnapshot(
-                        id = n.getInt("id"),
-                        x = n.getInt("x"),
-                        y = n.getInt("y"),
-                        facing = Direction.valueOf(n.getString("facing"))
-                    )
-                }
-            }
-            val powerUps = obj.getJSONArray(KEY_POWERUPS).let { arr ->
-                List(arr.length()) { i ->
-                    val p = arr.getJSONObject(i)
-                    SpawnedPowerUpSnapshot(
-                        type = PowerUpType.valueOf(p.getString("type")),
+            return try {
+                val obj = JSONObject(json)
+                val version = obj.optInt(KEY_VERSION, 0)
+                if (version != SCHEMA_VERSION) return null
+                val player = obj.getJSONObject(KEY_PLAYER).let { p ->
+                    PlayerSnapshot(
                         x = p.getInt("x"),
                         y = p.getInt("y"),
-                        remainingSeconds = if (p.has("rem")) p.getDouble("rem").toFloat() else null
+                        facing = Direction.valueOf(p.getString("facing"))
                     )
                 }
-            }
-            val effects = obj.getJSONArray(KEY_EFFECTS).let { arr ->
-                List(arr.length()) { i ->
-                    val e = arr.getJSONObject(i)
-                    ActiveEffectSnapshot(
-                        type = PowerUpType.valueOf(e.getString("type")),
-                        remainingSeconds = if (e.has("rem")) e.getDouble("rem").toFloat() else null
-                    )
+                val npcs = obj.getJSONArray(KEY_NPCS).let { arr ->
+                    List(arr.length()) { i ->
+                        val n = arr.getJSONObject(i)
+                        NpcSnapshot(
+                            id = n.getInt("id"),
+                            x = n.getInt("x"),
+                            y = n.getInt("y"),
+                            facing = Direction.valueOf(n.getString("facing"))
+                        )
+                    }
                 }
+                val powerUps = obj.getJSONArray(KEY_POWERUPS).let { arr ->
+                    List(arr.length()) { i ->
+                        val p = arr.getJSONObject(i)
+                        SpawnedPowerUpSnapshot(
+                            type = PowerUpType.valueOf(p.getString("type")),
+                            x = p.getInt("x"),
+                            y = p.getInt("y"),
+                            remainingSeconds = if (p.has("rem")) p.getDouble("rem").toFloat() else null
+                        )
+                    }
+                }
+                val effects = obj.getJSONArray(KEY_EFFECTS).let { arr ->
+                    List(arr.length()) { i ->
+                        val e = arr.getJSONObject(i)
+                        ActiveEffectSnapshot(
+                            type = PowerUpType.valueOf(e.getString("type")),
+                            remainingSeconds = if (e.has("rem")) e.getDouble("rem").toFloat() else null
+                        )
+                    }
+                }
+                val manualQueue = obj.getJSONArray(KEY_MANUAL_QUEUE).let { arr ->
+                    List(arr.length()) { i -> Direction.valueOf(arr.getString(i)) }
+                }
+                GameEngineSnapshot(
+                    schemaVersion = version,
+                    difficultyName = obj.getString(KEY_DIFFICULTY),
+                    playerPolicy = PlayerPolicyType.valueOf(obj.getString(KEY_PLAYER_POLICY)),
+                    npcPolicy = NpcPolicyType.valueOf(obj.getString(KEY_NPC_POLICY)),
+                    seed = obj.getLong(KEY_SEED),
+                    status = GameStatus.valueOf(obj.getString(KEY_STATUS)),
+                    elapsedSeconds = obj.getDouble(KEY_ELAPSED).toFloat(),
+                    steps = obj.getInt(KEY_STEPS),
+                    player = player,
+                    npcs = npcs,
+                    spawnedPowerUps = powerUps,
+                    activeEffects = effects,
+                    npcInducedPlayerFreezeRemainingSeconds = if (obj.has(KEY_NPC_FREEZE)) {
+                        obj.getDouble(KEY_NPC_FREEZE).toFloat()
+                    } else null,
+                    manualQueue = manualQueue,
+                    manualOverrideRemainingSeconds = obj.optDouble(KEY_MANUAL_OVERRIDE, 0.0).toFloat()
+                )
+            } catch (_: Throwable) {
+                null
             }
-            val manualQueue = obj.getJSONArray(KEY_MANUAL_QUEUE).let { arr ->
-                List(arr.length()) { i -> Direction.valueOf(arr.getString(i)) }
-            }
-            GameEngineSnapshot(
-                schemaVersion = version,
-                difficultyName = obj.getString(KEY_DIFFICULTY),
-                playerPolicy = PlayerPolicyType.valueOf(obj.getString(KEY_PLAYER_POLICY)),
-                npcPolicy = NpcPolicyType.valueOf(obj.getString(KEY_NPC_POLICY)),
-                seed = obj.getLong(KEY_SEED),
-                status = GameStatus.valueOf(obj.getString(KEY_STATUS)),
-                elapsedSeconds = obj.getDouble(KEY_ELAPSED).toFloat(),
-                steps = obj.getInt(KEY_STEPS),
-                player = player,
-                npcs = npcs,
-                spawnedPowerUps = powerUps,
-                activeEffects = effects,
-                npcInducedPlayerFreezeRemainingSeconds = if (obj.has(KEY_NPC_FREEZE)) {
-                    obj.getDouble(KEY_NPC_FREEZE).toFloat()
-                } else null,
-                manualQueue = manualQueue,
-                manualOverrideRemainingSeconds = obj.optDouble(KEY_MANUAL_OVERRIDE, 0.0).toFloat()
-            )
-          } catch (_: Throwable) {
-            null
-          }
         }
     }
 }
