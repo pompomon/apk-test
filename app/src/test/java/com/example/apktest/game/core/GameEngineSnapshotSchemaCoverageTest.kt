@@ -2,10 +2,8 @@ package com.example.apktest.game.core
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.reflect.KProperty1
-import kotlin.reflect.full.declaredMemberProperties
-import kotlin.reflect.full.primaryConstructor
 
 /**
  * CI enforcement test that fails loudly if a field on [GameEngineSnapshot]
@@ -15,15 +13,19 @@ import kotlin.reflect.full.primaryConstructor
  * Strategy: build a "witness" snapshot whose every property holds a value
  * distinct from the data class' implicit default (e.g. non-zero numbers,
  * non-empty collections), round-trip it through `toJson` / `fromJson`, and
- * assert each primary-constructor property survives unchanged. If a new
- * field is introduced and missed in (de)serialization, `fromJson` will
- * fall back to the constructor default and the per-property assertion
- * will fail naming the missing property.
+ * assert each declared field survives unchanged. If a new field is added
+ * to the data class but missed in (de)serialization, `fromJson` will fall
+ * back to the constructor default and the per-field assertion will fail
+ * naming the offending field.
+ *
+ * Uses [java.lang.reflect] only — no `kotlin.reflect.full` dependency —
+ * so the test runs with the default Android `kotlin-stdlib` test classpath
+ * (no `kotlin-reflect` artifact required).
  */
 class GameEngineSnapshotSchemaCoverageTest {
 
     @Test
-    fun everyConstructorPropertyRoundTripsThroughJson() {
+    fun everyDeclaredFieldRoundTripsThroughJson() {
         val original = witnessSnapshot()
         val json = original.toJson()
         val restored = GameEngineSnapshot.fromJson(json)
@@ -34,26 +36,27 @@ class GameEngineSnapshotSchemaCoverageTest {
             restored
         )
 
-        val ctor = GameEngineSnapshot::class.primaryConstructor
-            ?: error("GameEngineSnapshot must remain a data class with a primary constructor")
-        val propsByName = GameEngineSnapshot::class.declaredMemberProperties
-            .associateBy { it.name }
+        // A Kotlin data class compiles every primary-constructor parameter into
+        // a private instance field with the same name. Walk those fields and
+        // verify each round-trips. Skip synthetic / static fields (e.g.
+        // `Companion`, `$stable`) which are not constructor parameters.
+        val fields = GameEngineSnapshot::class.java.declaredFields
+            .filter { f ->
+                !java.lang.reflect.Modifier.isStatic(f.modifiers) && !f.isSynthetic
+            }
+        assertTrue(
+            "Expected GameEngineSnapshot to expose declared instance fields for its " +
+                "constructor parameters, but found none — has the data-class shape changed?",
+            fields.isNotEmpty()
+        )
 
-        // Every primary-constructor parameter must map to a declared property
-        // (true for a Kotlin data class) and round-trip through JSON.
-        for (param in ctor.parameters) {
-            val name = param.name ?: continue
-            @Suppress("UNCHECKED_CAST")
-            val prop = propsByName[name] as? KProperty1<GameEngineSnapshot, Any?>
-                ?: error(
-                    "GameEngineSnapshot primary-constructor parameter '$name' has no matching " +
-                        "declared property. Is the data-class shape still intact?"
-                )
-            val originalValue = prop.get(original)
-            val restoredValue = prop.get(restored!!)
+        for (field in fields) {
+            field.isAccessible = true
+            val originalValue = field.get(original)
+            val restoredValue = field.get(restored!!)
             assertEquals(
-                "GameEngineSnapshot property '$name' did not round-trip through toJson/fromJson. " +
-                    "If you just added '$name', remember to (a) serialize it in toJson, " +
+                "GameEngineSnapshot field '${field.name}' did not round-trip through toJson/fromJson. " +
+                    "If you just added '${field.name}', remember to (a) serialize it in toJson, " +
                     "(b) deserialize it in fromJson, (c) bump SCHEMA_VERSION, " +
                     "(d) update GameEngine.snapshot()/restore(), and " +
                     "(e) update witnessSnapshot() below if the existing witness value matches the default. " +
