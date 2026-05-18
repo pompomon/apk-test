@@ -74,6 +74,12 @@ class GameEngineSnapshotSchemaCoverageTest {
         val a = witnessSnapshot()
         val b = alternateWitnessSnapshot()
         for (field in reflectedFields()) {
+            // `schemaVersion` is special-cased: it is not user-state and
+            // `fromJson` rejects mismatched versions outright, so both
+            // witnesses must pin it to the current SCHEMA_VERSION. The
+            // round-trip test above still verifies that it survives
+            // serialization unchanged.
+            if (field.name == "schemaVersion") continue
             field.isAccessible = true
             val va = field.get(a)
             val vb = field.get(b)

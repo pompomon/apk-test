@@ -41,11 +41,11 @@ Good replacements for "different things look different":
 
 ## Snapshot / schema CI enforcement
 
-`GameEngineSnapshotSchemaCoverageTest` is a reflection-based JVM test that walks every property of `GameEngineSnapshot`'s primary constructor and verifies it round-trips through `toJson` / `fromJson`. The test enforces two invariants per field: (a) the witness value is **deliberately non-default** (non-null, non-zero, non-empty) so the round-trip assertion isn't vacuous, and (b) the value survives `toJson` → `fromJson` unchanged. If a field is added but missed in `toJson` / `fromJson`, or missed in `witnessSnapshot()`, the test fails with a clear message naming the property.
+`GameEngineSnapshotSchemaCoverageTest` is a reflection-based JVM test that walks every property of `GameEngineSnapshot`'s primary constructor and verifies it round-trips through `toJson` / `fromJson`. The test enforces two invariants per field: (a) the value survives `toJson` → `fromJson` unchanged, and (b) the field is set to **different values** in two independent witness builders (`witnessSnapshot()` and `alternateWitnessSnapshot()`) so the round-trip assertion isn't vacuous. If a field is added but missed in `toJson` / `fromJson`, or if both witnesses silently inherit the same constructor default, the test fails with a clear message naming the property. (`schemaVersion` is special-cased: both witnesses pin it to the current `SCHEMA_VERSION`, since `fromJson` rejects mismatched versions outright.)
 
 When you add a property to `GameEngineSnapshot`:
 
-1. Add the property to `witnessSnapshot()` with a **deliberately non-default value** (non-null, non-zero, non-empty). Even if the property has a default, an unset witness will be flagged as "trivial" and the test will fail until you choose a meaningful witness value.
+1. Add the property to **both** `witnessSnapshot()` and `alternateWitnessSnapshot()`, choosing values that differ between the two builders. Setting only one (or setting both to the same value) will fail the distinct-witness assertion until the discrepancy is fixed.
 2. Bump `GameEngineSnapshot.SCHEMA_VERSION` and add the JSON key in `toJson` / `fromJson`.
 3. Update `GameEngine.snapshot()` and `GameEngine.restore()` to feed/consume the new field.
 
