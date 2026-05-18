@@ -217,7 +217,15 @@ class GameEngine(
         // crash the engine through Maze.hasWall. Reject up-front so the
         // caller can fall back to a fresh game (and clear the stored
         // snapshot) instead of corrupting engine state.
+        //
+        // The engine's *currently-installed* difficulty is accepted as a
+        // fallback when its name matches the snapshot's `difficultyName`
+        // even if that name isn't in `DifficultyPresets.all` — this
+        // supports test-only / future custom presets that aren't shipped
+        // as built-ins. On-disk snapshots reach this path through
+        // `fromJson` first, which still rejects unknown names outright.
         val preset = snapshot.resolvePreset()
+            ?: difficulty.takeIf { it.name == snapshot.difficultyName }
             ?: throw IllegalArgumentException(
                 "Unknown difficulty in snapshot: ${snapshot.difficultyName}"
             )

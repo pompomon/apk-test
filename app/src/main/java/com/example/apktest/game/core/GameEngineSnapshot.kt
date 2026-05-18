@@ -213,7 +213,10 @@ data class GameEngineSnapshot(
                 val preset = snapshot.resolvePreset() ?: return null
                 if (!snapshot.isWithinBounds(preset)) return null
                 snapshot
-            } catch (_: Throwable) {
+            } catch (_: Exception) {
+                // Catch only Exception (JSON / enum / number-format / etc.)
+                // so JVM Errors such as OutOfMemoryError or StackOverflowError
+                // continue to propagate and remain diagnosable.
                 null
             }
         }

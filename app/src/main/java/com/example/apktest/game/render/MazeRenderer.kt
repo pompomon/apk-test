@@ -38,14 +38,22 @@ class MazeRenderer {
 
     // Static floor geometry cache. Keyed by maze identity (size); revision
     // is not needed because BLAST removes walls but never changes which cells
-    // exist. Stored in maze-local coords so origin shifts (viewport resize)
-    // require no rebuild.
+    // exist. The floor pattern is dominated by `FloorTextures.base` (12/16
+    // pixels per tile), so the base layer is drawn as a single maze-sized
+    // rect and only the accent / highlight pattern pixels are stored here,
+    // grouped by colour to keep `shapes.color` reassignments to one per
+    // group (instead of one per rect) and to cut per-frame `shapes.rect`
+    // calls by ~4× (e.g. MEDIUM 18×28×4 = 2,016 non-base rects + 1 base rect
+    // vs the previous 18×28×16 = 8,064 rects). Stored in maze-local coords
+    // so origin shifts (viewport resize) require no rebuild.
     private var cachedFloorMaze: Maze? = null
-    private var floorRectX: FloatArray = FloatArray(0)
-    private var floorRectY: FloatArray = FloatArray(0)
-    private var floorRectSize: Float = 0f
-    private var floorRectColor: Array<Color?> = emptyArray()
-    private var floorRectCount: Int = 0
+    private var floorAccentX: FloatArray = FloatArray(0)
+    private var floorAccentY: FloatArray = FloatArray(0)
+    private var floorAccentCount: Int = 0
+    private var floorHighlightX: FloatArray = FloatArray(0)
+    private var floorHighlightY: FloatArray = FloatArray(0)
+    private var floorHighlightCount: Int = 0
+    private var floorPixelSize: Float = 0f
 
     fun resize(width: Int, height: Int) {
         viewport.update(width, height, true)
@@ -97,19 +105,35 @@ class MazeRenderer {
 
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
-        // Floor: replay the precomputed per-pixel pattern rects. mazeOriginX/Y
-        // are added per-rect because viewport resize can shift the origin
-        // while the geometry stays valid.
-        val floorCount = floorRectCount
-        val fxs = floorRectX
-        val fys = floorRectY
-        val fcs = floorRectColor
-        val pixelSize = floorRectSize
+        // Floor base: one maze-sized rect (covers the dominant base colour
+        // for every cell). Accent/highlight pattern pixels are overlaid in
+        // a single colour-set + run per group below, so the per-frame
+        // floor cost is `1 + 2 + accentCount + highlightCount` rects with
+        // only 3 `shapes.color` assignments total (down from one per
+        // pattern pixel under the previous per-rect colour scheme).
         val ox = mazeOriginX
         val oy = mazeOriginY
-        for (i in 0 until floorCount) {
-            shapes.color = fcs[i]!!
-            shapes.rect(ox + fxs[i], oy + fys[i], pixelSize, pixelSize)
+        shapes.color = FloorTextures.base
+        shapes.rect(ox, oy, maze.width.toFloat(), maze.height.toFloat())
+
+        val pixelSize = floorPixelSize
+        val accentCount = floorAccentCount
+        if (accentCount > 0) {
+            shapes.color = FloorTextures.accent
+            val axs = floorAccentX
+            val ays = floorAccentY
+            for (i in 0 until accentCount) {
+                shapes.rect(ox + axs[i], oy + ays[i], pixelSize, pixelSize)
+            }
+        }
+        val highlightCount = floorHighlightCount
+        if (highlightCount > 0) {
+            shapes.color = FloorTextures.highlight
+            val hxs = floorHighlightX
+            val hys = floorHighlightY
+            for (i in 0 until highlightCount) {
+                shapes.rect(ox + hxs[i], oy + hys[i], pixelSize, pixelSize)
+            }
         }
 
         // Render the exit as a wooden door sprite centered on the exit cell.
@@ -142,17 +166,38 @@ class MazeRenderer {
      * Build per-pixel floor geometry for every cell of [maze]. Each cell is
      * 1 world unit wide and tiled with the [FloorTextures] pattern; since
      * every cell uses the same tile, the pattern is seamless across cell
-     * borders by construction. Stored in maze-local coords so viewport
-     * resize doesn't trigger a rebuild.
+     * borders by construction. Only the non-base pattern pixels are
+     * stored — the base colour is rendered as a single maze-sized rect at
+     * draw time — and the accent / highlight rects are grouped into
+     * separate arrays so the draw loop changes [ShapeRenderer.color] just
+     * once per group. Stored in maze-local coords so viewport resize
+     * doesn't trigger a rebuild.
      */
     private fun rebuildFloorGeometry(maze: Maze) {
         val tile = FloorTextures.TILE_SIZE
         val pixelSize = 1f / tile
-        val total = maze.width * maze.height * tile * tile
-        val xs = FloatArray(total)
-        val ys = FloatArray(total)
-        val cs = arrayOfNulls<Color>(total)
-        var n = 0
+
+        // Tally non-base pixels per tile to size the per-colour arrays
+        // exactly (no copy-on-trim).
+        var accentPerTile = 0
+        var highlightPerTile = 0
+        for (row in 0 until tile) {
+            val rowColors = FloorTextures.pixelColors[row]
+            for (col in 0 until tile) {
+                when (rowColors[col]) {
+                    FloorTextures.accent -> accentPerTile++
+                    FloorTextures.highlight -> highlightPerTile++
+                    // base pixels are covered by the maze-sized base rect.
+                }
+            }
+        }
+        val cellCount = maze.width * maze.height
+        val accentX = FloatArray(cellCount * accentPerTile)
+        val accentY = FloatArray(cellCount * accentPerTile)
+        val highlightX = FloatArray(cellCount * highlightPerTile)
+        val highlightY = FloatArray(cellCount * highlightPerTile)
+        var ai = 0
+        var hi = 0
         for (cellY in 0 until maze.height) {
             for (cellX in 0 until maze.width) {
                 for (row in 0 until tile) {
@@ -161,19 +206,27 @@ class MazeRenderer {
                     val py = cellY.toFloat() + (tile - row - 1) * pixelSize
                     val rowColors = FloorTextures.pixelColors[row]
                     for (col in 0 until tile) {
-                        xs[n] = cellX.toFloat() + col * pixelSize
-                        ys[n] = py
-                        cs[n] = rowColors[col]
-                        n++
+                        val px = cellX.toFloat() + col * pixelSize
+                        when (rowColors[col]) {
+                            FloorTextures.accent -> {
+                                accentX[ai] = px; accentY[ai] = py; ai++
+                            }
+                            FloorTextures.highlight -> {
+                                highlightX[hi] = px; highlightY[hi] = py; hi++
+                            }
+                            // base pixels are covered by the maze-sized base rect.
+                        }
                     }
                 }
             }
         }
-        floorRectX = xs
-        floorRectY = ys
-        floorRectColor = cs
-        floorRectSize = pixelSize
-        floorRectCount = n
+        floorAccentX = accentX
+        floorAccentY = accentY
+        floorAccentCount = ai
+        floorHighlightX = highlightX
+        floorHighlightY = highlightY
+        floorHighlightCount = hi
+        floorPixelSize = pixelSize
     }
 
     /**
