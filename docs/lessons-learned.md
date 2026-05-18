@@ -80,7 +80,7 @@ Each entry follows: **Rule** — *what goes wrong* — *how to avoid it* — cit
 > Cited PRs: #5, #7, #11, #12.
 
 1. **Open the menu via `scenario.onActivity { buttonMenu.performClick() }`**, not Espresso `click()`. Espresso clicks race against view layout on emulator startup. (PR #12)
-2. **Inspect popover contents via `@VisibleForTesting` snapshot hooks** (`GameMenuPopover.snapshotForTests`, `MainActivity.menuPopoverForTesting`), not Espresso `isPlatformPopup()` / focus-root matchers. The popover-focus transition is flaky under automation. (PR #11, PR #12)
+2. **Inspect popover contents via `@VisibleForTesting` snapshot hooks** (`GameMenuPopover.textSnapshotForTesting()`, `MainActivity.menuPopoverTextSnapshotForTesting()`, `MainActivity.isMenuPopoverShowingForTesting()`), not Espresso `isPlatformPopup()` / focus-root matchers. The popover-focus transition is flaky under automation. (PR #11, PR #12)
 3. **Prefer integer "observable counters" (`@VisibleForTesting(NONE)`) to timing assertions.** PR #5 replaced "did the engine advance?" assertions with a `resolvedSwipeCount` counter on the UI thread.
 4. **Poll for layout readiness** (`waitForGameHostLaidOut(...)`) before injecting gestures rather than `Thread.sleep`. (PR #5)
 5. **`supportFragmentManager.executePendingTransactions()` before casting `findFragmentById`** to avoid the transient race after `setContentView`. (PR #5)

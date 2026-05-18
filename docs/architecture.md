@@ -83,4 +83,4 @@ Tie-breaker order across all ranking sites: **risk → path distance → `PowerU
 
 - D-pad sizing uses `maze_dpad_*` dimens with `values-sw400dp` overrides for narrow vs. wider phones.
 - Swipe gestures are detected in `MainActivity.dispatchTouchEvent` (parent dispatch) — the libGDX `SurfaceView` would otherwise consume them. The dispatcher hit-tests then **never consumes** the event (returns `super.dispatchTouchEvent(ev)`).
-- The hamburger menu is `GameMenuPopover`, exposing `snapshotForTests` (`@VisibleForTesting`) so instrumented tests can inspect contents without depending on Espresso platform-popup focus.
+- The hamburger menu is `GameMenuPopover`, exposing `textSnapshotForTesting()` (`@VisibleForTesting`) — wrapped by `MainActivity.menuPopoverTextSnapshotForTesting()` and `MainActivity.isMenuPopoverShowingForTesting()` — so instrumented tests can inspect contents without depending on Espresso platform-popup focus.

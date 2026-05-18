@@ -41,11 +41,11 @@ Good replacements for "different things look different":
 
 ## Snapshot / schema CI enforcement
 
-`GameEngineSnapshotSchemaCoverageTest` is a reflection-based JVM test that walks every property of `GameEngineSnapshot`'s primary constructor and verifies it round-trips through `toJson` / `fromJson`. If a field is added but missed in `toJson` (or `fromJson`), the test fails with a clear message naming the property.
+`GameEngineSnapshotSchemaCoverageTest` is a reflection-based JVM test that walks every property of `GameEngineSnapshot`'s primary constructor and verifies it round-trips through `toJson` / `fromJson`. The test enforces two invariants per field: (a) the witness value is **deliberately non-default** (non-null, non-zero, non-empty) so the round-trip assertion isn't vacuous, and (b) the value survives `toJson` → `fromJson` unchanged. If a field is added but missed in `toJson` / `fromJson`, or missed in `witnessSnapshot()`, the test fails with a clear message naming the property.
 
 When you add a property to `GameEngineSnapshot`:
 
-1. Add a witness value (a non-default value distinct from the default) in `GameEngineSnapshotSchemaCoverageTest.witnessSnapshot()` if the existing default doesn't already differ from a freshly-constructed one.
+1. Add the property to `witnessSnapshot()` with a **deliberately non-default value** (non-null, non-zero, non-empty). Even if the property has a default, an unset witness will be flagged as "trivial" and the test will fail until you choose a meaningful witness value.
 2. Bump `GameEngineSnapshot.SCHEMA_VERSION` and add the JSON key in `toJson` / `fromJson`.
 3. Update `GameEngine.snapshot()` and `GameEngine.restore()` to feed/consume the new field.
 
@@ -53,7 +53,7 @@ When you add a property to `GameEngineSnapshot`:
 
 The CI emulator (`api-level: 29`, `arch: x86_64`) is the source of most historical flakes. Use these patterns instead of obvious-looking Espresso usage:
 
-- **Menu popover assertions:** open the menu by `scenario.onActivity { buttonMenu.performClick() }` rather than Espresso `click()`, then inspect via `GameMenuPopover.snapshotForTests()` / `MainActivity.menuPopoverForTesting`-style `@VisibleForTesting` hooks. Do not rely on Espresso `isPlatformPopup()` / focus-root matchers — they race against the platform-popup focus transfer (PR #11, PR #12).
+- **Menu popover assertions:** open the menu by `scenario.onActivity { buttonMenu.performClick() }` rather than Espresso `click()`, then inspect via `GameMenuPopover.textSnapshotForTesting()` (wrapped by `MainActivity.menuPopoverTextSnapshotForTesting()`) and `MainActivity.isMenuPopoverShowingForTesting()` `@VisibleForTesting` hooks. Do not rely on Espresso `isPlatformPopup()` / focus-root matchers — they race against the platform-popup focus transfer (PR #11, PR #12).
 - **Synthetic swipes:** prefer the test-only `MainActivity.feedSwipeEventForTesting` hook over building `MotionEvent.obtain(...)` and dispatching through `Activity.dispatchTouchEvent` (synthetic events have `SOURCE_UNKNOWN` and are silently dropped by the InputDispatcher on the emulator). If you must use real input, `Instrumentation.sendPointerSync` with an explicit `SOURCE_TOUCHSCREEN` works. Wrap in a bounded retry loop (≤5 attempts) — one success is enough (PR #5, PR #7).
 - **Layout readiness:** poll for layout (e.g. `waitForGameHostLaidOut(...)`) before injecting gestures, instead of `Thread.sleep`.
 - **Fragment retrieval:** call `supportFragmentManager.executePendingTransactions()` before casting, to avoid a transient race after `setContentView`.

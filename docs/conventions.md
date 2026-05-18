@@ -46,7 +46,7 @@ Distilled from PR #1–#14 review feedback and the existing codebase. When in do
 
 ## Testability / `@VisibleForTesting`
 
-- Use `@VisibleForTesting(otherwise = VisibleForTesting.NONE)` to expose state snapshots for instrumented tests when the production-public surface would be polluted by them. Examples: `GameMenuPopover.snapshotForTests`, swipe-feed hooks on `MainActivity` (PR #5, PR #11, PR #12).
+- Use `@VisibleForTesting(otherwise = VisibleForTesting.NONE)` to expose state snapshots for instrumented tests when the production-public surface would be polluted by them. Examples: `GameMenuPopover.textSnapshotForTesting()` (wrapped by `MainActivity.menuPopoverTextSnapshotForTesting()` and `MainActivity.isMenuPopoverShowingForTesting()`), swipe-feed hooks on `MainActivity` (PR #5, PR #11, PR #12).
 - Prefer exposing a content / state snapshot over a "did this UI focus correctly?" assertion — Espresso focus assertions are flaky on CI emulators.
 
 ## Test dependencies

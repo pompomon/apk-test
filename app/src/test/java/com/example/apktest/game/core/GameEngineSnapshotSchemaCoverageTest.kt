@@ -2,6 +2,7 @@ package com.example.apktest.game.core
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -53,19 +54,59 @@ class GameEngineSnapshotSchemaCoverageTest {
         for (field in fields) {
             field.isAccessible = true
             val originalValue = field.get(original)
+
+            // Guard against a witness that silently inherits a default value.
+            // If a future contributor adds a field with a default (e.g.
+            // `val newFlag: Boolean = false`) and forgets to (a) wire it into
+            // toJson/fromJson and (b) extend witnessSnapshot(), then both
+            // `originalValue` and `restoredValue` will be the same default —
+            // and the round-trip assertion below would pass spuriously.
+            // Refuse "trivial" witness values to force witnessSnapshot() to be
+            // updated whenever a new field is introduced.
+            val triviality = trivialityDescription(originalValue)
+            assertNull(
+                "GameEngineSnapshot field '${field.name}' has a trivial witness value " +
+                    "($triviality) in witnessSnapshot(). This makes the round-trip " +
+                    "assertion vacuous: if toJson/fromJson omit '${field.name}', the " +
+                    "restored value would silently equal the default. Set " +
+                    "'${field.name}' to a deliberately non-default value in " +
+                    "witnessSnapshot(). See docs/lessons-learned.md §1.",
+                triviality
+            )
+
             val restoredValue = field.get(restored!!)
             assertEquals(
                 "GameEngineSnapshot field '${field.name}' did not round-trip through toJson/fromJson. " +
                     "If you just added '${field.name}', remember to (a) serialize it in toJson, " +
                     "(b) deserialize it in fromJson, (c) bump SCHEMA_VERSION, " +
                     "(d) update GameEngine.snapshot()/restore(), and " +
-                    "(e) update witnessSnapshot() below if the existing witness value matches the default. " +
+                    "(e) update witnessSnapshot() below with a non-default witness value. " +
                     "See docs/lessons-learned.md §1.",
                 originalValue,
                 restoredValue
             )
         }
     }
+
+    /**
+     * Returns a short human-readable description of why [value] is a "trivial"
+     * (default-equivalent) witness, or `null` when [value] is deliberately
+     * non-default and therefore a meaningful witness. Trivial values are:
+     * `null`, numeric zero, `false`, empty strings, and empty collections /
+     * maps / arrays — i.e. anything that a forgotten `fromJson` branch would
+     * also produce by accident.
+     */
+    private fun trivialityDescription(value: Any?): String? = when {
+        value == null -> "null"
+        value is Boolean && !value -> "false"
+        value is Number && value.toDouble() == 0.0 -> "zero ($value)"
+        value is CharSequence && value.isEmpty() -> "empty string"
+        value is Collection<*> && value.isEmpty() -> "empty collection"
+        value is Map<*, *> && value.isEmpty() -> "empty map"
+        value is Array<*> && value.isEmpty() -> "empty array"
+        else -> null
+    }
+
 
     /**
      * Build a [GameEngineSnapshot] whose every field carries a value
