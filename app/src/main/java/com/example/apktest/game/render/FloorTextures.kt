@@ -32,7 +32,7 @@ object FloorTextures {
         "bbba"
     )
 
-    /** Pre-resolved colour for `pattern[row][col]`. `null` is treated as base. */
+    /** Pre-resolved colour for `pattern[row][col]`: always one of [base], [accent], or [highlight]. */
     val pixelColors: Array<Array<Color>> = Array(TILE_SIZE) { row ->
         val rowPattern = pattern[row]
         Array(TILE_SIZE) { col ->

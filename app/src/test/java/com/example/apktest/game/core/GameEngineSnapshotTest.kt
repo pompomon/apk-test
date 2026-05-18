@@ -85,7 +85,7 @@ class GameEngineSnapshotTest {
     fun fromJson_returnsNullForUnknownDifficultyName() {
         val original = GameEngine(DifficultyPresets.MEDIUM, seed)
         val json = original.snapshot().toJson()
-        val tampered = json.replace("\"Medium\"", "\"NotARealDifficulty\"")
+        val tampered = json.replace("\"${DifficultyPresets.MEDIUM.name}\"", "\"NotARealDifficulty\"")
         assertEquals(null, GameEngineSnapshot.fromJson(tampered))
     }
 
