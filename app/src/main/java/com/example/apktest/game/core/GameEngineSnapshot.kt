@@ -63,16 +63,25 @@ data class GameEngineSnapshot(
      * spawned power-ups) is inside the maze bounds implied by [preset].
      * Used to reject corrupted or mismatched snapshots before they can
      * crash the engine via out-of-bounds [Maze.hasWall] calls.
+     *
+     * The preset's [DifficultyPreset.mazeWidth]/[DifficultyPreset.mazeHeight]
+     * are rounded up to the next even number to mirror
+     * [MazeGenerator.generate], so a valid snapshot whose coordinates
+     * fall inside the *actual* generated maze (which may be one cell
+     * wider/taller than the preset for odd dimensions) is not
+     * incorrectly rejected.
      */
     fun isWithinBounds(preset: DifficultyPreset): Boolean {
-        val w = preset.mazeWidth
-        val h = preset.mazeHeight
+        val w = roundUpToEven(preset.mazeWidth)
+        val h = roundUpToEven(preset.mazeHeight)
         fun ok(x: Int, y: Int): Boolean = x in 0 until w && y in 0 until h
         if (!ok(player.x, player.y)) return false
         if (npcs.any { !ok(it.x, it.y) }) return false
         if (spawnedPowerUps.any { !ok(it.x, it.y) }) return false
         return true
     }
+
+    private fun roundUpToEven(value: Int): Int = if (value % 2 == 0) value else value + 1
 
     fun toJson(): String = JSONObject().apply {
         put(KEY_VERSION, schemaVersion)

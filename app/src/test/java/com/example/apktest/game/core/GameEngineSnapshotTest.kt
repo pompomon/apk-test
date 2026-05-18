@@ -130,4 +130,29 @@ class GameEngineSnapshotTest {
         )
         GameEngine(DifficultyPresets.MEDIUM, seed + 7).restore(bad)
     }
+
+    /**
+     * `MazeGenerator.generate` rounds maze dimensions up to the next even
+     * number, so for a preset with odd `mazeWidth`/`mazeHeight` the
+     * actual generated maze is one cell wider/taller than the preset.
+     * `isWithinBounds` must validate against those rounded-up bounds so
+     * a snapshot whose coordinates fall inside the *actual* maze (but
+     * outside the raw preset dimensions) is not incorrectly rejected.
+     */
+    @Test
+    fun isWithinBounds_acceptsCoordinatesInRoundedUpMaze() {
+        val oddPreset = DifficultyPresets.MEDIUM.copy(
+            name = "OddPreset",
+            mazeWidth = 17,
+            mazeHeight = 27
+        )
+        val original = GameEngine(DifficultyPresets.MEDIUM, seed)
+        val snap = original.snapshot().copy(
+            difficultyName = oddPreset.name,
+            // x = 17, y = 27 are outside the raw preset bounds but inside
+            // the rounded-up (18 x 28) maze that MazeGenerator produces.
+            player = original.snapshot().player.copy(x = 17, y = 27)
+        )
+        assertEquals(true, snap.isWithinBounds(oddPreset))
+    }
 }
