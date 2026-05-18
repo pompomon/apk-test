@@ -72,9 +72,10 @@ data class GameEngineSnapshot(
 
     /**
      * Validates that every persisted grid coordinate (player, NPCs,
-     * spawned power-ups) is inside the maze bounds implied by [preset].
-     * Used to reject corrupted or mismatched snapshots before they can
-     * crash the engine via out-of-bounds [Maze.hasWall] calls.
+     * spawned power-ups, and removed-wall cells) is inside the maze
+     * bounds implied by [preset]. Used to reject corrupted or mismatched
+     * snapshots before they can crash the engine via out-of-bounds
+     * [Maze.hasWall] / [Maze.removeWall] calls.
      *
      * The preset's [DifficultyPreset.mazeWidth]/[DifficultyPreset.mazeHeight]
      * are rounded up to the next even number to mirror
@@ -90,6 +91,7 @@ data class GameEngineSnapshot(
         if (!ok(player.x, player.y)) return false
         if (npcs.any { !ok(it.x, it.y) }) return false
         if (spawnedPowerUps.any { !ok(it.x, it.y) }) return false
+        if (removedWalls.any { !ok(it.x, it.y) }) return false
         return true
     }
 
