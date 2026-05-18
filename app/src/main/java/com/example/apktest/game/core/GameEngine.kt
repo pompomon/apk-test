@@ -210,7 +210,21 @@ class GameEngine(
      * already saw the layout before saving.
      */
     fun restore(snapshot: GameEngineSnapshot) {
-        difficulty = DifficultyPresets.byName(snapshot.difficultyName)
+        // Validate the snapshot before installing any state: an unknown
+        // difficulty name would silently fall back to MEDIUM via
+        // DifficultyPresets.byName and regenerate a differently-sized
+        // maze, and out-of-bounds persisted coordinates would later
+        // crash the engine through Maze.hasWall. Reject up-front so the
+        // caller can fall back to a fresh game (and clear the stored
+        // snapshot) instead of corrupting engine state.
+        val preset = snapshot.resolvePreset()
+            ?: throw IllegalArgumentException(
+                "Unknown difficulty in snapshot: ${snapshot.difficultyName}"
+            )
+        require(snapshot.isWithinBounds(preset)) {
+            "Snapshot contains positions outside maze bounds for preset ${preset.name}"
+        }
+        difficulty = preset
         playerPolicyType = snapshot.playerPolicy
         npcPolicyType = snapshot.npcPolicy
         playerPolicy = PolicyFactory.player(playerPolicyType)

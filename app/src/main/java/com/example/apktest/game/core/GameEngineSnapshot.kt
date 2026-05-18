@@ -46,6 +46,34 @@ data class GameEngineSnapshot(
         val remainingSeconds: Float?
     )
 
+    /**
+     * Returns the [DifficultyPreset] whose [DifficultyPreset.name] exactly
+     * matches [difficultyName], or `null` if the snapshot's difficulty does
+     * not correspond to a known preset. Unlike
+     * [DifficultyPresets.byName], this does **not** silently fall back to
+     * `MEDIUM` — restoring with the wrong preset would regenerate a
+     * differently-sized maze and could place persisted entities out of
+     * bounds.
+     */
+    fun resolvePreset(): DifficultyPreset? =
+        DifficultyPresets.all.firstOrNull { it.name == difficultyName }
+
+    /**
+     * Validates that every persisted grid coordinate (player, NPCs,
+     * spawned power-ups) is inside the maze bounds implied by [preset].
+     * Used to reject corrupted or mismatched snapshots before they can
+     * crash the engine via out-of-bounds [Maze.hasWall] calls.
+     */
+    fun isWithinBounds(preset: DifficultyPreset): Boolean {
+        val w = preset.mazeWidth
+        val h = preset.mazeHeight
+        fun ok(x: Int, y: Int): Boolean = x in 0 until w && y in 0 until h
+        if (!ok(player.x, player.y)) return false
+        if (npcs.any { !ok(it.x, it.y) }) return false
+        if (spawnedPowerUps.any { !ok(it.x, it.y) }) return false
+        return true
+    }
+
     fun toJson(): String = JSONObject().apply {
         put(KEY_VERSION, schemaVersion)
         put(KEY_DIFFICULTY, difficultyName)
@@ -155,7 +183,7 @@ data class GameEngineSnapshot(
                 val manualQueue = obj.getJSONArray(KEY_MANUAL_QUEUE).let { arr ->
                     List(arr.length()) { i -> Direction.valueOf(arr.getString(i)) }
                 }
-                GameEngineSnapshot(
+                val snapshot = GameEngineSnapshot(
                     schemaVersion = version,
                     difficultyName = obj.getString(KEY_DIFFICULTY),
                     playerPolicy = PlayerPolicyType.valueOf(obj.getString(KEY_PLAYER_POLICY)),
@@ -174,6 +202,17 @@ data class GameEngineSnapshot(
                     manualQueue = manualQueue,
                     manualOverrideRemainingSeconds = obj.optDouble(KEY_MANUAL_OVERRIDE, 0.0).toFloat()
                 )
+                // Reject snapshots whose difficulty name doesn't match a
+                // known preset exactly (DifficultyPresets.byName silently
+                // falls back to MEDIUM, which would regenerate a
+                // differently-sized maze on restore) and snapshots whose
+                // persisted coordinates fall outside the preset's maze
+                // bounds (e.g., corrupted blob) — installing either would
+                // later crash the engine via out-of-bounds Maze.hasWall
+                // calls.
+                val preset = snapshot.resolvePreset() ?: return null
+                if (!snapshot.isWithinBounds(preset)) return null
+                snapshot
             } catch (_: Throwable) {
                 null
             }

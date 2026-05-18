@@ -71,4 +71,63 @@ class GameEngineSnapshotTest {
             other.spawnedPowerUps.map { it.type to it.position }.toSet()
         )
     }
+
+    /**
+     * Restoring a snapshot whose `difficultyName` doesn't match any known
+     * preset must be rejected: `DifficultyPresets.byName` falls back to
+     * `MEDIUM` for unknown names, which would regenerate a
+     * differently-sized maze and could place persisted entities out of
+     * bounds. `fromJson` should return `null` so callers
+     * (e.g., `GameStateStore.load`) drop the corrupted blob instead of
+     * falling through to a silent restore with a mismatched preset.
+     */
+    @Test
+    fun fromJson_returnsNullForUnknownDifficultyName() {
+        val original = GameEngine(DifficultyPresets.MEDIUM, seed)
+        val json = original.snapshot().toJson()
+        val tampered = json.replace("\"Medium\"", "\"NotARealDifficulty\"")
+        assertEquals(null, GameEngineSnapshot.fromJson(tampered))
+    }
+
+    /**
+     * Coordinates outside the preset's maze bounds (corrupted snapshot)
+     * would later crash the engine via out-of-bounds `Maze.hasWall`
+     * calls. `fromJson` should reject the blob so callers drop it.
+     */
+    @Test
+    fun fromJson_returnsNullForOutOfBoundsPlayer() {
+        val original = GameEngine(DifficultyPresets.MEDIUM, seed)
+        val snap = original.snapshot()
+        val w = DifficultyPresets.MEDIUM.mazeWidth
+        val h = DifficultyPresets.MEDIUM.mazeHeight
+        val outOfBounds = snap.copy(
+            player = snap.player.copy(x = w + 5, y = h + 5)
+        )
+        assertEquals(null, GameEngineSnapshot.fromJson(outOfBounds.toJson()))
+    }
+
+    /**
+     * `GameEngine.restore` itself defensively validates the snapshot so
+     * programmatically-constructed (not just deserialized) invalid
+     * snapshots also fail loudly instead of corrupting engine state.
+     */
+    @Test(expected = IllegalArgumentException::class)
+    fun restore_rejectsUnknownDifficulty() {
+        val original = GameEngine(DifficultyPresets.MEDIUM, seed)
+        val snap = original.snapshot().copy(difficultyName = "NotARealDifficulty")
+        GameEngine(DifficultyPresets.MEDIUM, seed + 7).restore(snap)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun restore_rejectsOutOfBoundsCoordinates() {
+        val original = GameEngine(DifficultyPresets.MEDIUM, seed)
+        val snap = original.snapshot()
+        val bad = snap.copy(
+            player = snap.player.copy(
+                x = DifficultyPresets.MEDIUM.mazeWidth + 10,
+                y = DifficultyPresets.MEDIUM.mazeHeight + 10
+            )
+        )
+        GameEngine(DifficultyPresets.MEDIUM, seed + 7).restore(bad)
+    }
 }
