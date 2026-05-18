@@ -105,18 +105,15 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         // fragment (avoiding a redundant JSON parse on the GL thread).
         // We still embed the JSON in args so a process-death recreation
         // — where the static handoff is wiped but the fragment Bundle
-        // survives — can restore from the bundle. Falls back to a fresh
-        // game (using the intent's policy/difficulty extras) when no
-        // valid snapshot exists.
+        // survives — can restore from the bundle. The user's selected
+        // policy/difficulty are always included in the args alongside
+        // the snapshot so that, if a later recreation cannot parse the
+        // serialized snapshot (schema bump, corruption), GameFragment
+        // starts a fresh game with the user's selections rather than
+        // its hard-coded defaults. Falls back to a fresh game using
+        // those same selections when no valid snapshot exists.
         val resume = intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false)
         val resumeSnapshot = if (resume) stateStore.load() else null
-
-        if (resumeSnapshot != null) {
-            GameFragment.pendingResumeSnapshot = resumeSnapshot
-            return Bundle().apply {
-                putString(GameFragment.ARG_RESUME_SNAPSHOT_JSON, resumeSnapshot.toJson())
-            }
-        }
 
         val player = enumOrDefault(
             intent.getStringExtra(SetupActivity.EXTRA_PLAYER_POLICY),
@@ -128,10 +125,21 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         )
         val difficulty = intent.getStringExtra(SetupActivity.EXTRA_DIFFICULTY)
             ?: DifficultyPresets.MEDIUM.name
+
+        // Always carry the user's selected policy/difficulty in the
+        // fragment args, even on the resume path. If a process-death
+        // recreation later wipes the static snapshot handoff and the
+        // serialized JSON in the bundle can't be parsed (schema bump,
+        // corruption), GameFragment will still start a fresh game using
+        // the user's selections rather than its hard-coded defaults.
         return Bundle().apply {
             putString(GameFragment.ARG_PLAYER_POLICY, player.name)
             putString(GameFragment.ARG_NPC_POLICY, npc.name)
             putString(GameFragment.ARG_DIFFICULTY, difficulty)
+            if (resumeSnapshot != null) {
+                GameFragment.pendingResumeSnapshot = resumeSnapshot
+                putString(GameFragment.ARG_RESUME_SNAPSHOT_JSON, resumeSnapshot.toJson())
+            }
         }
     }
 
