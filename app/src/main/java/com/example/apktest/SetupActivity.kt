@@ -83,8 +83,16 @@ class SetupActivity : AppCompatActivity() {
         refreshResumeButtonState()
 
         buttonResume.setOnClickListener {
+            // Also forward the currently selected difficulty/player/npc so
+            // that if the saved snapshot is missing/stale by the time
+            // MainActivity loads it, the fallback fresh game uses the
+            // user's current start-menu selections instead of hard-coded
+            // defaults.
             val intent = Intent(this, MainActivity::class.java).apply {
                 putExtra(EXTRA_RESUME, true)
+                putExtra(EXTRA_PLAYER_POLICY, selectedPlayerPolicy.name)
+                putExtra(EXTRA_NPC_POLICY, selectedNpcPolicy.name)
+                putExtra(EXTRA_DIFFICULTY, selectedDifficultyName)
             }
             startActivity(intent)
         }
