@@ -1,8 +1,8 @@
 package com.example.apktest.game.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -11,13 +11,17 @@ import org.junit.Test
  * is added without also being persisted in [GameEngineSnapshot.toJson] /
  * [GameEngineSnapshot.fromJson]. See `docs/lessons-learned.md` §1.
  *
- * Strategy: build a "witness" snapshot whose every property holds a value
- * distinct from the data class' implicit default (e.g. non-zero numbers,
- * non-empty collections), round-trip it through `toJson` / `fromJson`, and
- * assert each declared field survives unchanged. If a new field is added
- * to the data class but missed in (de)serialization, `fromJson` will fall
- * back to the constructor default and the per-field assertion will fail
- * naming the offending field.
+ * Strategy: build two "witness" snapshots whose every property holds a
+ * value distinct from the *other* witness (and distinct from the data
+ * class' implicit default). Round-trip the first one through `toJson` /
+ * `fromJson`, and assert each declared field survives unchanged. To
+ * catch the "new field added with a default value, forgotten in both
+ * `witnessSnapshot()` and `fromJson`" trap, we also assert each
+ * reflected field has *different* values across the two witnesses —
+ * this fails whenever a field is left unset in either witness (both
+ * would silently take the same default), regardless of whether the
+ * default is `null`, `0`, `false`, an enum value, a non-empty default,
+ * or anything else.
  *
  * Uses [java.lang.reflect] only — no `kotlin.reflect.full` dependency —
  * so the test runs with the default Android `kotlin-stdlib` test classpath
@@ -37,10 +41,62 @@ class GameEngineSnapshotSchemaCoverageTest {
             restored
         )
 
-        // A Kotlin data class compiles every primary-constructor parameter into
-        // a private instance field with the same name. Walk those fields and
-        // verify each round-trips. Skip synthetic / static fields (e.g.
-        // `Companion`, `$stable`) which are not constructor parameters.
+        for (field in reflectedFields()) {
+            field.isAccessible = true
+            val originalValue = field.get(original)
+            val restoredValue = field.get(restored!!)
+            assertEquals(
+                "GameEngineSnapshot field '${field.name}' did not round-trip through toJson/fromJson. " +
+                    "If you just added '${field.name}', remember to (a) serialize it in toJson, " +
+                    "(b) deserialize it in fromJson, (c) bump SCHEMA_VERSION, " +
+                    "(d) update GameEngine.snapshot()/restore(), and " +
+                    "(e) update witnessSnapshot()/alternateWitnessSnapshot() below with " +
+                    "non-default witness values. See docs/lessons-learned.md §1.",
+                originalValue,
+                restoredValue
+            )
+        }
+    }
+
+    /**
+     * Defends against a future contributor adding a constructor field with
+     * a default value and forgetting to wire it into [witnessSnapshot] and
+     * [alternateWitnessSnapshot]. If both witnesses inherit the same
+     * default for a field, the round-trip test above silently passes
+     * even when `toJson`/`fromJson` ignore the field — because the
+     * restored default still equals the witness default. By asserting
+     * each reflected field differs across two independently-constructed
+     * witnesses, this test forces every new field to be deliberately set
+     * in both, which in turn forces a careful audit of (de)serialization.
+     */
+    @Test
+    fun everyDeclaredFieldHasDistinctValuesAcrossWitnesses() {
+        val a = witnessSnapshot()
+        val b = alternateWitnessSnapshot()
+        for (field in reflectedFields()) {
+            field.isAccessible = true
+            val va = field.get(a)
+            val vb = field.get(b)
+            assertNotEquals(
+                "GameEngineSnapshot field '${field.name}' has the same value in " +
+                    "witnessSnapshot() and alternateWitnessSnapshot(). This makes the " +
+                    "round-trip assertion vacuous: if toJson/fromJson omit '${field.name}', " +
+                    "the restored value would silently equal the (shared) default. Set " +
+                    "'${field.name}' to deliberately *different* values in the two " +
+                    "witness builders. See docs/lessons-learned.md §1.",
+                va,
+                vb
+            )
+        }
+    }
+
+    /**
+     * A Kotlin data class compiles every primary-constructor parameter
+     * into a private instance field with the same name. Walk those
+     * fields, skipping synthetic / static fields (e.g. `Companion`,
+     * `$stable`) which are not constructor parameters.
+     */
+    private fun reflectedFields(): List<java.lang.reflect.Field> {
         val fields = GameEngineSnapshot::class.java.declaredFields
             .filter { f ->
                 !java.lang.reflect.Modifier.isStatic(f.modifiers) && !f.isSynthetic
@@ -50,68 +106,15 @@ class GameEngineSnapshotSchemaCoverageTest {
                 "constructor parameters, but found none — has the data-class shape changed?",
             fields.isNotEmpty()
         )
-
-        for (field in fields) {
-            field.isAccessible = true
-            val originalValue = field.get(original)
-
-            // Guard against a witness that silently inherits a default value.
-            // If a future contributor adds a field with a default (e.g.
-            // `val newFlag: Boolean = false`) and forgets to (a) wire it into
-            // toJson/fromJson and (b) extend witnessSnapshot(), then both
-            // `originalValue` and `restoredValue` will be the same default —
-            // and the round-trip assertion below would pass spuriously.
-            // Refuse "trivial" witness values to force witnessSnapshot() to be
-            // updated whenever a new field is introduced.
-            val triviality = trivialityDescription(originalValue)
-            assertNull(
-                "GameEngineSnapshot field '${field.name}' has a trivial witness value " +
-                    "($triviality) in witnessSnapshot(). This makes the round-trip " +
-                    "assertion vacuous: if toJson/fromJson omit '${field.name}', the " +
-                    "restored value would silently equal the default. Set " +
-                    "'${field.name}' to a deliberately non-default value in " +
-                    "witnessSnapshot(). See docs/lessons-learned.md §1.",
-                triviality
-            )
-
-            val restoredValue = field.get(restored!!)
-            assertEquals(
-                "GameEngineSnapshot field '${field.name}' did not round-trip through toJson/fromJson. " +
-                    "If you just added '${field.name}', remember to (a) serialize it in toJson, " +
-                    "(b) deserialize it in fromJson, (c) bump SCHEMA_VERSION, " +
-                    "(d) update GameEngine.snapshot()/restore(), and " +
-                    "(e) update witnessSnapshot() below with a non-default witness value. " +
-                    "See docs/lessons-learned.md §1.",
-                originalValue,
-                restoredValue
-            )
-        }
+        return fields
     }
-
-    /**
-     * Returns a short human-readable description of why [value] is a "trivial"
-     * (default-equivalent) witness, or `null` when [value] is deliberately
-     * non-default and therefore a meaningful witness. Trivial values are:
-     * `null`, numeric zero, `false`, empty strings, and empty collections /
-     * maps / arrays — i.e. anything that a forgotten `fromJson` branch would
-     * also produce by accident.
-     */
-    private fun trivialityDescription(value: Any?): String? = when {
-        value == null -> "null"
-        value is Boolean && !value -> "false"
-        value is Number && value.toDouble() == 0.0 -> "zero ($value)"
-        value is CharSequence && value.isEmpty() -> "empty string"
-        value is Collection<*> && value.isEmpty() -> "empty collection"
-        value is Map<*, *> && value.isEmpty() -> "empty map"
-        value is Array<*> && value.isEmpty() -> "empty array"
-        else -> null
-    }
-
 
     /**
      * Build a [GameEngineSnapshot] whose every field carries a value
-     * distinguishable from the implicit data-class default. When you add a
-     * new field, extend this builder with a non-default witness value.
+     * distinguishable from the implicit data-class default *and* from
+     * [alternateWitnessSnapshot]. When you add a new field, extend
+     * both this builder and [alternateWitnessSnapshot] with values
+     * that differ from each other.
      */
     private fun witnessSnapshot(): GameEngineSnapshot = GameEngineSnapshot(
         schemaVersion = GameEngineSnapshot.SCHEMA_VERSION,
@@ -146,6 +149,54 @@ class GameEngineSnapshotSchemaCoverageTest {
         manualOverrideRemainingSeconds = 3.0f,
         removedWalls = listOf(
             GameEngineSnapshot.RemovedWallSnapshot(x = 0, y = 0, direction = Direction.EAST)
+        )
+    )
+
+    /**
+     * Companion to [witnessSnapshot] — every field must hold a value
+     * that differs from the corresponding field in [witnessSnapshot].
+     * The schema-version is held constant (it's not user-state and
+     * `fromJson` rejects mismatched versions outright).
+     */
+    private fun alternateWitnessSnapshot(): GameEngineSnapshot = GameEngineSnapshot(
+        schemaVersion = GameEngineSnapshot.SCHEMA_VERSION,
+        difficultyName = DifficultyPresets.EASY.name,
+        playerPolicy = PlayerPolicyType.ASTAR_EXIT,
+        npcPolicy = NpcPolicyType.PATROL_GUARD,
+        seed = 0xC0FFEEL,
+        status = GameStatus.PAUSED,
+        elapsedSeconds = 99.0f,
+        steps = 42,
+        player = GameEngineSnapshot.PlayerSnapshot(x = 4, y = 6, facing = Direction.SOUTH),
+        npcs = listOf(
+            GameEngineSnapshot.NpcSnapshot(id = 3, x = 5, y = 7, facing = Direction.EAST)
+        ),
+        spawnedPowerUps = listOf(
+            GameEngineSnapshot.SpawnedPowerUpSnapshot(
+                type = PowerUpType.FREEZE,
+                x = 2,
+                y = 2,
+                remainingSeconds = 8.0f
+            ),
+            GameEngineSnapshot.SpawnedPowerUpSnapshot(
+                type = PowerUpType.BLAST,
+                x = 3,
+                y = 3,
+                remainingSeconds = null
+            )
+        ),
+        activeEffects = listOf(
+            GameEngineSnapshot.ActiveEffectSnapshot(
+                type = PowerUpType.FREEZE,
+                remainingSeconds = 5.0f
+            )
+        ),
+        npcInducedPlayerFreezeRemainingSeconds = null,
+        manualQueue = listOf(Direction.NORTH),
+        manualOverrideRemainingSeconds = 6.0f,
+        removedWalls = listOf(
+            GameEngineSnapshot.RemovedWallSnapshot(x = 1, y = 1, direction = Direction.SOUTH),
+            GameEngineSnapshot.RemovedWallSnapshot(x = 2, y = 0, direction = Direction.WEST)
         )
     )
 }

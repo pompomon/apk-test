@@ -132,6 +132,28 @@ class GameEngineSnapshotTest {
     }
 
     /**
+     * `removedWalls` entries are persisted coordinates too — a corrupted
+     * blob with an out-of-bounds removed-wall cell would later crash
+     * `GameEngine.restore` when it tries to re-apply the wall removal
+     * via `Maze.removeWall`. `isWithinBounds` must reject these.
+     */
+    @Test(expected = IllegalArgumentException::class)
+    fun restore_rejectsOutOfBoundsRemovedWalls() {
+        val original = GameEngine(DifficultyPresets.MEDIUM, seed)
+        val snap = original.snapshot()
+        val bad = snap.copy(
+            removedWalls = listOf(
+                GameEngineSnapshot.RemovedWallSnapshot(
+                    x = DifficultyPresets.MEDIUM.mazeWidth + 10,
+                    y = DifficultyPresets.MEDIUM.mazeHeight + 10,
+                    direction = Direction.NORTH
+                )
+            )
+        )
+        GameEngine(DifficultyPresets.MEDIUM, seed + 7).restore(bad)
+    }
+
+    /**
      * `MazeGenerator.generate` rounds maze dimensions up to the next even
      * number, so for a preset with odd `mazeWidth`/`mazeHeight` the
      * actual generated maze is one cell wider/taller than the preset.
