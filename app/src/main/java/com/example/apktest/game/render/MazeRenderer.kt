@@ -38,11 +38,12 @@ class MazeRenderer {
 
     // Static floor geometry cache. Keyed by maze identity (size); revision
     // is not needed because BLAST removes walls but never changes which cells
-    // exist. The floor pattern is dominated by `FloorTextures.base` (12/16
-    // pixels per tile), so the base layer is drawn as a single maze-sized
-    // rect and only the accent / highlight pattern pixels are stored here,
-    // grouped by colour to keep `shapes.color` reassignments to one per
-    // group (instead of one per rect) and to cut per-frame `shapes.rect`
+    // exist. The floor pattern is a 4×4 (`FloorTextures.TILE_SIZE`) tile
+    // dominated by `FloorTextures.base` (12 of the 16 pixels per tile), so
+    // the base layer is drawn as a single maze-sized rect and only the
+    // accent / highlight pattern pixels (4 of the 16 per tile) are stored
+    // here, grouped by colour to keep `shapes.color` reassignments to one
+    // per group (instead of one per rect) and to cut per-frame `shapes.rect`
     // calls by ~4× (e.g. MEDIUM 18×28×4 = 2,016 non-base rects + 1 base rect
     // vs the previous 18×28×16 = 8,064 rects). Stored in maze-local coords
     // so origin shifts (viewport resize) require no rebuild.

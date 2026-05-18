@@ -180,9 +180,20 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
                 // captureSnapshotAsync's callback runs on the GL thread and may
                 // fire after onDestroy() has shut the executor down. Guard so a
                 // late snapshot doesn't crash with RejectedExecutionException.
+                //
+                // Re-check the snapshot's status here: the HUD reading above
+                // is a UI-thread sample taken before the GL-thread capture,
+                // and the game can transition to WIN/LOSE in between. If
+                // that happens, clear any prior saved state instead of
+                // persisting a terminal snapshot (which would re-launch the
+                // user straight back into the end-of-game overlay).
                 try {
-                    autosaveExecutor.execute {
-                        stateStore.save(snapshot)
+                    if (snapshot.status == GameStatus.WIN || snapshot.status == GameStatus.LOSE) {
+                        autosaveExecutor.execute { stateStore.clearBlocking() }
+                    } else {
+                        autosaveExecutor.execute {
+                            stateStore.save(snapshot)
+                        }
                     }
                 } catch (_: RejectedExecutionException) {
                     // Executor already shut down — drop the late autosave.
