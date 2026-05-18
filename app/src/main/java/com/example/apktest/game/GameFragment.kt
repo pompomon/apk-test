@@ -23,16 +23,6 @@ class GameFragment : AndroidFragmentApplication() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Prefer the in-memory parsed-snapshot handoff (set by
-        // MainActivity when the user taps Resume) so we don't re-parse
-        // the snapshot JSON the state store already parsed for
-        // validation. The arg-based JSON fallback below is still used
-        // for process-death recreations where the static field has been
-        // wiped but the Bundle survives.
-        pendingResumeSnapshot?.let {
-            pendingSnapshot = it
-            pendingResumeSnapshot = null
-        }
         arguments?.let { args ->
             args.getString(ARG_PLAYER_POLICY)?.let { name ->
                 pendingPlayerPolicy = PlayerPolicyType.entries.firstOrNull { it.name == name }
@@ -43,10 +33,19 @@ class GameFragment : AndroidFragmentApplication() {
                     ?: pendingNpcPolicy
             }
             args.getString(ARG_DIFFICULTY)?.let { pendingDifficulty = it }
-            if (pendingSnapshot == null) {
-                args.getString(ARG_RESUME_SNAPSHOT_JSON)?.let { json ->
-                    pendingSnapshot = GameEngineSnapshot.fromJson(json)
-                }
+            // Only consume a resume snapshot if MainActivity explicitly
+            // marked this fragment instance as a resume by attaching
+            // ARG_RESUME_SNAPSHOT_JSON. Prefer the in-memory parsed
+            // handoff (set by MainActivity when the user taps Resume)
+            // so we don't re-parse the JSON the state store already
+            // parsed for validation. Fall back to parsing the JSON in
+            // args for process-death recreations where the static field
+            // has been wiped but the Bundle survives.
+            val resumeJson = args.getString(ARG_RESUME_SNAPSHOT_JSON)
+            if (resumeJson != null) {
+                val handoff = pendingResumeSnapshot
+                pendingResumeSnapshot = null
+                pendingSnapshot = handoff ?: GameEngineSnapshot.fromJson(resumeJson)
             }
         }
     }
