@@ -211,8 +211,8 @@ class ExampleInstrumentedTest {
                     snapshot.contains(activity.getString(R.string.legend))
                 )
                 assertTrue(
-                    "Expected snapshot to contain back-to-setup button text",
-                    snapshot.contains(activity.getString(R.string.back_to_setup))
+                    "Expected snapshot to contain pause-and-exit button text",
+                    snapshot.contains(activity.getString(R.string.pause_and_exit))
                 )
                 assertTrue(
                     "Expected snapshot to include status HUD text",

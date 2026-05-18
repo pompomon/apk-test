@@ -30,7 +30,13 @@ class GameMenuPopover(
         fun onPauseResume()
         fun onRestart()
         fun onLegend()
-        fun onBackToSetup()
+        /**
+         * Pause the game, persist a snapshot, and return to the start menu.
+         * Replaces the older "Back to Setup" action; the host should call
+         * `togglePause()` only if the engine is currently RUNNING, capture
+         * the snapshot, save it, then finish the activity.
+         */
+        fun onPauseAndExit()
     }
 
     private val statusText: TextView
@@ -57,7 +63,7 @@ class GameMenuPopover(
         root.addView(actionButton(R.string.legend) { callbacks.onLegend() }.also {
             (it.layoutParams as LinearLayout.LayoutParams).topMargin = gap
         })
-        root.addView(actionButton(R.string.back_to_setup) { callbacks.onBackToSetup() }.also {
+        root.addView(actionButton(R.string.pause_and_exit) { callbacks.onPauseAndExit() }.also {
             (it.layoutParams as LinearLayout.LayoutParams).topMargin = gap
         })
 

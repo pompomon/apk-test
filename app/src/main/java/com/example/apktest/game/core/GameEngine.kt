@@ -24,6 +24,38 @@ class GameEngine(
     var steps: Int = 0
         private set
 
+    /**
+     * Seconds remaining on the pre-game countdown (3 / 2 / 1 / GO). While
+     * positive, [update] consumes the value but does not advance the
+     * simulation. Starts at `0f` (no countdown); callers (e.g. [MazeGame])
+     * arm it via [startCountdown] after construction or after [restart].
+     */
+    var countdownRemainingSeconds: Float = 0f
+        private set
+
+    /**
+     * Seconds remaining on the post-countdown "GO!" flash. Set to
+     * [COUNTDOWN_GO_FLASH_SECONDS] on the tick where [countdownRemainingSeconds]
+     * transitions from positive to zero, and decayed by subsequent
+     * [update] deltas. Renderers display the "GO!" overlay while this is
+     * positive (the countdown numeric value itself is already zero by then).
+     */
+    var goFlashRemainingSeconds: Float = 0f
+        private set
+
+    /**
+     * Seconds remaining on a manual-input override. While positive (and the
+     * player policy is not [PlayerPolicyType.MANUAL]), [updatePlayer]
+     * consumes queued manual directions instead of consulting the active
+     * automated policy. See [queueManualMove].
+     */
+    val manualOverrideRemainingSeconds: Float
+        get() = (manualOverrideUntilSeconds - elapsedSeconds).coerceAtLeast(0f)
+
+    /** The seed used to generate the current [maze]. Exposed so snapshots can persist it. */
+    var currentSeed: Long = seed
+        private set
+
     var maze: Maze = MazeGenerator.generate(difficulty.mazeWidth, difficulty.mazeHeight, seed)
         private set
     var navigator: MazeNavigator = MazeNavigator(maze)
@@ -53,6 +85,12 @@ class GameEngine(
     private var playerAccumulator = 0f
     private var npcAccumulator = 0f
     private val manualQueue = ArrayDeque<Direction>()
+    /**
+     * Absolute [elapsedSeconds] timestamp at which the manual-input override
+     * (see [queueManualMove]) expires. `<= elapsedSeconds` means the override
+     * is inactive. Reset to `0f` in [restart] and [setPlayerPolicy].
+     */
+    private var manualOverrideUntilSeconds = 0f
 
     private val powerUpsByCell = mutableMapOf<GridPos, SpawnedPowerUp>()
     private val activeEffectsByType = mutableMapOf<PowerUpType, ActivePowerUpEffect>()
@@ -71,6 +109,7 @@ class GameEngine(
     }
 
     fun restart(seed: Long = System.currentTimeMillis()) {
+        currentSeed = seed
         maze = MazeGenerator.generate(difficulty.mazeWidth, difficulty.mazeHeight, seed)
         navigator = MazeNavigator(maze)
         player = Player(maze.start)
@@ -81,6 +120,9 @@ class GameEngine(
         status = GameStatus.RUNNING
         elapsedSeconds = 0f
         steps = 0
+        countdownRemainingSeconds = 0f
+        goFlashRemainingSeconds = 0f
+        manualOverrideUntilSeconds = 0f
         playerAccumulator = 0f
         npcAccumulator = 0f
         powerUpRespawnAccumulator = 0f
@@ -103,6 +145,7 @@ class GameEngine(
         playerPolicyType = type
         playerPolicy = PolicyFactory.player(type)
         manualQueue.clear()
+        manualOverrideUntilSeconds = 0f
         playerPolicy.reset()
     }
 
@@ -122,12 +165,207 @@ class GameEngine(
         resetNpcPolicyState()
     }
 
+    /**
+     * Capture the engine's observable state as a serialisable
+     * [GameEngineSnapshot]. RNG and per-frame accumulator state are
+     * intentionally omitted; see the snapshot KDoc for rationale.
+     */
+    fun snapshot(): GameEngineSnapshot = GameEngineSnapshot(
+        difficultyName = difficulty.name,
+        playerPolicy = playerPolicyType,
+        npcPolicy = npcPolicyType,
+        seed = currentSeed,
+        status = status,
+        elapsedSeconds = elapsedSeconds,
+        steps = steps,
+        player = GameEngineSnapshot.PlayerSnapshot(player.position.x, player.position.y, player.facing),
+        npcs = npcs.map {
+            GameEngineSnapshot.NpcSnapshot(it.id, it.position.x, it.position.y, it.facing)
+        },
+        spawnedPowerUps = powerUpsByCell.values.map { p ->
+            GameEngineSnapshot.SpawnedPowerUpSnapshot(
+                type = p.type,
+                x = p.position.x,
+                y = p.position.y,
+                remainingSeconds = p.expiresAtSeconds?.let { (it - elapsedSeconds).coerceAtLeast(0f) }
+            )
+        },
+        activeEffects = activeEffectsByType.values.map { e ->
+            GameEngineSnapshot.ActiveEffectSnapshot(
+                type = e.type,
+                remainingSeconds = e.endsAtSeconds?.let { (it - elapsedSeconds).coerceAtLeast(0f) }
+            )
+        },
+        npcInducedPlayerFreezeRemainingSeconds = npcInducedPlayerFreeze?.endsAtSeconds
+            ?.let { (it - elapsedSeconds).coerceAtLeast(0f) },
+        manualQueue = manualQueue.toList(),
+        manualOverrideRemainingSeconds = manualOverrideRemainingSeconds,
+        removedWalls = computeRemovedWalls()
+    )
+
+    /**
+     * Returns the set of walls that gameplay has removed relative to the
+     * baseline maze [MazeGenerator] produces for [currentSeed]. Each shared
+     * wall is emitted once (using EAST for the cell with the smaller x and
+     * NORTH for the cell with the smaller y) so the persisted list is
+     * compact and round-trips through [restore] without duplicates.
+     */
+    private fun computeRemovedWalls(): List<GameEngineSnapshot.RemovedWallSnapshot> {
+        val baseline = MazeGenerator.generate(difficulty.mazeWidth, difficulty.mazeHeight, currentSeed)
+        // Defensive: if the regenerated baseline ever stopped matching the
+        // installed maze's dimensions, abandon the diff rather than risk
+        // an indexing crash — restore will still produce a playable maze
+        // from the seed, just without preserving mid-run wall mutations.
+        if (baseline.width != maze.width || baseline.height != maze.height) return emptyList()
+        val baselineCells = baseline.copyCells()
+        val currentCells = maze.copyCells()
+        val result = mutableListOf<GameEngineSnapshot.RemovedWallSnapshot>()
+        for (y in 0 until maze.height) {
+            for (x in 0 until maze.width) {
+                val i = y * maze.width + x
+                // Bits set in baseline but cleared in current = removed walls.
+                val diff = baselineCells[i] and currentCells[i].inv()
+                if (diff and Maze.WALL_EAST != 0 && x + 1 < maze.width) {
+                    result.add(GameEngineSnapshot.RemovedWallSnapshot(x, y, Direction.EAST))
+                }
+                if (diff and Maze.WALL_NORTH != 0 && y + 1 < maze.height) {
+                    result.add(GameEngineSnapshot.RemovedWallSnapshot(x, y, Direction.NORTH))
+                }
+            }
+        }
+        return result
+    }
+
+    /**
+     * Restore engine state from a [GameEngineSnapshot]. Regenerates the
+     * maze deterministically from [GameEngineSnapshot.seed], then overlays
+     * the persisted positions, power-ups, and timers on top. The countdown
+     * is **not** re-armed — resumed games skip the 3-2-1 since the player
+     * already saw the layout before saving.
+     */
+    fun restore(snapshot: GameEngineSnapshot) {
+        // Validate the snapshot before installing any state: an unknown
+        // difficulty name would silently fall back to MEDIUM via
+        // DifficultyPresets.byName and regenerate a differently-sized
+        // maze, and out-of-bounds persisted coordinates would later
+        // crash the engine through Maze.hasWall. Reject up-front so the
+        // caller can fall back to a fresh game (and clear the stored
+        // snapshot) instead of corrupting engine state.
+        //
+        // The engine's *currently-installed* difficulty is accepted as a
+        // fallback when its name matches the snapshot's `difficultyName`
+        // even if that name isn't in `DifficultyPresets.all` — this
+        // supports test-only / future custom presets that aren't shipped
+        // as built-ins. On-disk snapshots reach this path through
+        // `fromJson` first, which still rejects unknown names outright.
+        val preset = snapshot.resolvePreset()
+            ?: difficulty.takeIf { it.name == snapshot.difficultyName }
+            ?: throw IllegalArgumentException(
+                "Unknown difficulty in snapshot: ${snapshot.difficultyName}"
+            )
+        require(snapshot.isWithinBounds(preset)) {
+            "Snapshot contains positions outside maze bounds for preset ${preset.name}"
+        }
+        difficulty = preset
+        playerPolicyType = snapshot.playerPolicy
+        npcPolicyType = snapshot.npcPolicy
+        playerPolicy = PolicyFactory.player(playerPolicyType)
+        currentSeed = snapshot.seed
+        maze = MazeGenerator.generate(difficulty.mazeWidth, difficulty.mazeHeight, currentSeed)
+        // Re-apply any walls that gameplay had removed (e.g., via BLAST)
+        // before the snapshot was taken, so a resumed game preserves
+        // mid-run wall destruction instead of restoring the pristine
+        // seeded layout. Maze.removeWall is bounds-checked and idempotent.
+        snapshot.removedWalls.forEach { w ->
+            val pos = GridPos(w.x, w.y)
+            if (maze.inBounds(pos)) maze.removeWall(pos, w.direction)
+        }
+        navigator = MazeNavigator(maze)
+        random = Random(currentSeed)
+        npcRandom = Random(currentSeed xor NPC_RANDOM_SEED_MIX)
+        npcPolicy = PolicyFactory.npc(npcPolicyType, npcRandom)
+        playerPolicy.reset()
+        npcPolicy.reset()
+
+        status = snapshot.status
+        elapsedSeconds = snapshot.elapsedSeconds
+        steps = snapshot.steps
+        countdownRemainingSeconds = 0f
+        goFlashRemainingSeconds = 0f
+
+        player = Player(
+            position = GridPos(snapshot.player.x, snapshot.player.y),
+            facing = snapshot.player.facing
+        )
+        npcs = snapshot.npcs.map { n ->
+            Npc(
+                id = n.id,
+                position = GridPos(n.x, n.y),
+                facing = n.facing,
+                patrolRoute = patrolRouteFrom(GridPos(n.x, n.y))
+            )
+        }.toMutableList()
+
+        powerUpsByCell.clear()
+        snapshot.spawnedPowerUps.forEach { p ->
+            val pos = GridPos(p.x, p.y)
+            powerUpsByCell[pos] = SpawnedPowerUp(
+                type = p.type,
+                position = pos,
+                spawnedAtSeconds = elapsedSeconds,
+                expiresAtSeconds = p.remainingSeconds?.let { elapsedSeconds + it }
+            )
+        }
+        activeEffectsByType.clear()
+        snapshot.activeEffects.forEach { e ->
+            activeEffectsByType[e.type] = ActivePowerUpEffect(
+                type = e.type,
+                startedAtSeconds = elapsedSeconds,
+                endsAtSeconds = e.remainingSeconds?.let { elapsedSeconds + it }
+            )
+        }
+        npcInducedPlayerFreeze = snapshot.npcInducedPlayerFreezeRemainingSeconds?.let { rem ->
+            ActivePowerUpEffect(
+                type = PowerUpType.FREEZE,
+                startedAtSeconds = elapsedSeconds,
+                endsAtSeconds = elapsedSeconds + rem
+            )
+        }
+        manualQueue.clear()
+        snapshot.manualQueue.forEach { manualQueue.addLast(it) }
+        manualOverrideUntilSeconds = elapsedSeconds + snapshot.manualOverrideRemainingSeconds.coerceAtLeast(0f)
+        playerAccumulator = 0f
+        npcAccumulator = 0f
+        powerUpRespawnAccumulator = 0f
+    }
+
+    /**
+     * Accept a manual movement request. Always queued regardless of the
+     * active [playerPolicyType] so the player can nudge the character even
+     * under an automated policy. When the policy is not [PlayerPolicyType.MANUAL],
+     * a successful queue arms a [MANUAL_OVERRIDE_DURATION_SECONDS]-long
+     * override window during which [updatePlayer] consumes the queued
+     * direction instead of asking the policy for a move.
+     */
     fun queueManualMove(direction: Direction) {
-        if (playerPolicyType != PlayerPolicyType.MANUAL) return
         if (manualQueue.size >= MAX_MANUAL_QUEUE) {
             manualQueue.removeFirst()
         }
         manualQueue.addLast(direction)
+        if (playerPolicyType != PlayerPolicyType.MANUAL) {
+            manualOverrideUntilSeconds = elapsedSeconds + MANUAL_OVERRIDE_DURATION_SECONDS
+        }
+    }
+
+    /**
+     * Arm (or re-arm) the pre-game countdown. While
+     * [countdownRemainingSeconds] is positive, [update] consumes the value
+     * from the supplied delta but does not advance simulation state. Called
+     * by the game host after construction / restart so the player has time
+     * to assess the layout before NPCs start moving.
+     */
+    fun startCountdown(seconds: Float = COUNTDOWN_DEFAULT_SECONDS) {
+        countdownRemainingSeconds = seconds.coerceAtLeast(0f)
     }
 
     fun togglePause() {
@@ -141,23 +379,54 @@ class GameEngine(
     fun update(deltaSeconds: Float) {
         if (status != GameStatus.RUNNING) return
 
-        elapsedSeconds += deltaSeconds
+        // Pre-game countdown: consume the delta but freeze the simulation so
+        // the player has time to read the maze before NPCs move. We
+        // intentionally also pause `elapsedSeconds` so power-up lifetimes
+        // and HUD timers don't drain during the countdown.
+        var effectiveDelta = deltaSeconds
+        // Tracks whether [goFlashRemainingSeconds] was armed during *this*
+        // update() call (i.e., the countdown finished on this very tick).
+        // We skip decay in this case so the full
+        // [COUNTDOWN_GO_FLASH_SECONDS] window survives the transition tick
+        // regardless of how large the incoming delta or leftover delta is
+        // (avoids the GO! frame being consumed by a single big delta).
+        var goFlashArmedThisTick = false
+        if (countdownRemainingSeconds > 0f) {
+            val consumed = effectiveDelta.coerceAtMost(countdownRemainingSeconds)
+            countdownRemainingSeconds -= consumed
+            if (countdownRemainingSeconds < 0f) countdownRemainingSeconds = 0f
+            effectiveDelta -= consumed
+            // Arm the post-countdown "GO!" flash on the exact tick the
+            // countdown reaches zero, so the renderer has a visible window
+            // (~[COUNTDOWN_GO_FLASH_SECONDS]) to display "GO!" even though
+            // [countdownRemainingSeconds] is already zero by this point.
+            if (countdownRemainingSeconds == 0f) {
+                goFlashRemainingSeconds = COUNTDOWN_GO_FLASH_SECONDS
+                goFlashArmedThisTick = true
+            }
+            if (effectiveDelta <= 0f) return
+        }
+        if (goFlashRemainingSeconds > 0f && !goFlashArmedThisTick) {
+            goFlashRemainingSeconds = (goFlashRemainingSeconds - effectiveDelta).coerceAtLeast(0f)
+        }
+
+        elapsedSeconds += effectiveDelta
         // Pause player time accumulation while the NPC-induced FREEZE is
         // active so the player can't be moved by manual input or by automated
         // policies, and so no burst of accumulated moves fires after thaw.
         // Mirrors the symmetric NPC accumulator gate below.
         if (!isPlayerFrozenByNpc()) {
-            playerAccumulator += deltaSeconds
+            playerAccumulator += effectiveDelta
         }
         // Pause NPC time accumulation while FREEZE is active so freezing truly
         // pauses NPC movement. Preserve the existing accumulator value so any
         // partial progress made before FREEZE started is not discarded
         // (avoids forcing an extra full interval after FREEZE expires).
         if (!isEffectActive(PowerUpType.FREEZE)) {
-            npcAccumulator += deltaSeconds
+            npcAccumulator += effectiveDelta
         }
 
-        processPowerUpLifecycles(deltaSeconds)
+        processPowerUpLifecycles(effectiveDelta)
 
         val playerInterval = 1f / effectivePlayerMovesPerSecond()
         while (
@@ -192,27 +461,40 @@ class GameEngine(
         activePowerUps = activePowerUpSnapshots().map { snapshot ->
             val remaining = snapshot.remainingSeconds?.coerceAtLeast(0f)
             if (remaining == null) snapshot.type.label else "${snapshot.type.label} %.1fs".format(remaining)
-        } + npcInducedFreezeHudEntries(),
-        powerUpsOnMap = powerUpsByCell.size
+        } + npcInducedFreezeHudEntries() + manualOverrideHudEntries(),
+        powerUpsOnMap = powerUpsByCell.size,
+        countdownRemainingSeconds = countdownRemainingSeconds.takeIf { it > 0f },
+        manualOverrideRemainingSeconds = manualOverrideRemainingSeconds.takeIf { it > 0f }
     )
 
     private fun updatePlayer() {
-        val requestedDirection = when (playerPolicyType) {
-            PlayerPolicyType.MANUAL -> manualQueue.removeFirstOrNull()
-            else -> playerPolicy.nextMove(
-                PlayerPolicyContext(
-                    maze = maze,
-                    navigator = navigator,
-                    player = player,
-                    exit = maze.exit,
-                    npcs = npcs,
-                    playerInvisibleToNpcs = isEffectActive(PowerUpType.INVISIBILITY),
-                    npcsFrozen = isEffectActive(PowerUpType.FREEZE),
-                    spawnedPowerUps = spawnedPowerUpsView,
-                    pickupRadius = difficulty.automaticPickupRadius
-                )
-            )
-        } ?: return
+        val manualOverrideActive = elapsedSeconds < manualOverrideUntilSeconds
+        // For MANUAL policy, only queued input drives movement. For an
+        // automated policy with an active override, prefer the queued
+        // manual direction if present, but fall back to the policy when
+        // the queue is empty so a single nudge can't freeze the player
+        // for the full override window.
+        val queued = if (playerPolicyType == PlayerPolicyType.MANUAL || manualOverrideActive) {
+            manualQueue.removeFirstOrNull()
+        } else null
+        val requestedDirection = queued
+            ?: if (playerPolicyType == PlayerPolicyType.MANUAL) {
+                return
+            } else {
+                playerPolicy.nextMove(
+                    PlayerPolicyContext(
+                        maze = maze,
+                        navigator = navigator,
+                        player = player,
+                        exit = maze.exit,
+                        npcs = npcs,
+                        playerInvisibleToNpcs = isEffectActive(PowerUpType.INVISIBILITY),
+                        npcsFrozen = isEffectActive(PowerUpType.FREEZE),
+                        spawnedPowerUps = spawnedPowerUpsView,
+                        pickupRadius = difficulty.automaticPickupRadius
+                    )
+                ) ?: return
+            }
 
         // GHOST_MODE lets the player walk through walls; NPCs intentionally do
         // not gain this ability (NpcPolicyContext is unchanged) so the power-up
@@ -512,6 +794,17 @@ class GameEngine(
         return listOf(if (remaining == null) label else "%s %.1fs".format(label, remaining))
     }
 
+    /**
+     * Single-element HUD list (or empty) describing the active manual-input
+     * override, so the popover surfaces "Manual Xs" alongside power-up
+     * effects. Only emitted when the override is currently active.
+     */
+    private fun manualOverrideHudEntries(): List<String> {
+        val remaining = manualOverrideRemainingSeconds
+        if (remaining <= 0f) return emptyList()
+        return listOf("Manual %.1fs".format(remaining))
+    }
+
     private fun isEffectActive(type: PowerUpType): Boolean {
         val effect = activeEffectsByType[type] ?: return false
         val endsAt = effect.endsAtSeconds ?: return true
@@ -527,6 +820,12 @@ class GameEngine(
         private const val MAX_EXTRA_PATROL_WAYPOINTS = 2
         private const val MAX_MANUAL_QUEUE = 8
         private const val SPEED_UP_MULTIPLIER = 2f
+        /** Default duration of the manual-input override (see [queueManualMove]). */
+        const val MANUAL_OVERRIDE_DURATION_SECONDS = 3f
+        /** Default duration of the pre-game countdown (see [startCountdown]). */
+        const val COUNTDOWN_DEFAULT_SECONDS = 3f
+        /** How long the post-countdown "GO!" flash stays visible. */
+        const val COUNTDOWN_GO_FLASH_SECONDS = 0.6f
         // Arbitrary mix constant so the NPC policy RNG stream is decoupled from
         // (but still deterministically derived from) the engine seed. Written
         // as a signed-Long literal because Kotlin `const val` initializers must

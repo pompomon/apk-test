@@ -82,6 +82,12 @@ dependencies {
     gdxNatives("com.badlogicgames.gdx:gdx-platform:1.13.1:natives-x86_64")
 
     testImplementation("junit:junit:4.13.2")
+    // Android's `org.json` is shipped as a stub in `android.jar`; calls throw
+    // `RuntimeException("Stub!")` from local JVM unit tests. Pull in the real
+    // implementation on the test classpath so `GameEngineSnapshot.toJson` /
+    // `fromJson` (and any other `JSONObject` user) is exercisable from unit
+    // tests without pulling in the full Robolectric runtime.
+    testImplementation("org.json:json:20240303")
     androidTestImplementation("androidx.test:core:1.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")

@@ -36,6 +36,26 @@ class MazeRenderer {
     private var wallRectColor: Array<Color?> = emptyArray()
     private var wallRectCount: Int = 0
 
+    // Static floor geometry cache. Keyed by maze identity (size); revision
+    // is not needed because BLAST removes walls but never changes which cells
+    // exist. The floor pattern is a 4×4 (`FloorTextures.TILE_SIZE`) tile
+    // dominated by `FloorTextures.base` (12 of the 16 pixels per tile), so
+    // the base layer is drawn as a single maze-sized rect and only the
+    // accent / highlight pattern pixels (4 of the 16 per tile) are stored
+    // here, grouped by colour to keep `shapes.color` reassignments to one
+    // per group (instead of one per rect) and to cut per-frame `shapes.rect`
+    // calls by ~4× (e.g. MEDIUM 18×28×4 = 2,016 non-base rects + 1 base rect
+    // vs the previous 18×28×16 = 8,064 rects). Stored in maze-local coords
+    // so origin shifts (viewport resize) require no rebuild.
+    private var cachedFloorMaze: Maze? = null
+    private var floorAccentX: FloatArray = FloatArray(0)
+    private var floorAccentY: FloatArray = FloatArray(0)
+    private var floorAccentCount: Int = 0
+    private var floorHighlightX: FloatArray = FloatArray(0)
+    private var floorHighlightY: FloatArray = FloatArray(0)
+    private var floorHighlightCount: Int = 0
+    private var floorPixelSize: Float = 0f
+
     fun resize(width: Int, height: Int) {
         viewport.update(width, height, true)
     }
@@ -45,13 +65,17 @@ class MazeRenderer {
         mazeOriginX = (viewport.worldWidth - engine.maze.width.toFloat()) / 2f
         mazeOriginY = (viewport.worldHeight - engine.maze.height.toFloat()) / 2f
 
-        ScreenUtils.clear(0.08f, 0.08f, 0.1f, 1f)
+        // Letterbox colour: pick something close to the floor base so any
+        // viewport bars look intentional rather than like a black void.
+        ScreenUtils.clear(0.06f, 0.07f, 0.10f, 1f)
         viewport.apply(true)
         shapes.projectionMatrix = camera.combined
 
         drawMaze(engine)
         drawPowerUps(engine)
         drawEntities(engine)
+        drawCountdownOverlay(engine)
+        drawEndOverlay(engine)
     }
 
     fun dispose() {
@@ -75,12 +99,43 @@ class MazeRenderer {
             cachedWallMaze = maze
             cachedWallRevision = maze.revision
         }
+        if (cachedFloorMaze !== maze) {
+            rebuildFloorGeometry(maze)
+            cachedFloorMaze = maze
+        }
 
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
-        // Floor — slightly darker than before so the brown/green walls pop.
-        shapes.color.set(0.08f, 0.08f, 0.10f, 1f)
-        shapes.rect(mazeOriginX, mazeOriginY, maze.width.toFloat(), maze.height.toFloat())
+        // Floor base: one maze-sized rect (covers the dominant base colour
+        // for every cell). Accent/highlight pattern pixels are overlaid in
+        // a single colour-set + run per group below, so the per-frame
+        // floor cost is `1 + 2 + accentCount + highlightCount` rects with
+        // only 3 `shapes.color` assignments total (down from one per
+        // pattern pixel under the previous per-rect colour scheme).
+        val ox = mazeOriginX
+        val oy = mazeOriginY
+        shapes.color = FloorTextures.base
+        shapes.rect(ox, oy, maze.width.toFloat(), maze.height.toFloat())
+
+        val pixelSize = floorPixelSize
+        val accentCount = floorAccentCount
+        if (accentCount > 0) {
+            shapes.color = FloorTextures.accent
+            val axs = floorAccentX
+            val ays = floorAccentY
+            for (i in 0 until accentCount) {
+                shapes.rect(ox + axs[i], oy + ays[i], pixelSize, pixelSize)
+            }
+        }
+        val highlightCount = floorHighlightCount
+        if (highlightCount > 0) {
+            shapes.color = FloorTextures.highlight
+            val hxs = floorHighlightX
+            val hys = floorHighlightY
+            for (i in 0 until highlightCount) {
+                shapes.rect(ox + hxs[i], oy + hys[i], pixelSize, pixelSize)
+            }
+        }
 
         // Render the exit as a wooden door sprite centered on the exit cell.
         PixelSpriteRenderer.draw(
@@ -101,13 +156,82 @@ class MazeRenderer {
         val ws = wallRectW
         val hs = wallRectH
         val cs = wallRectColor
-        val ox = mazeOriginX
-        val oy = mazeOriginY
         for (i in 0 until count) {
             shapes.color = cs[i]!!
             shapes.rect(ox + xs[i], oy + ys[i], ws[i], hs[i])
         }
         shapes.end()
+    }
+
+    /**
+     * Build per-pixel floor geometry for every cell of [maze]. Each cell is
+     * 1 world unit wide and tiled with the [FloorTextures] pattern; since
+     * every cell uses the same tile, the pattern is seamless across cell
+     * borders by construction. Only the non-base pattern pixels are
+     * stored — the base colour is rendered as a single maze-sized rect at
+     * draw time — and the accent / highlight rects are grouped into
+     * separate arrays so the draw loop changes [ShapeRenderer.color] just
+     * once per group. Stored in maze-local coords so viewport resize
+     * doesn't trigger a rebuild.
+     */
+    private fun rebuildFloorGeometry(maze: Maze) {
+        val tile = FloorTextures.TILE_SIZE
+        val pixelSize = 1f / tile
+
+        // Tally non-base pixels per tile to size the per-colour arrays
+        // exactly (no copy-on-trim).
+        var accentPerTile = 0
+        var highlightPerTile = 0
+        for (row in 0 until tile) {
+            val rowColors = FloorTextures.pixelColors[row]
+            for (col in 0 until tile) {
+                when (rowColors[col]) {
+                    FloorTextures.accent -> accentPerTile++
+                    FloorTextures.highlight -> highlightPerTile++
+                    // base pixels are covered by the maze-sized base rect.
+                }
+            }
+        }
+        val cellCount = maze.width * maze.height
+        val accentX = FloatArray(cellCount * accentPerTile)
+        val accentY = FloatArray(cellCount * accentPerTile)
+        val highlightX = FloatArray(cellCount * highlightPerTile)
+        val highlightY = FloatArray(cellCount * highlightPerTile)
+        var ai = 0
+        var hi = 0
+        for (cellY in 0 until maze.height) {
+            for (cellX in 0 until maze.width) {
+                for (row in 0 until tile) {
+                    // row 0 is the top of the pattern (top of cell). Y-up
+                    // means top is at the larger world Y.
+                    val py = cellY.toFloat() + (tile - row - 1) * pixelSize
+                    val rowColors = FloorTextures.pixelColors[row]
+                    for (col in 0 until tile) {
+                        val px = cellX.toFloat() + col * pixelSize
+                        when (rowColors[col]) {
+                            FloorTextures.accent -> {
+                                accentX[ai] = px
+                                accentY[ai] = py
+                                ai++
+                            }
+                            FloorTextures.highlight -> {
+                                highlightX[hi] = px
+                                highlightY[hi] = py
+                                hi++
+                            }
+                            // base pixels are covered by the maze-sized base rect.
+                        }
+                    }
+                }
+            }
+        }
+        floorAccentX = accentX
+        floorAccentY = accentY
+        floorAccentCount = ai
+        floorHighlightX = highlightX
+        floorHighlightY = highlightY
+        floorHighlightCount = hi
+        floorPixelSize = pixelSize
     }
 
     /**
@@ -304,12 +428,119 @@ class MazeRenderer {
         shapes.end()
     }
 
+    /**
+     * Draws the pre-game 3 / 2 / 1 / GO! glyph centered on the viewport
+     * while the engine reports a positive countdown. Drawn last so it
+     * overlays sprites/walls; a dark backdrop guarantees legibility on top
+     * of the floor pattern.
+     */
+    private fun drawCountdownOverlay(engine: GameEngine) {
+        val remaining = engine.countdownRemainingSeconds
+        val goFlash = engine.goFlashRemainingSeconds
+        if (remaining <= 0f && goFlash <= 0f) return
+        val text = if (remaining > 0f) countdownLabel(remaining) else "GO!"
+        val glyphSize = (viewport.worldWidth.coerceAtMost(viewport.worldHeight)) * 0.18f
+        val glyphGap = glyphSize * 0.18f
+        val cx = viewport.worldWidth / 2f
+        val cy = viewport.worldHeight / 2f
+        drawBackdrop(cx, cy, glyphSize, glyphGap, text)
+
+        shapes.begin(ShapeRenderer.ShapeType.Filled)
+        PixelTextRenderer.drawCentered(
+            shapes = shapes,
+            text = text,
+            centerX = cx,
+            centerY = cy,
+            glyphSize = glyphSize,
+            glyphGap = glyphGap,
+            fallbackColor = COUNTDOWN_COLOR
+        )
+        shapes.end()
+    }
+
+    private fun countdownLabel(remaining: Float): String = when {
+        remaining > 2f -> "3"
+        remaining > 1f -> "2"
+        else -> "1"
+    }
+
+    /**
+     * Draws the end-of-game overlay ("YOU WIN!" with bright colours / "GAME
+     * OVER" with dark colours) centered on the viewport.
+     */
+    private fun drawEndOverlay(engine: GameEngine) {
+        val (text, palette) = when (engine.status) {
+            com.example.apktest.game.core.GameStatus.WIN -> "YOU WIN!" to WIN_PALETTE
+            com.example.apktest.game.core.GameStatus.LOSE -> "GAME OVER" to LOSE_PALETTE
+            else -> return
+        }
+        val glyphSize = (viewport.worldWidth.coerceAtMost(viewport.worldHeight)) * 0.10f
+        val glyphGap = glyphSize * 0.20f
+        val cx = viewport.worldWidth / 2f
+        val cy = viewport.worldHeight / 2f
+        drawBackdrop(cx, cy, glyphSize, glyphGap, text)
+
+        shapes.begin(ShapeRenderer.ShapeType.Filled)
+        PixelTextRenderer.drawCentered(
+            shapes = shapes,
+            text = text,
+            centerX = cx,
+            centerY = cy,
+            glyphSize = glyphSize,
+            glyphGap = glyphGap,
+            fallbackColor = palette[0],
+            colorForIndex = { i -> palette[i % palette.size] }
+        )
+        shapes.end()
+    }
+
+    /**
+     * Opaque dark rect painted behind overlay text so the message stays
+     * legible regardless of the floor/wall colours underneath.
+     */
+    private fun drawBackdrop(
+        centerX: Float,
+        centerY: Float,
+        glyphSize: Float,
+        glyphGap: Float,
+        text: String
+    ) {
+        val textWidth = PixelTextRenderer.textWidth(text, glyphSize, glyphGap)
+        val padX = glyphSize * 0.5f
+        val padY = glyphSize * 0.4f
+        val rectW = textWidth + 2f * padX
+        val rectH = glyphSize + 2f * padY
+        shapes.begin(ShapeRenderer.ShapeType.Filled)
+        shapes.color = OVERLAY_BACKDROP_COLOR
+        shapes.rect(centerX - rectW / 2f, centerY - rectH / 2f, rectW, rectH)
+        shapes.end()
+    }
+
     private companion object {
         // Wall thickness as fraction of a cell (world units).
         private const val WALL_THICKNESS = 0.18f
 
         // Upper-bound pixel count per wall segment (4 rows * 8 cols brick tile).
         private const val WALL_PATTERN_PIXELS_PER_SEGMENT = 32
+
+        private val COUNTDOWN_COLOR = Color(1f, 0.95f, 0.5f, 1f)
+        private val OVERLAY_BACKDROP_COLOR = Color(0.02f, 0.02f, 0.04f, 1f)
+
+        // Bright cycle for WIN — vivid yellow / lime / cyan / magenta.
+        private val WIN_PALETTE = arrayOf(
+            Color(1f, 0.95f, 0.20f, 1f),
+            Color(0.40f, 1f, 0.40f, 1f),
+            Color(0.30f, 0.90f, 1f, 1f),
+            Color(1f, 0.40f, 0.90f, 1f)
+        )
+
+        // Dark cycle for LOSE — muted blood-red / purple / slate / forest.
+        private val LOSE_PALETTE = arrayOf(
+            Color(0.50f, 0.05f, 0.05f, 1f),
+            Color(0.25f, 0.05f, 0.35f, 1f),
+            Color(0.15f, 0.15f, 0.20f, 1f),
+            Color(0.10f, 0.30f, 0.15f, 1f)
+        )
     }
 
     private object PixelPowerUpIconRenderer {

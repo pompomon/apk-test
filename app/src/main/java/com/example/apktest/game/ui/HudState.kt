@@ -12,5 +12,13 @@ data class HudState(
     val playerSpeed: Float,
     val npcSpeed: Float,
     val activePowerUps: List<String>,
-    val powerUpsOnMap: Int
+    val powerUpsOnMap: Int,
+    /** Seconds remaining on the pre-game countdown; `null` when not counting. */
+    val countdownRemainingSeconds: Float? = null,
+    /**
+     * Seconds remaining on the manual-input override; `null` when no
+     * override is active (either no recent manual input, or the policy is
+     * already `MANUAL`).
+     */
+    val manualOverrideRemainingSeconds: Float? = null
 )

@@ -24,10 +24,15 @@ import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.ui.GameMenuPopover
 import com.example.apktest.ui.LegendDialog
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private var menuPopover: GameMenuPopover? = null
     private lateinit var menuButton: ImageButton
+    private lateinit var stateStore: GameStateStore
+    private val autosaveExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal var resolvedSwipeCount: Int = 0
@@ -70,6 +75,8 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
 
+        stateStore = GameStateStore(this)
+
         val root = findViewById<View>(R.id.root)
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -93,8 +100,21 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     }
 
     private fun buildGameFragmentArgs(intent: Intent): Bundle {
-        // Resolve selections from the launching intent; fall back to safe
-        // defaults so the activity remains usable if launched directly.
+        // If the launcher asked us to resume, load+validate the saved
+        // snapshot once here and hand the parsed object directly to the
+        // fragment (avoiding a redundant JSON parse on the GL thread).
+        // We still embed the JSON in args so a process-death recreation
+        // — where the static handoff is wiped but the fragment Bundle
+        // survives — can restore from the bundle. The user's selected
+        // policy/difficulty are always included in the args alongside
+        // the snapshot so that, if a later recreation cannot parse the
+        // serialized snapshot (schema bump, corruption), GameFragment
+        // starts a fresh game with the user's selections rather than
+        // its hard-coded defaults. Falls back to a fresh game using
+        // those same selections when no valid snapshot exists.
+        val resume = intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false)
+        val resumeSnapshot = if (resume) stateStore.load() else null
+
         val player = enumOrDefault(
             intent.getStringExtra(SetupActivity.EXTRA_PLAYER_POLICY),
             PlayerPolicyType.MANUAL
@@ -105,10 +125,21 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         )
         val difficulty = intent.getStringExtra(SetupActivity.EXTRA_DIFFICULTY)
             ?: DifficultyPresets.MEDIUM.name
+
+        // Always carry the user's selected policy/difficulty in the
+        // fragment args, even on the resume path. If a process-death
+        // recreation later wipes the static snapshot handoff and the
+        // serialized JSON in the bundle can't be parsed (schema bump,
+        // corruption), GameFragment will still start a fresh game using
+        // the user's selections rather than its hard-coded defaults.
         return Bundle().apply {
             putString(GameFragment.ARG_PLAYER_POLICY, player.name)
             putString(GameFragment.ARG_NPC_POLICY, npc.name)
             putString(GameFragment.ARG_DIFFICULTY, difficulty)
+            if (resumeSnapshot != null) {
+                GameFragment.pendingResumeSnapshot = resumeSnapshot
+                putString(GameFragment.ARG_RESUME_SNAPSHOT_JSON, resumeSnapshot.toJson())
+            }
         }
     }
 
@@ -130,7 +161,77 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     override fun onPause() {
         hudHandler.removeCallbacks(hudRefreshRunnable)
         menuPopover?.dismiss()
+        // Autosave so the user can resume after a process death, switching
+        // away, or just to be safe before any incidental finish(). Skip
+        // terminal states (WIN/LOSE) so re-launching doesn't drop the
+        // player straight back into the end-of-game overlay.
+        //
+        // The snapshot capture is performed asynchronously on the GL
+        // thread: blocking the UI thread here risks ANR / jank on slower
+        // devices when the render loop is busy or starved. The state
+        // store write is hopped onto a background executor so we never
+        // touch the prefs editor on the UI thread either (even though
+        // GameStateStore.save uses apply(), the JSON serialisation
+        // itself is non-trivial for larger snapshots).
+        val hud = gameFragment()?.hudState()
+        val status = hud?.status
+        // While the pre-game 3-2-1 countdown is active the engine is
+        // RUNNING but the simulation is frozen, and snapshots don't
+        // persist the countdown state (restore zeroes it). Saving here
+        // would resume into an immediately-live game on relaunch,
+        // skipping the countdown the player saw. Treat this as a
+        // fresh-game resume by clearing any prior snapshot instead.
+        if (hud?.countdownRemainingSeconds != null &&
+            (status == GameStatus.RUNNING || status == GameStatus.PAUSED)) {
+            // Bounded-wait clear so the removal is durably flushed before
+            // we return from onPause(); a fire-and-forget execute() could
+            // be lost if the process is killed shortly after pausing,
+            // leaving an older snapshot on disk that would resume into a
+            // live game and skip the countdown the player just saw.
+            clearSavedStateBlocking()
+            super.onPause()
+            return
+        }
+        if (status == GameStatus.RUNNING || status == GameStatus.PAUSED) {
+            gameFragment()?.captureSnapshotAsync { snapshot ->
+                // captureSnapshotAsync's callback runs on the GL thread and may
+                // fire after onDestroy() has shut the executor down. Guard so a
+                // late snapshot doesn't crash with RejectedExecutionException.
+                //
+                // Re-check the snapshot's status here: the HUD reading above
+                // is a UI-thread sample taken before the GL-thread capture,
+                // and the game can transition to WIN/LOSE in between. If
+                // that happens, clear any prior saved state instead of
+                // persisting a terminal snapshot (which would re-launch the
+                // user straight back into the end-of-game overlay).
+                try {
+                    if (snapshot.status == GameStatus.WIN || snapshot.status == GameStatus.LOSE) {
+                        autosaveExecutor.execute { stateStore.clearBlocking() }
+                    } else {
+                        autosaveExecutor.execute {
+                            stateStore.save(snapshot)
+                        }
+                    }
+                } catch (_: RejectedExecutionException) {
+                    // Executor already shut down — drop the late autosave.
+                }
+            }
+        } else if (status == GameStatus.WIN || status == GameStatus.LOSE) {
+            // Clear any prior snapshot so Resume can't drop the user back into
+            // a stale mid-run state after a completed game. Use the
+            // bounded-wait commit()-based helper so the removal is durably
+            // flushed to disk before we return from onPause(); a
+            // fire-and-forget execute() could be lost if the process is
+            // killed shortly after pausing and resurrect a finished game
+            // on relaunch.
+            clearSavedStateBlocking()
+        }
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        autosaveExecutor.shutdown()
+        super.onDestroy()
     }
 
     private fun setupControls() {
@@ -160,7 +261,65 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
                     LegendDialog.show(this@MainActivity)
                 }
 
-                override fun onBackToSetup() {
+                override fun onPauseAndExit() {
+                    // Pause first so the snapshot reflects PAUSED status;
+                    // captureSnapshot() blocks briefly on the GL thread.
+                    val hud = gameFragment()?.hudState()
+                    if (hud?.status == GameStatus.RUNNING) {
+                        gameFragment()?.togglePause()
+                    }
+                    val status = hud?.status
+                    // While the pre-game 3-2-1 countdown is active, the
+                    // engine is RUNNING but the simulation is frozen and
+                    // snapshots don't persist the countdown state
+                    // (restore zeroes it). Persisting here would resume
+                    // straight into a live game on relaunch, skipping
+                    // the countdown the player saw. Treat this as a
+                    // fresh-game resume by clearing any prior snapshot.
+                    if (hud?.countdownRemainingSeconds != null &&
+                        (status == GameStatus.RUNNING || status == GameStatus.PAUSED)) {
+                        clearSavedStateBlocking()
+                    } else if (status == GameStatus.RUNNING || status == GameStatus.PAUSED) {
+                        val snapshot = gameFragment()?.captureSnapshot()
+                        // Re-check the post-capture status: the game may have
+                        // transitioned to WIN/LOSE between the UI-thread HUD
+                        // read above and the synchronous capture below. In
+                        // that case fall through to the clear path so a
+                        // terminal snapshot is never persisted (and Resume
+                        // can't resurrect a completed run on relaunch).
+                        val postStatus = snapshot?.status
+                        if (snapshot != null &&
+                            postStatus != GameStatus.WIN &&
+                            postStatus != GameStatus.LOSE) {
+                            // Use the commit()-based path off the UI thread so the
+                            // snapshot is durably on disk before we finish() —
+                            // apply()'s deferred write could otherwise be lost when
+                            // the activity exits immediately after.
+                            try {
+                                autosaveExecutor.submit {
+                                    stateStore.saveBlocking(snapshot)
+                                }.get(PAUSE_EXIT_SAVE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+                            } catch (_: RejectedExecutionException) {
+                                // Fall back to a direct synchronous commit on the UI
+                                // thread if the executor is unavailable.
+                                stateStore.saveBlocking(snapshot)
+                            } catch (_: InterruptedException) {
+                                Thread.currentThread().interrupt()
+                            } catch (_: java.util.concurrent.ExecutionException) {
+                                // Surface no further action; save failure is best-effort.
+                            } catch (_: java.util.concurrent.TimeoutException) {
+                                // Executor backed up or disk I/O stalled; avoid
+                                // ANR by giving up the wait. The submitted task
+                                // will still complete in the background if it
+                                // can, and a stale snapshot is preferable to a
+                                // frozen UI on exit.
+                            }
+                        } else if (postStatus == GameStatus.WIN || postStatus == GameStatus.LOSE) {
+                            clearSavedStateBlocking()
+                        }
+                    } else if (status == GameStatus.WIN || status == GameStatus.LOSE) {
+                        clearSavedStateBlocking()
+                    }
                     val intent = Intent(this@MainActivity, SetupActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     }
@@ -179,6 +338,27 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         refreshHudSnapshot()
         hudHandler.removeCallbacks(hudRefreshRunnable)
         hudHandler.postDelayed(hudRefreshRunnable, HUD_REFRESH_INTERVAL_MS)
+    }
+
+    private fun clearSavedStateBlocking() {
+        // Use commit()-based clear off the UI thread (with the same
+        // bounded-wait pattern as the save path) so the removal is
+        // durably on disk before we finish() and Resume can't resurrect
+        // a completed run on relaunch.
+        try {
+            autosaveExecutor.submit {
+                stateStore.clearBlocking()
+            }.get(PAUSE_EXIT_SAVE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (_: RejectedExecutionException) {
+            stateStore.clearBlocking()
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        } catch (_: java.util.concurrent.ExecutionException) {
+            // Best-effort; nothing further to do.
+        } catch (_: java.util.concurrent.TimeoutException) {
+            // Avoid ANR by giving up the wait; submitted
+            // task will still complete in the background.
+        }
     }
 
     private fun move(direction: Direction) {
@@ -321,5 +501,8 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         private const val HUD_REFRESH_INTERVAL_MS = 250L
         // 4x touch slop requires a deliberate drag, reducing accidental move input from taps/jitter.
         private const val SWIPE_DISTANCE_TOUCH_SLOP_MULTIPLIER = 4
+        // Upper bound on how long Pause & Exit will wait for the snapshot
+        // commit() to flush before giving up to avoid an ANR.
+        private const val PAUSE_EXIT_SAVE_TIMEOUT_MS = 750L
     }
 }
