@@ -175,6 +175,22 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         // itself is non-trivial for larger snapshots).
         val hud = gameFragment()?.hudState()
         val status = hud?.status
+        // While the pre-game 3-2-1 countdown is active the engine is
+        // RUNNING but the simulation is frozen, and snapshots don't
+        // persist the countdown state (restore zeroes it). Saving here
+        // would resume into an immediately-live game on relaunch,
+        // skipping the countdown the player saw. Treat this as a
+        // fresh-game resume by clearing any prior snapshot instead.
+        if (hud?.countdownRemainingSeconds != null &&
+            (status == GameStatus.RUNNING || status == GameStatus.PAUSED)) {
+            try {
+                autosaveExecutor.execute { stateStore.clearBlocking() }
+            } catch (_: RejectedExecutionException) {
+                // Executor already shut down — best-effort clear.
+            }
+            super.onPause()
+            return
+        }
         if (status == GameStatus.RUNNING || status == GameStatus.PAUSED) {
             gameFragment()?.captureSnapshotAsync { snapshot ->
                 // captureSnapshotAsync's callback runs on the GL thread and may
@@ -255,7 +271,17 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
                         gameFragment()?.togglePause()
                     }
                     val status = hud?.status
-                    if (status == GameStatus.RUNNING || status == GameStatus.PAUSED) {
+                    // While the pre-game 3-2-1 countdown is active, the
+                    // engine is RUNNING but the simulation is frozen and
+                    // snapshots don't persist the countdown state
+                    // (restore zeroes it). Persisting here would resume
+                    // straight into a live game on relaunch, skipping
+                    // the countdown the player saw. Treat this as a
+                    // fresh-game resume by clearing any prior snapshot.
+                    if (hud?.countdownRemainingSeconds != null &&
+                        (status == GameStatus.RUNNING || status == GameStatus.PAUSED)) {
+                        clearSavedStateBlocking()
+                    } else if (status == GameStatus.RUNNING || status == GameStatus.PAUSED) {
                         val snapshot = gameFragment()?.captureSnapshot()
                         // Re-check the post-capture status: the game may have
                         // transitioned to WIN/LOSE between the UI-thread HUD
