@@ -1,6 +1,5 @@
 package com.example.apktest
 
-import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
@@ -13,6 +12,7 @@ import android.widget.Button
 import android.widget.ImageButton
 import android.widget.TextView
 import androidx.annotation.VisibleForTesting
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -187,44 +187,49 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             super.onPause()
             return
         }
-        // Capture the in-flight engine snapshot for paused-mid-maze resume.
         val frag = gameFragment()
         val hud = frag?.hudState()
         val status = hud?.status
+        // While the 3-2-1 countdown is active the engine snapshot
+        // doesn't persist the countdown; treat as fresh-maze resume
+        // by clearing the mid-maze snapshot instead of persisting a
+        // snapshot that would skip the countdown on relaunch.
+        if (hud?.countdownRemainingSeconds != null) {
+            controller.clearMidMazeSnapshot()
+            persistAdventureStateAsync()
+            super.onPause()
+            return
+        }
         if (status == GameStatus.RUNNING || status == GameStatus.PAUSED) {
-            // While the 3-2-1 countdown is active the engine snapshot
-            // doesn't persist the countdown; treat as fresh-maze resume
-            // by clearing the mid-maze snapshot rather than persisting
-            // a snapshot that would skip the countdown on relaunch.
-            if (hud.countdownRemainingSeconds != null) {
-                controller.clearMidMazeSnapshot()
-            } else {
-                frag.captureSnapshotAsync { engineSnapshot ->
+            frag.captureSnapshotAsync { engineSnapshot ->
+                // captureSnapshotAsync's callback fires on the GL thread.
+                // Hop back to the main thread before mutating the
+                // controller (not thread-safe) and before reading state
+                // into a serialisable snapshot.
+                tickHandler.post {
                     try {
                         if (engineSnapshot.status == GameStatus.WIN ||
-                            engineSnapshot.status == GameStatus.LOSE) {
-                            // Don't persist terminal snapshots; the next
-                            // poll on relaunch would re-trigger the
-                            // overlay flow. Just keep the run-level state
-                            // (lives, maze index) without a mid-maze
-                            // snapshot — prepareCurrentMaze will use the
-                            // locked seed/policies and start fresh.
+                            engineSnapshot.status == GameStatus.LOSE
+                        ) {
+                            // Don't persist terminal snapshots; relaunch
+                            // would re-trigger the overlay flow.
                             controller.clearMidMazeSnapshot()
                         } else {
                             controller.recordMidMazeSnapshot(engineSnapshot)
                         }
                         persistAdventureStateAsync()
                     } catch (_: RejectedExecutionException) {
-                        // Executor shut down.
+                        // Executor shut down between hop and persist.
                     }
                 }
-                super.onPause()
-                return
             }
         } else {
+            // WIN/LOSE were handled by the engine before we got here
+            // and the controller already transitioned via pollEngineStatus;
+            // persist the run-level state without a mid-maze snapshot.
             controller.clearMidMazeSnapshot()
+            persistAdventureStateAsync()
         }
-        persistAdventureStateAsync()
         super.onPause()
     }
 
