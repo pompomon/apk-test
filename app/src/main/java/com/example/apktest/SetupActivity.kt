@@ -77,6 +77,7 @@ class SetupActivity : AppCompatActivity() {
         buttonPickPlayerStrategy = findViewById(R.id.buttonPickPlayerStrategy)
         buttonPickNpcStrategy = findViewById(R.id.buttonPickNpcStrategy)
         val buttonStart = findViewById<Button>(R.id.buttonStart)
+        val buttonAdventure = findViewById<Button>(R.id.buttonAdventureMode)
         val buttonLegend = findViewById<Button>(R.id.buttonLegend)
 
         refreshSelectionLabels()
@@ -114,6 +115,9 @@ class SetupActivity : AppCompatActivity() {
         buttonPickPlayerStrategy.setOnClickListener { showPlayerStrategyPicker() }
         buttonPickNpcStrategy.setOnClickListener { showNpcStrategyPicker() }
         buttonLegend.setOnClickListener { LegendDialog.show(this) }
+        buttonAdventure.setOnClickListener {
+            startActivity(Intent(this, AdventureSetupActivity::class.java))
+        }
     }
 
     override fun onResume() {

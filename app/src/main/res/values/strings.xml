@@ -50,4 +50,28 @@
     <!-- Game menu (hamburger) -->
     <string name="menu_button_description">Open game menu</string>
     <string name="pause_and_exit">Pause &amp; Exit</string>
+
+    <!-- Adventure mode -->
+    <string name="menu_adventure_mode">Adventure mode</string>
+    <string name="adventure_setup_title">Adventure</string>
+    <string name="adventure_resume">Resume Adventure</string>
+    <string name="adventure_start">Start Adventure</string>
+    <string name="adventure_back">Back</string>
+    <string name="adventure_summary_format">%1$d lives · %2$d mazes · +%3$d NPC / level</string>
+    <string name="adventure_status_format">Maze %1$d / %2$d · Lives: %3$d · Streak: %4$d/%5$d</string>
+    <string name="adventure_status_default">Adventure: —</string>
+    <string name="adventure_maze_won_title">Maze %1$d of %2$d cleared!</string>
+    <string name="adventure_bonus_life">Bonus life awarded! Lives: %1$d</string>
+    <string name="adventure_unlock_prompt">Choose a new player strategy to unlock:</string>
+    <string name="adventure_no_unlock_available">All strategies already unlocked.</string>
+    <string name="adventure_continue">Continue</string>
+    <string name="adventure_caught_title">Caught! Lives remaining: %1$d</string>
+    <string name="adventure_run_complete_title">Adventure complete!</string>
+    <string name="adventure_run_complete_body">You cleared all %1$d mazes with %2$d %3$s remaining.</string>
+    <string name="adventure_run_lost_title">Adventure lost</string>
+    <string name="adventure_run_lost_body">You ran out of lives on maze %1$d of %2$d.</string>
+    <string name="adventure_finish">Finish</string>
+    <string name="adventure_lives_singular">life</string>
+    <string name="adventure_lives_plural">lives</string>
+    <string name="adventure_pick_player_strategy">Switch active player strategy</string>
 </resources>

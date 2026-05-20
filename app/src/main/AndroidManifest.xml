@@ -23,6 +23,18 @@
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
             android:exported="false"
             android:screenOrientation="fullSensor" />
+        <activity
+            android:name=".AdventureSetupActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+            android:exported="false"
+            android:parentActivityName=".SetupActivity"
+            android:screenOrientation="fullSensor" />
+        <activity
+            android:name=".AdventureActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+            android:exported="false"
+            android:parentActivityName=".AdventureSetupActivity"
+            android:screenOrientation="fullSensor" />
     </application>
 
 </manifest>
