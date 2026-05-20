@@ -28,7 +28,14 @@ data class Npc(
     var searchTicksRemaining: Int = 0,
     var animationFrame: Int = 0,
     // See Player.lastMoveAtSeconds for the sentinel rationale.
-    var lastMoveAtSeconds: Float = Float.NEGATIVE_INFINITY
+    var lastMoveAtSeconds: Float = Float.NEGATIVE_INFINITY,
+    /**
+     * The behaviour policy this NPC uses. Defaults to the engine's
+     * configured [NpcPolicyType] (set in [com.example.apktest.game.core.GameEngine])
+     * so single-maze runs behave as before, but Adventure mode assigns each
+     * NPC an independently-randomised type at maze entry.
+     */
+    var policyType: NpcPolicyType = NpcPolicyType.DIRECT_CHASE
 )
 
 enum class GameStatus {
