@@ -99,6 +99,24 @@ class GameFragment : AndroidFragmentApplication() {
         game?.setDifficulty(name)
     }
 
+    /**
+     * Adventure-mode hook. Configures the next maze (difficulty + player
+     * policy + NPC count + per-NPC policy list) and forces a restart with
+     * the supplied seed. Safe to call from the UI thread; the engine
+     * command is enqueued onto the GL thread.
+     */
+    fun configureAdventureMaze(
+        seed: Long,
+        difficulty: String,
+        playerPolicy: PlayerPolicyType,
+        npcCount: Int,
+        npcPolicies: List<NpcPolicyType>
+    ) {
+        pendingDifficulty = difficulty
+        pendingPlayerPolicy = playerPolicy
+        game?.configureAdventureMaze(seed, difficulty, playerPolicy, npcCount, npcPolicies)
+    }
+
     fun queueManualMove(direction: Direction) {
         game?.queueManualMove(direction)
     }

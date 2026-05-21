@@ -40,7 +40,27 @@ data class GameEngineSnapshot(
      * survive a save/resume round-trip. Each entry is canonical (a wall
      * shared between two cells is recorded only once).
      */
-    val removedWalls: List<RemovedWallSnapshot> = emptyList()
+    val removedWalls: List<RemovedWallSnapshot> = emptyList(),
+    /**
+     * Adventure-mode override of [DifficultyPreset.npcCount]. `null` for
+     * single-maze runs (engine spawns `difficulty.npcCount` NPCs). When
+     * non-null, restored engines re-install this override so a subsequent
+     * `restart(seed)` re-spawns with the same NPC count.
+     */
+    val npcCountOverride: Int? = null,
+    /**
+     * Per-NPC `NpcPolicyType` keyed by spawn index ([com.example.apktest.game.core.Npc.id]).
+     * Always populated by `GameEngine.snapshot()` with one entry per spawned
+     * NPC: in single-maze runs every entry is the engine's configured uniform
+     * `npcPolicyType` (uniform list), and in Adventure mode each entry is the
+     * NPC's individually-assigned type. On restore, each NPC is re-assigned
+     * its individual policy; if the list is non-empty it is also re-installed
+     * as an Adventure override so a follow-up `restart` re-spawns NPCs with
+     * the same per-NPC policies. May be empty only for snapshots produced
+     * before this field existed (older schema versions are rejected by
+     * `fromJson`, so in practice this is always populated for v3+).
+     */
+    val npcPolicies: List<NpcPolicyType> = emptyList()
 ) {
     data class PlayerSnapshot(val x: Int, val y: Int, val facing: Direction)
     data class NpcSnapshot(val id: Int, val x: Int, val y: Int, val facing: Direction)
@@ -146,10 +166,16 @@ data class GameEngineSnapshot(
                 })
             }
         })
+        if (npcCountOverride != null) {
+            put(KEY_NPC_COUNT_OVERRIDE, npcCountOverride)
+        }
+        put(KEY_NPC_POLICIES, JSONArray().apply {
+            npcPolicies.forEach { put(it.name) }
+        })
     }.toString()
 
     companion object {
-        const val SCHEMA_VERSION = 2
+        const val SCHEMA_VERSION = 3
 
         private const val KEY_VERSION = "v"
         private const val KEY_DIFFICULTY = "difficulty"
@@ -167,6 +193,8 @@ data class GameEngineSnapshot(
         private const val KEY_MANUAL_QUEUE = "manualQueue"
         private const val KEY_MANUAL_OVERRIDE = "manualOverrideRem"
         private const val KEY_REMOVED_WALLS = "removedWalls"
+        private const val KEY_NPC_COUNT_OVERRIDE = "npcCountOverride"
+        private const val KEY_NPC_POLICIES = "npcPolicies"
 
         fun fromJson(json: String): GameEngineSnapshot? {
             return try {
@@ -226,6 +254,14 @@ data class GameEngineSnapshot(
                         }
                     }
                 } else emptyList()
+                val npcCountOverride = if (obj.has(KEY_NPC_COUNT_OVERRIDE)) {
+                    obj.getInt(KEY_NPC_COUNT_OVERRIDE)
+                } else null
+                val npcPolicies = if (obj.has(KEY_NPC_POLICIES)) {
+                    obj.getJSONArray(KEY_NPC_POLICIES).let { arr ->
+                        List(arr.length()) { i -> NpcPolicyType.valueOf(arr.getString(i)) }
+                    }
+                } else emptyList()
                 val snapshot = GameEngineSnapshot(
                     schemaVersion = version,
                     difficultyName = obj.getString(KEY_DIFFICULTY),
@@ -244,8 +280,14 @@ data class GameEngineSnapshot(
                     } else null,
                     manualQueue = manualQueue,
                     manualOverrideRemainingSeconds = obj.optDouble(KEY_MANUAL_OVERRIDE, 0.0).toFloat(),
-                    removedWalls = removedWalls
+                    removedWalls = removedWalls,
+                    npcCountOverride = npcCountOverride,
+                    npcPolicies = npcPolicies
                 )
+                // Reject snapshots whose npcCountOverride is obviously
+                // corrupt (negative). Other bounds checks happen via
+                // isWithinBounds below.
+                if (npcCountOverride != null && npcCountOverride < 0) return null
                 // Reject snapshots whose difficulty name doesn't match a
                 // known preset exactly (DifficultyPresets.byName silently
                 // falls back to MEDIUM, which would regenerate a
