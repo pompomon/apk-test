@@ -50,11 +50,15 @@ data class GameEngineSnapshot(
     val npcCountOverride: Int? = null,
     /**
      * Per-NPC `NpcPolicyType` keyed by spawn index ([com.example.apktest.game.core.Npc.id]).
-     * Empty list for single-maze runs (every NPC uses the engine's
-     * configured uniform policy). When present, restored engines assign
-     * each NPC its individual policy and also re-install this list as
-     * an Adventure override so a follow-up `restart` re-spawns NPCs
-     * with the same per-NPC policies.
+     * Always populated by `GameEngine.snapshot()` with one entry per spawned
+     * NPC: in single-maze runs every entry is the engine's configured uniform
+     * `npcPolicyType` (uniform list), and in Adventure mode each entry is the
+     * NPC's individually-assigned type. On restore, each NPC is re-assigned
+     * its individual policy; if the list is non-empty it is also re-installed
+     * as an Adventure override so a follow-up `restart` re-spawns NPCs with
+     * the same per-NPC policies. May be empty only for snapshots produced
+     * before this field existed (older schema versions are rejected by
+     * `fromJson`, so in practice this is always populated for v3+).
      */
     val npcPolicies: List<NpcPolicyType> = emptyList()
 ) {

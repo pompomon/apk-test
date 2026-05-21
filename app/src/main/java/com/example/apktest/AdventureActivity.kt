@@ -95,7 +95,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         statusBar = findViewById(R.id.adventureStatusBar)
         menuButton = findViewById(R.id.buttonMenu)
 
-        val (initialController, initialSeed) = loadOrBuildController(intent)
+        val (initialController, initialSeed) = loadOrBuildController(intent, savedInstanceState)
         controller = initialController
         runSeed = initialSeed
 
@@ -145,9 +145,19 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         refreshStatusBar()
     }
 
-    private fun loadOrBuildController(intent: Intent): Pair<AdventureRunController, Long> {
-        val resume = intent.getBooleanExtra(AdventureSetupActivity.EXTRA_RESUME, false)
-        val saved = if (resume) adventureStore.load() else null
+    private fun loadOrBuildController(
+        intent: Intent,
+        savedInstanceState: Bundle?
+    ): Pair<AdventureRunController, Long> {
+        // Always attempt to load a persisted run when the activity is being
+        // recreated by the OS (savedInstanceState != null). Process death
+        // recreates the activity with the original launch Intent, which for a
+        // fresh-Start launch lacks EXTRA_RESUME — without this we'd build a
+        // fresh controller and lose the in-flight run. Honour EXTRA_RESUME
+        // for explicit Resume launches from setup as well.
+        val explicitResume = intent.getBooleanExtra(AdventureSetupActivity.EXTRA_RESUME, false)
+        val shouldTryLoad = explicitResume || savedInstanceState != null
+        val saved = if (shouldTryLoad) adventureStore.load() else null
         if (saved != null) {
             val config = AdventureConfig.forDifficultyName(saved.difficultyName)
             val controller = AdventureRunController(

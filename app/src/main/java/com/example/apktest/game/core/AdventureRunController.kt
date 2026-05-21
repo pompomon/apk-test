@@ -145,9 +145,12 @@ class AdventureRunController(
         if (state.currentMazeSeed == null) {
             state.currentMazeSeed = deriveMazeSeed(mazeIndex1Based)
         }
-        if (state.currentMazeNpcPolicies.size != npcCount) {
-            // Either first entry, or a (rare) state-corruption recovery where
-            // the persisted list length doesn't match the expected count.
+        if (state.currentMazeNpcPolicies.isEmpty()) {
+            // First entry for this maze: draw a deterministic per-NPC policy
+            // list from the run seed. Once locked, the list is preserved
+            // verbatim on rehydration so a death replay reuses identical
+            // NPC strategies even if [npcCount] disagrees with the stored
+            // list length (e.g. a JSON tampering or schema-evolution edge).
             val rng = Random(deriveNpcPolicySeed(mazeIndex1Based))
             val pool = NpcPolicyType.entries
             state.currentMazeNpcPolicies = List(npcCount) { pool[rng.nextInt(pool.size)] }

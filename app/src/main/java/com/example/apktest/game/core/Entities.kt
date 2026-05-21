@@ -30,10 +30,12 @@ data class Npc(
     // See Player.lastMoveAtSeconds for the sentinel rationale.
     var lastMoveAtSeconds: Float = Float.NEGATIVE_INFINITY,
     /**
-     * The behaviour policy this NPC uses. Defaults to the engine's
-     * configured [NpcPolicyType] (set in [com.example.apktest.game.core.GameEngine])
-     * so single-maze runs behave as before, but Adventure mode assigns each
-     * NPC an independently-randomised type at maze entry.
+     * The behaviour policy this NPC uses. The constructor default is
+     * [NpcPolicyType.DIRECT_CHASE] purely so direct callers (chiefly
+     * unit tests constructing throw-away [Npc]s) don't need to supply
+     * one; [GameEngine] always overwrites this on spawn with either the
+     * engine's configured [NpcPolicyType] (single-maze runs) or the
+     * Adventure-mode per-NPC override (`configureAdventureMaze`).
      */
     var policyType: NpcPolicyType = NpcPolicyType.DIRECT_CHASE
 )
