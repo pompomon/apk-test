@@ -95,7 +95,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         statusBar = findViewById(R.id.adventureStatusBar)
         menuButton = findViewById(R.id.buttonMenu)
 
-        val (initialController, initialSeed) = loadOrBuildController(intent, savedInstanceState)
+        val (initialController, initialSeed, isFreshStart) = loadOrBuildController(intent, savedInstanceState)
         controller = initialController
         runSeed = initialSeed
 
@@ -148,12 +148,20 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         setupControls()
         setupSwipeControls()
         refreshStatusBar()
+
+        if (isFreshStart) {
+            // Eagerly persist the freshly-built run state with commit() so a
+            // process death before the first autosave can't resurrect a
+            // previous run (AdventureSetupActivity's clear() uses async
+            // apply(), which is not flushed yet at this point).
+            persistAdventureStateBlocking()
+        }
     }
 
     private fun loadOrBuildController(
         intent: Intent,
         savedInstanceState: Bundle?
-    ): Pair<AdventureRunController, Long> {
+    ): Triple<AdventureRunController, Long, Boolean> {
         // Always attempt to load a persisted run when the activity is being
         // recreated by the OS (savedInstanceState != null). Process death
         // recreates the activity with the original launch Intent, which for a
@@ -170,13 +178,13 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 initialState = saved.toState(),
                 runSeed = saved.runSeed
             )
-            return controller to saved.runSeed
+            return Triple(controller, saved.runSeed, false)
         }
         val difficultyName = intent.getStringExtra(AdventureSetupActivity.EXTRA_DIFFICULTY)
             ?: DifficultyPresets.EASY.name
         val config = AdventureConfig.forDifficulty(DifficultyPresets.byName(difficultyName))
         val seed = System.currentTimeMillis()
-        return AdventureRunController(config = config, runSeed = seed) to seed
+        return Triple(AdventureRunController(config = config, runSeed = seed), seed, true)
     }
 
     override fun exit() {
@@ -215,7 +223,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             super.onPause()
             return
         }
-        if (status == GameStatus.RUNNING || status == GameStatus.PAUSED) {
+        if (frag != null && (status == GameStatus.RUNNING || status == GameStatus.PAUSED)) {
             frag.captureSnapshotAsync { engineSnapshot ->
                 // captureSnapshotAsync's callback fires on the GL thread.
                 // Hop back to the main thread before mutating the
@@ -336,10 +344,12 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         val frag = gameFragment()
         val hud = frag?.hudState()
         if (hud?.status == GameStatus.RUNNING) {
-            frag.togglePause()
+            frag?.togglePause()
         }
-        // Capture mid-maze snapshot synchronously so the commit() below
-        // catches it.
+        // Capture mid-maze snapshot synchronously so the best-effort
+        // blocking persist below has it before we finish(). Note that
+        // persistAdventureStateBlocking() can time out and proceed
+        // best-effort, so the save is not strictly guaranteed.
         val engineSnapshot = if (hud?.countdownRemainingSeconds == null) {
             frag?.captureSnapshot()
         } else null
