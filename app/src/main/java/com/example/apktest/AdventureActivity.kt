@@ -268,7 +268,9 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             autosaveExecutor.submit { adventureStore.saveBlocking(snapshot) }
                 .get(SAVE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
         } catch (_: RejectedExecutionException) {
-            adventureStore.saveBlocking(snapshot)
+            // Executor shut down — accept the loss rather than calling
+            // saveBlocking() (which does SharedPreferences.commit() disk
+            // I/O) on the calling thread, which may be the UI thread.
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         } catch (_: java.util.concurrent.ExecutionException) {
@@ -390,12 +392,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun handleMazeWon() {
-        // Pause engine so it doesn't keep ticking under the dialog.
-        val frag = gameFragment()
-        if (frag?.hudState()?.status == GameStatus.WIN) {
-            // Already terminal; toggling pause has no effect, but we don't
-            // want to advance simulation either. Safe to skip.
-        }
+        // No engine pause needed: GameEngine.update() early-returns when
+        // status != RUNNING, and we only get here after observing WIN.
         val outcome = controller.onMazeWon()
         // Intentionally do NOT persist controller state here. The controller
         // has advanced (mazeIndex / lives / streak), but if the run is
