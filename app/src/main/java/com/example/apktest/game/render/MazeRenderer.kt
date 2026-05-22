@@ -44,8 +44,9 @@ class MazeRenderer {
     // accent / highlight pattern pixels (4 of the 16 per tile) are stored
     // here, grouped by colour to keep `shapes.color` reassignments to one
     // per group (instead of one per rect) and to cut per-frame `shapes.rect`
-    // calls by ~4× (e.g. MEDIUM 18×28×4 = 2,016 non-base rects + 1 base rect
-    // vs the previous 18×28×16 = 8,064 rects). Stored in maze-local coords
+    // calls by ~4× (W×H×4 non-base rects + 1 base rect vs the previous
+    // W×H×16 rects, where W/H are the preset maze dimensions). Stored in
+    // maze-local coords
     // so origin shifts (viewport resize) require no rebuild.
     private var cachedFloorMaze: Maze? = null
     private var floorAccentX: FloatArray = FloatArray(0)
