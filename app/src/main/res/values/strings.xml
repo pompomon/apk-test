@@ -74,4 +74,5 @@
     <string name="adventure_lives_singular">life</string>
     <string name="adventure_lives_plural">lives</string>
     <string name="adventure_pick_player_strategy">Switch active player strategy</string>
+    <string name="adventure_menu_title">Menu</string>
 </resources>

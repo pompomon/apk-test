@@ -294,25 +294,22 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         // because restarting the engine without going through the controller
         // would skip the lives/streak bookkeeping. Players who want to bail
         // can use Pause & Exit (autosaves) or finish the run.
-        val items = listOfNotNull(
-            getString(R.string.pause_resume),
-            getString(R.string.legend),
+        data class MenuEntry(val labelRes: Int, val action: () -> Unit)
+        val entries = buildList {
+            add(MenuEntry(R.string.pause_resume) { gameFragment()?.togglePause() })
+            add(MenuEntry(R.string.legend) { LegendDialog.show(this@AdventureActivity) })
             // Only show the strategy switcher when the player has unlocked
             // more than just MANUAL.
-            getString(R.string.adventure_pick_player_strategy).takeIf {
-                controller.state.unlockedPlayerPolicies.size > 1
-            },
-            getString(R.string.pause_and_exit)
-        ).toTypedArray()
+            if (controller.state.unlockedPlayerPolicies.size > 1) {
+                add(MenuEntry(R.string.adventure_pick_player_strategy) { showSwitchPlayerStrategy() })
+            }
+            add(MenuEntry(R.string.pause_and_exit) { onPauseAndExit() })
+        }
+        val items = entries.map { getString(it.labelRes) }.toTypedArray()
         AlertDialog.Builder(this)
-            .setTitle(R.string.menu_button_description)
+            .setTitle(R.string.adventure_menu_title)
             .setItems(items) { _, which ->
-                when (items[which]) {
-                    getString(R.string.pause_resume) -> gameFragment()?.togglePause()
-                    getString(R.string.legend) -> LegendDialog.show(this)
-                    getString(R.string.adventure_pick_player_strategy) -> showSwitchPlayerStrategy()
-                    getString(R.string.pause_and_exit) -> onPauseAndExit()
-                }
+                entries[which].action()
             }
             .show()
     }
