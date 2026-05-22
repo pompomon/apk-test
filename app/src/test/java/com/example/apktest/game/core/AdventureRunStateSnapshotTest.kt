@@ -52,7 +52,8 @@ class AdventureRunStateSnapshotTest {
             activeEffects = emptyList(),
             npcInducedPlayerFreezeRemainingSeconds = null,
             manualQueue = emptyList(),
-            manualOverrideRemainingSeconds = 0f
+            manualOverrideRemainingSeconds = 0f,
+            npcPolicies = listOf(NpcPolicyType.DIRECT_CHASE)
         )
         val state = sampleState().apply { currentMazeSnapshot = engineSnapshot }
         val snap = AdventureRunStateSnapshot.fromState(state, runSeed = 0xCAFEL)
