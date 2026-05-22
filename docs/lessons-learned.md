@@ -133,6 +133,18 @@ Each entry follows: **Rule** — *what goes wrong* — *how to avoid it* — cit
 2. **JVM tests need `org.json:json` because `android.jar` ships `Stub!` stubs.** Already in `app/build.gradle.kts` as `testImplementation`. Don't remove it.
 3. **Instrumented tests run on API 29, x86_64, Nexus 6** via `reactivecircus/android-emulator-runner`. Most historical flakes track back to this emulator — see [`testing.md`](testing.md).
 
+## 15. Session-length tuning
+
+> Owner files: `app/src/main/java/com/example/apktest/game/core/Difficulty.kt`, `app/src/main/java/com/example/apktest/game/core/AdventureConfig.kt`.
+
+The presets aim for **~2–3 minute** Classic single-maze sessions and **~10–20 minute** full Adventure runs. When tuning preset constants, keep that target in mind and update the bounded assertions (not exact-equality assertions) below if you change the design intent.
+
+1. **Heuristic for maze size:** a competent player visits ~30–40 % of cells before reaching the exit at the configured `playerMovesPerSecond`. So a 2.5 min Medium session at 4.5 mps × ~40 % wants ~480 visited cells → preset cell count in the ~400 range. `DifficultyPresetTest.presets_targetShortSessions_cellCountsBounded` pins the upper bounds (Easy ≤ 256, Medium ≤ 480, Hard ≤ 600) so future nudges don't need to re-pin exact widths/heights.
+2. **Heuristic for Adventure length:** a full run should land around 10–20 minutes; `AdventureConfigTest.totalMazesTargetShortRuns` pins the upper bounds on `totalMazes` and the strict ladder ordering Easy < Medium < Hard.
+3. **Power-up cadence should match session length.** If a session lasts ~3 min, a respawn interval of 60 s+ means players see at most one wave. Keep `powerUpRespawnIntervalSeconds` ≤ ~half the session target on the modes that respawn.
+4. **Prefer bounded assertions over exact-equality** for design-intent tests. Exact-equality tests are appropriate for *one* canonical value per preset (e.g. "Medium's lifetime is 45 s"), but range/ladder assertions should bracket the design target so cosmetic tuning PRs don't churn every test.
+5. **Shrinking maze dimensions invalidates saved snapshots** whose persisted coordinates fall outside the new bounds. `GameStateStore.load()` (Hard rule §1.5 / §1.9) silently rejects and clears them — graceful, but mention the user-visible "saved game gone after update" effect in the PR description.
+
 ---
 
 ## How to update this document

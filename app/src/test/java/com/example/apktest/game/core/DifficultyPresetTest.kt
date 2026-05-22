@@ -62,13 +62,13 @@ class DifficultyPresetTest {
     }
 
     @Test
-    fun mediumPowerUpPolicy_usesOneTwentySecondLifetimeAndRespawns() {
-        assertEquals(120f, DifficultyPresets.MEDIUM.powerUpPickupLifetimeSeconds, 0.0001f)
+    fun mediumPowerUpPolicy_usesFortyFiveSecondLifetimeAndRespawns() {
+        assertEquals(45f, DifficultyPresets.MEDIUM.powerUpPickupLifetimeSeconds, 0.0001f)
         val respawn = DifficultyPresets.MEDIUM.powerUpRespawnIntervalSeconds
         assertNotNull("Medium should respawn power-ups so the map stays populated", respawn)
         // Exact value pins the preset intent — see Difficulty.kt MEDIUM.
-        assertEquals(30f, respawn!!, 0.0001f)
-        // Medium must remain harder than Easy (which respawns every 15s).
+        assertEquals(20f, respawn!!, 0.0001f)
+        // Medium must remain harder than Easy (which respawns every 12s).
         val easyRespawn = DifficultyPresets.EASY.powerUpRespawnIntervalSeconds
         assertNotNull(easyRespawn)
         assertTrue(
@@ -85,8 +85,28 @@ class DifficultyPresetTest {
     }
 
     @Test
-    fun hardUsesSixtyFiveSecondLifetime() {
-        assertEquals(65f, DifficultyPresets.HARD.powerUpPickupLifetimeSeconds, 0.0001f)
+    fun easyRespawnInterval_isTwelveSeconds() {
+        assertEquals(12f, DifficultyPresets.EASY.powerUpRespawnIntervalSeconds!!, 0.0001f)
+    }
+
+    @Test
+    fun hardUsesFortySecondLifetime() {
+        assertEquals(40f, DifficultyPresets.HARD.powerUpPickupLifetimeSeconds, 0.0001f)
+    }
+
+    @Test
+    fun hardRespawnsPowerUps_soLongerSessionsStayPopulated() {
+        // Hard previously had no respawn; the short-session rebalance enables
+        // it so a 2–3 minute Hard run still sees a second wave of pickups.
+        val respawn = DifficultyPresets.HARD.powerUpRespawnIntervalSeconds
+        assertNotNull("Hard should respawn power-ups after the short-session rebalance", respawn)
+        assertEquals(25f, respawn!!, 0.0001f)
+        // Hard must remain harder than Medium (slower respawn).
+        val mediumRespawn = DifficultyPresets.MEDIUM.powerUpRespawnIntervalSeconds!!
+        assertTrue(
+            "Hard respawn interval should be slower (longer) than Medium",
+            respawn > mediumRespawn
+        )
     }
 
     @Test
@@ -94,5 +114,27 @@ class DifficultyPresetTest {
         assertEquals(10f, DifficultyPresets.EASY.powerUpExpirationStaggerSeconds, 0.0001f)
         assertEquals(10f, DifficultyPresets.MEDIUM.powerUpExpirationStaggerSeconds, 0.0001f)
         assertEquals(10f, DifficultyPresets.HARD.powerUpExpirationStaggerSeconds, 0.0001f)
+    }
+
+    /**
+     * Pins the short-session design intent: every preset's maze cell count
+     * must stay within a bounded range so a typical single-maze Classic
+     * session lands around 2–3 minutes. The bounds give headroom for
+     * future small tweaks without churning this test on every nudge. See
+     * docs/lessons-learned.md "Session-length tuning".
+     */
+    @Test
+    fun presets_targetShortSessions_cellCountsBounded() {
+        // Generator rounds up to even, so use the raw preset dimensions
+        // (which are themselves already even in the shipping presets).
+        val easyCells = DifficultyPresets.EASY.mazeWidth * DifficultyPresets.EASY.mazeHeight
+        val mediumCells = DifficultyPresets.MEDIUM.mazeWidth * DifficultyPresets.MEDIUM.mazeHeight
+        val hardCells = DifficultyPresets.HARD.mazeWidth * DifficultyPresets.HARD.mazeHeight
+        assertTrue("Easy maze cell count $easyCells must be <= 256", easyCells <= 256)
+        assertTrue("Medium maze cell count $mediumCells must be <= 480", mediumCells <= 480)
+        assertTrue("Hard maze cell count $hardCells must be <= 600", hardCells <= 600)
+        // Strict ordering keeps the difficulty ladder intact.
+        assertTrue("Easy cells ($easyCells) must be < Medium ($mediumCells)", easyCells < mediumCells)
+        assertTrue("Medium cells ($mediumCells) must be < Hard ($hardCells)", mediumCells < hardCells)
     }
 }

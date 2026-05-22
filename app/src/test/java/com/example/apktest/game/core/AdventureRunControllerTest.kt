@@ -102,13 +102,13 @@ class AdventureRunControllerTest {
 
     @Test
     fun winningAllMazesTransitionsToWonStatus() {
-        val c = hardController() // 1 life, 13 mazes
-        repeat(13) {
+        val c = hardController() // 1 life, 9 mazes
+        repeat(9) {
             c.prepareCurrentMaze()
             c.onMazeWon()
         }
         assertEquals(AdventureStatus.WON, c.state.status)
-        assertEquals(13, c.state.currentMazeIndex)
+        assertEquals(9, c.state.currentMazeIndex)
         // prepareCurrentMaze returns null when terminal
         assertNull(c.prepareCurrentMaze())
     }
@@ -177,15 +177,15 @@ class AdventureRunControllerTest {
 
     @Test
     fun winOutcomeOnFinalMazeMarksRunComplete() {
-        val c = hardController() // 13 mazes, 1 life
-        repeat(12) {
+        val c = hardController() // 9 mazes, 1 life
+        repeat(8) {
             c.prepareCurrentMaze()
             c.onMazeWon()
         }
         c.prepareCurrentMaze()
         val w = c.onMazeWon()
         assertTrue(w.runComplete)
-        assertEquals(13, w.mazeIndexCompleted)
+        assertEquals(9, w.mazeIndexCompleted)
         assertTrue(w.unlockCandidates.isEmpty()) // no unlock after final win
     }
 

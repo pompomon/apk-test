@@ -53,41 +53,41 @@ enum class NpcSpeedBalanceRule {
 object DifficultyPresets {
     val EASY = DifficultyPreset(
         name = "Easy",
-        mazeWidth = 14,
-        mazeHeight = 20,
+        mazeWidth = 12,
+        mazeHeight = 16,
         npcCount = 1,
         playerMovesPerSecond = 4f,
         npcMovesPerSecond = 1f,
         npcVisionRange = 4,
         balanceRule = NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER,
         powerUpPickupLifetimeSeconds = 0f,
-        powerUpRespawnIntervalSeconds = 15f
+        powerUpRespawnIntervalSeconds = 12f
     )
 
     val MEDIUM = DifficultyPreset(
         name = "Medium",
-        mazeWidth = 18,
-        mazeHeight = 28,
+        mazeWidth = 16,
+        mazeHeight = 24,
         npcCount = 2,
         playerMovesPerSecond = 4.5f,
         npcMovesPerSecond = 1.5f,
         npcVisionRange = 5,
         balanceRule = NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER,
-        powerUpPickupLifetimeSeconds = 120f,
-        powerUpRespawnIntervalSeconds = 30f
+        powerUpPickupLifetimeSeconds = 45f,
+        powerUpRespawnIntervalSeconds = 20f
     )
 
     val HARD = DifficultyPreset(
         name = "Hard",
-        mazeWidth = 24,
-        mazeHeight = 34,
+        mazeWidth = 18,
+        mazeHeight = 28,
         npcCount = 3,
         playerMovesPerSecond = 5f,
         npcMovesPerSecond = 3.6f,
         npcVisionRange = 6,
         balanceRule = NpcSpeedBalanceRule.NONE,
-        powerUpPickupLifetimeSeconds = 65f,
-        powerUpRespawnIntervalSeconds = null
+        powerUpPickupLifetimeSeconds = 40f,
+        powerUpRespawnIntervalSeconds = 25f
     )
 
     val all = listOf(EASY, MEDIUM, HARD)
