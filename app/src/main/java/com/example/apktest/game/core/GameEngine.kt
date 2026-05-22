@@ -81,6 +81,38 @@ class GameEngine(
     private var npcRandom = Random(seed xor NPC_RANDOM_SEED_MIX)
     private var playerPolicy: PlayerPolicy = PolicyFactory.player(playerPolicyType)
     private var npcPolicy: NpcPolicy = PolicyFactory.npc(npcPolicyType, npcRandom)
+    /**
+     * Per-`NpcPolicyType` cache. In single-maze mode every NPC shares
+     * [npcPolicy] (= the entry at [npcPolicyType]); in Adventure mode each
+     * NPC may have its own [Npc.policyType], and we resolve the policy
+     * instance through this cache so we don't allocate per tick.
+     *
+     * Each cached instance gets its own deterministic [Random] seeded from
+     * [currentSeed] XOR-mixed with a per-type constant (see
+     * [resolveNpcPolicy]) so per-type RNG stays reproducible for a given
+     * engine seed and stays independent of the shared [npcRandom] stream
+     * (Hard rule #4).
+     */
+    private val npcPolicyCache = mutableMapOf<NpcPolicyType, NpcPolicy>()
+
+    /**
+     * Adventure-mode override of [DifficultyPreset.npcCount]. When non-null
+     * the next [spawnNpcs] call uses this value instead of the preset's
+     * `npcCount`. Reset to `null` by [setDifficulty] so changing the
+     * preset always returns to the preset-driven count.
+     */
+    var npcCountOverride: Int? = null
+        private set
+
+    /**
+     * Adventure-mode override assigning a [NpcPolicyType] per NPC by spawn
+     * index. When `null` every NPC uses the engine's configured
+     * [npcPolicyType] (single-maze behaviour). When non-null
+     * [spawnNpcs] sets each `Npc.policyType` from this list, padding with
+     * [npcPolicyType] if the list is shorter than the spawn count.
+     */
+    var npcPolicies: List<NpcPolicyType>? = null
+        private set
 
     private var playerAccumulator = 0f
     private var npcAccumulator = 0f
@@ -117,6 +149,7 @@ class GameEngine(
         random = Random(seed)
         npcRandom = Random(seed xor NPC_RANDOM_SEED_MIX)
         npcPolicy = PolicyFactory.npc(npcPolicyType, npcRandom)
+        npcPolicyCache.clear()
         status = GameStatus.RUNNING
         elapsedSeconds = 0f
         steps = 0
@@ -137,8 +170,23 @@ class GameEngine(
     }
 
     fun setDifficulty(newDifficulty: DifficultyPreset) {
-        difficulty = newDifficulty
+        applyDifficulty(newDifficulty)
         restart()
+    }
+
+    /**
+     * Apply [newDifficulty] without restarting. Intended for callers like
+     * Adventure mode that already perform their own [restart] (with a
+     * specific seed) immediately after configuring per-maze state — using
+     * [setDifficulty] would queue an extra full restart/spawn pass on the
+     * GL thread that the subsequent restart immediately discards.
+     */
+    fun applyDifficulty(newDifficulty: DifficultyPreset) {
+        difficulty = newDifficulty
+        // Changing difficulty discards any per-maze Adventure overrides so a
+        // user who flips difficulty mid-session gets the preset's NPC count.
+        npcCountOverride = null
+        npcPolicies = null
     }
 
     fun setPlayerPolicy(type: PlayerPolicyType) {
@@ -162,7 +210,42 @@ class GameEngine(
         npcPolicyType = type
         npcPolicy = PolicyFactory.npc(type, npcRandom)
         npcPolicy.reset()
+        npcPolicyCache.clear()
+        // Selecting a new uniform policy at runtime is a single-maze
+        // intent: discard any lingering Adventure per-NPC override so
+        // a subsequent restart/spawnNpcs uses the freshly selected
+        // policy instead of the persisted per-NPC list.
+        npcCountOverride = null
+        npcPolicies = null
+        // Single-maze re-assignment: NPCs that were spawned with an
+        // Adventure-supplied per-NPC policy follow the new uniform policy.
+        npcs.forEach { it.policyType = type }
         resetNpcPolicyState()
+    }
+
+    /**
+     * Adventure-mode entry point. Locks the NPC count and per-NPC policy
+     * list for the *next* [restart] (or maze re-entry). Callers should
+     * follow this with [restart] (or, on the host, allow the existing
+     * restart path to run) so the new NPC spawn count and policies take
+     * effect. Passing an empty [policies] list (or fewer than [npcCount])
+     * falls back to the engine's configured [npcPolicyType] for any
+     * unassigned NPC index.
+     */
+    fun configureAdventureMaze(npcCount: Int, policies: List<NpcPolicyType>) {
+        require(npcCount >= 0) { "npcCount must be >= 0 (was $npcCount)" }
+        npcCountOverride = npcCount
+        npcPolicies = policies.toList()
+    }
+
+    /**
+     * Clears any Adventure-mode overrides previously installed via
+     * [configureAdventureMaze] so subsequent [restart] calls revert to the
+     * preset's `npcCount` and the uniform [npcPolicyType].
+     */
+    fun clearAdventureMazeConfig() {
+        npcCountOverride = null
+        npcPolicies = null
     }
 
     /**
@@ -200,7 +283,13 @@ class GameEngine(
             ?.let { (it - elapsedSeconds).coerceAtLeast(0f) },
         manualQueue = manualQueue.toList(),
         manualOverrideRemainingSeconds = manualOverrideRemainingSeconds,
-        removedWalls = computeRemovedWalls()
+        removedWalls = computeRemovedWalls(),
+        npcCountOverride = npcCountOverride,
+        // Always persist the per-NPC policy list (indexed by spawn id /
+        // [Npc.id]) so a resume on a snapshot taken mid-Adventure-maze
+        // restores each NPC's individual policy. For single-maze runs this
+        // is just a uniform list of [npcPolicyType] — small and harmless.
+        npcPolicies = npcs.map { it.policyType }
     )
 
     /**
@@ -284,8 +373,31 @@ class GameEngine(
         random = Random(currentSeed)
         npcRandom = Random(currentSeed xor NPC_RANDOM_SEED_MIX)
         npcPolicy = PolicyFactory.npc(npcPolicyType, npcRandom)
+        npcPolicyCache.clear()
         playerPolicy.reset()
         npcPolicy.reset()
+
+        // Re-install Adventure-mode overrides (if any) from the snapshot.
+        // These drive subsequent restarts so a paused-mid-maze resume that
+        // later hits restart still gets the right NPC count + per-NPC
+        // policies. The per-NPC `policyType` field below is what governs
+        // the *current* spawned NPCs.
+        //
+        // Single-maze snapshots also persist `npcPolicies` (a uniform list
+        // of `snapshot.npcPolicy`) so each NPC's `policyType` can be
+        // restored individually. Re-installing that uniform list as an
+        // override would then make a later [setNpcPolicy] ineffective on
+        // restart, because [spawnNpcs] would keep preferring the persisted
+        // list. Treat the snapshot as an Adventure override only when it
+        // explicitly carries a count override or a non-uniform policy list.
+        npcCountOverride = snapshot.npcCountOverride
+        npcPolicies = snapshot.npcPolicies
+            .takeIf { list ->
+                list.isNotEmpty() && (
+                    snapshot.npcCountOverride != null ||
+                        list.any { it != snapshot.npcPolicy }
+                )
+            }
 
         status = snapshot.status
         elapsedSeconds = snapshot.elapsedSeconds
@@ -302,7 +414,11 @@ class GameEngine(
                 id = n.id,
                 position = GridPos(n.x, n.y),
                 facing = n.facing,
-                patrolRoute = patrolRouteFrom(GridPos(n.x, n.y))
+                patrolRoute = patrolRouteFrom(GridPos(n.x, n.y)),
+                // Restore each NPC's per-NPC policy, defaulting to the
+                // engine-wide [npcPolicyType] when the snapshot did not
+                // record one (single-maze snapshots).
+                policyType = snapshot.npcPolicies.getOrNull(n.id) ?: npcPolicyType
             )
         }.toMutableList()
 
@@ -527,7 +643,8 @@ class GameEngine(
         )
 
         npcs.forEach { npc ->
-            val direction = npcPolicy.nextMove(npc, context) ?: return@forEach
+            val policy = resolveNpcPolicy(npc.policyType)
+            val direction = policy.nextMove(npc, context) ?: return@forEach
             if (!maze.canMove(npc.position, direction)) return@forEach
 
             npc.position = npc.position.moved(direction)
@@ -535,6 +652,23 @@ class GameEngine(
             npc.animationFrame = (npc.animationFrame + 1) % ANIMATION_FRAMES
             npc.lastMoveAtSeconds = elapsedSeconds
             collectPowerUpAtNpc(npc)
+        }
+    }
+
+    /**
+     * Resolve (and cache) the [NpcPolicy] instance for [type]. For the
+     * engine's configured [npcPolicyType] we always return the long-lived
+     * [npcPolicy] so single-maze behaviour is byte-for-byte unchanged
+     * (same RNG stream). For any other type — used only when an Adventure
+     * maze assigns per-NPC policies — we lazily build and cache a fresh
+     * instance with its own seeded RNG derived from [currentSeed] (Hard
+     * rule #4) so the per-type stream is reproducible.
+     */
+    private fun resolveNpcPolicy(type: NpcPolicyType): NpcPolicy {
+        if (type == npcPolicyType) return npcPolicy
+        return npcPolicyCache.getOrPut(type) {
+            val perTypeMix = NPC_RANDOM_SEED_MIX xor (type.ordinal + 1).toLong() * NPC_POLICY_TYPE_SEED_STRIDE
+            PolicyFactory.npc(type, Random(currentSeed xor perTypeMix))
         }
     }
 
@@ -604,14 +738,20 @@ class GameEngine(
             }
         }
         candidates.shuffle(random)
-        val spawnCount = difficulty.npcCount.coerceAtMost(candidates.size)
+        val requestedCount = npcCountOverride ?: difficulty.npcCount
+        val spawnCount = requestedCount.coerceAtMost(candidates.size).coerceAtLeast(0)
+        val policies = npcPolicies
         repeat(spawnCount) { index ->
             val candidate = candidates[index]
             val route = patrolRouteFrom(candidate)
+            // Per-NPC policy: fall back to engine-wide [npcPolicyType] if no
+            // override entry was supplied for this spawn index.
+            val perNpcPolicy = policies?.getOrNull(index) ?: npcPolicyType
             npcs += Npc(
                 id = index,
                 position = candidate,
-                patrolRoute = route
+                patrolRoute = route,
+                policyType = perNpcPolicy
             )
         }
     }
@@ -831,6 +971,19 @@ class GameEngine(
         // as a signed-Long literal because Kotlin `const val` initializers must
         // be compile-time constants (UInt/ULong .toLong() is not).
         private const val NPC_RANDOM_SEED_MIX: Long = -0x61C8864680B583EBL
+
+        /**
+         * Stride between per-`NpcPolicyType` RNG streams in Adventure mode.
+         * Multiplied by `(ordinal + 1)` and XOR-mixed with [NPC_RANDOM_SEED_MIX]
+         * so each NPC policy type used in a maze gets a distinct deterministic
+         * seed derived from [currentSeed].
+         *
+         * Written as a signed-Long literal because Kotlin `const val`
+         * initializers must be compile-time constants (UInt/ULong .toLong()
+         * is not). Value chosen to be coprime with small multipliers so
+         * per-type seeds remain well-spread.
+         */
+        private const val NPC_POLICY_TYPE_SEED_STRIDE: Long = 0x12B9B0A1CE4A11BL
         /**
          * Number of distinct movement-step animation frames an entity cycles
          * through while moving. The renderer picks `stepFrames[animationFrame]`

@@ -51,11 +51,35 @@ SetupActivity  ── Intent extras ──▶  MainActivity  ── Fragment arg
 - `GameStateStore` persists a JSON-serialized `GameEngineSnapshot` in `SharedPreferences`. Validated load only — never read raw JSON to drive UI.
 - `MainActivity.onPause` writes a snapshot via a **shared single-thread `ExecutorService`**. "Pause & Exit" *clears* the saved state when status is `WIN` or `LOSE` instead of saving.
 - `GameEngineSnapshot.fromJson` returns `null` on:
-  - schema-version mismatch (`SCHEMA_VERSION` is currently `2`),
+  - schema-version mismatch (`SCHEMA_VERSION` is currently `3`),
   - unknown `difficultyName` (does **not** silently fall back to MEDIUM the way `DifficultyPresets.byName` does),
   - any persisted coordinate (player, NPCs, spawned power-ups, or `removedWalls` cell) falling outside the maze bounds implied by the preset (rounded up to even, like the generator),
   - JSON / enum-value parse errors.
 - The snapshot persists `removedWalls` — walls destroyed during gameplay — so restore re-applies them on the regenerated baseline maze.
+- The snapshot also persists Adventure-mode overrides — `npcCountOverride` (replaces the preset's `npcCount`) and `npcPolicies` (per-NPC policy by spawn id) — so a paused-mid-maze resume re-spawns the same set of NPCs with the same per-NPC strategies.
+
+## Adventure mode
+
+Adventure mode is a thin "run controller" layered above the single-maze engine. The engine handles one maze at a time; the controller chains mazes and tracks run-level state (lives, win streak, unlocks).
+
+```
+SetupActivity ──▶ AdventureSetupActivity ──▶ AdventureActivity ──▶ GameFragment ──▶ MazeGame ──▶ GameEngine
+                                                  │
+                                                  ▼
+                                       AdventureRunController ◀──▶ AdventureRunStateSnapshot
+                                                  │
+                                                  ▼
+                                       AdventureStateStore (separate SharedPreferences file)
+```
+
+- **`AdventureConfig`** (`game/core/AdventureConfig.kt`): per-difficulty rules — Easy 5 lives / 7 mazes / +1 NPC per maze level, Medium 3 / 11 / +2, Hard 1 / 13 / +3. `npcCountForMaze(idx)` = `idx + extraNpcsPerMaze`. Unknown presets fall back to Medium rules.
+- **`AdventureRunController`** (`game/core/AdventureRunController.kt`): pure-Kotlin state transitions (no Android imports → fully JVM-testable). Locks `currentMazeSeed` + `currentMazeNpcPolicies` on first `prepareCurrentMaze()` per maze so a death replay returns the *same* spec; clears them on win; awards +1 life every 3 consecutive wins (resets streak on death OR on bonus); manages the unlocked-policies pool starting with only `MANUAL`.
+- **`AdventureRunStateSnapshot`** (`game/core/AdventureRunStateSnapshot.kt`): JSON, schema-versioned, validates the MANUAL-always-unlocked invariant. Embeds a `GameEngineSnapshot` for paused-mid-maze resume.
+- **`AdventureStateStore`** (`AdventureStateStore.kt`): sibling of `GameStateStore` but in its own SharedPreferences file (`adventure_state`) so a saved adventure never appears as a single-maze Resume on the main start menu, and vice versa.
+- **`AdventureActivity`** mirrors `MainActivity`'s lifecycle / popover / swipe handling, polls engine status every 200ms to detect `WIN`/`LOSE`, runs the win/lose/unlock-chooser overlays, and persists via a per-activity single-thread autosave executor (guarded against `RejectedExecutionException` per Hard rule #8).
+- **`GameEngine.configureAdventureMaze(npcCount, policies)`** sets `npcCountOverride` + `npcPolicies`. Per-NPC `policyType` is resolved through a per-type policy cache with deterministic seeded RNG (`NPC_POLICY_TYPE_SEED_STRIDE`) — single-maze runs still go through the long-lived `npcPolicy` instance so behaviour is byte-for-byte unchanged.
+
+**Hard rule (Adventure):** every per-maze NPC policy assignment is locked into `AdventureRunState.currentMazeNpcPolicies` on first entry so death replays use the same set; reloading an in-progress run preserves the locked list verbatim regardless of any future change to the derivation function.
 
 ## Player policy hierarchy
 

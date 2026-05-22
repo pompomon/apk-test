@@ -72,6 +72,28 @@ class MazeGame : ApplicationAdapter() {
 
     fun setDifficulty(name: String) = enqueue { it.setDifficulty(DifficultyPresets.byName(name)) }
 
+    /**
+     * Adventure-mode entry point. Applies the per-maze configuration
+     * (NPC count + per-NPC policy list + active player policy + difficulty)
+     * on the GL thread, then restarts the engine with the supplied seed
+     * so the next render tick spawns into the configured maze. Also
+     * re-arms the 3-2-1 countdown so the player gets the usual
+     * "assess the layout" window before NPCs start moving.
+     */
+    fun configureAdventureMaze(
+        seed: Long,
+        difficulty: String,
+        playerPolicy: PlayerPolicyType,
+        npcCount: Int,
+        npcPolicies: List<NpcPolicyType>
+    ) = enqueue { engine ->
+        engine.applyDifficulty(DifficultyPresets.byName(difficulty))
+        engine.setPlayerPolicy(playerPolicy)
+        engine.configureAdventureMaze(npcCount, npcPolicies)
+        engine.restart(seed)
+        engine.startCountdown()
+    }
+
     fun queueManualMove(direction: Direction) = enqueue { it.queueManualMove(direction) }
 
     fun togglePause() = enqueue { it.togglePause() }

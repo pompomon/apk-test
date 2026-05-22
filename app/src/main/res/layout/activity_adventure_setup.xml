@@ -7,91 +7,75 @@
     android:fillViewport="true">
 
     <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/setupRoot"
+        android:id="@+id/adventureSetupRoot"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:padding="24dp">
 
-        <!-- Centre column: buttons fill 70% of horizontal space via these
-             guidelines (15% / 85%). Switching to ConstraintLayout lets us
-             scale the buttons responsively without per-screen layout
-             variants. -->
         <androidx.constraintlayout.widget.Guideline
-            android:id="@+id/guidelineStart"
+            android:id="@+id/adventureGuidelineStart"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             app:layout_constraintGuide_percent="0.15" />
 
         <androidx.constraintlayout.widget.Guideline
-            android:id="@+id/guidelineEnd"
+            android:id="@+id/adventureGuidelineEnd"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             app:layout_constraintGuide_percent="0.85" />
 
         <TextView
-            android:id="@+id/setupTitle"
+            android:id="@+id/adventureSetupTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:gravity="center"
             android:paddingBottom="32dp"
-            android:text="@string/setup_title"
+            android:text="@string/adventure_setup_title"
             android:textColor="@color/maze_status_text"
             android:textSize="@dimen/start_menu_title_text_size"
             android:textStyle="bold"
-            app:layout_constraintEnd_toStartOf="@id/guidelineEnd"
-            app:layout_constraintStart_toEndOf="@id/guidelineStart"
+            app:layout_constraintEnd_toStartOf="@id/adventureGuidelineEnd"
+            app:layout_constraintStart_toEndOf="@id/adventureGuidelineStart"
             app:layout_constraintTop_toTopOf="parent" />
 
         <androidx.appcompat.widget.LinearLayoutCompat
-            android:id="@+id/startMenuButtonColumn"
+            android:id="@+id/adventureButtonColumn"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/guidelineEnd"
-            app:layout_constraintStart_toEndOf="@id/guidelineStart"
-            app:layout_constraintTop_toBottomOf="@id/setupTitle"
+            app:layout_constraintEnd_toStartOf="@id/adventureGuidelineEnd"
+            app:layout_constraintStart_toEndOf="@id/adventureGuidelineStart"
+            app:layout_constraintTop_toBottomOf="@id/adventureSetupTitle"
             app:layout_constraintVertical_bias="0.1">
 
             <Button
-                android:id="@+id/buttonResume"
+                android:id="@+id/buttonAdventureResume"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:minHeight="@dimen/start_menu_button_min_height"
-                android:text="@string/menu_resume"
+                android:text="@string/adventure_resume"
                 android:textSize="@dimen/start_menu_button_text_size"
                 app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
                 app:autoSizeMinTextSize="12sp"
                 app:autoSizeTextType="uniform" />
 
             <Button
-                android:id="@+id/buttonStart"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/start_menu_button_gap"
-                android:minHeight="@dimen/start_menu_button_min_height"
-                android:text="@string/menu_new_game"
-                android:textSize="@dimen/start_menu_button_text_size"
-                app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
-                app:autoSizeMinTextSize="12sp"
-                app:autoSizeTextType="uniform" />
-
-            <Button
-                android:id="@+id/buttonAdventureMode"
+                android:id="@+id/buttonAdventureStart"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/start_menu_button_gap"
                 android:minHeight="@dimen/start_menu_button_min_height"
-                android:text="@string/menu_adventure_mode"
+                android:text="@string/adventure_start"
                 android:textSize="@dimen/start_menu_button_text_size"
                 app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
                 app:autoSizeMinTextSize="12sp"
                 app:autoSizeTextType="uniform" />
 
             <Button
-                android:id="@+id/buttonPickDifficulty"
+                android:id="@+id/buttonAdventurePickDifficulty"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/start_menu_button_gap"
@@ -101,35 +85,34 @@
                 app:autoSizeMinTextSize="12sp"
                 app:autoSizeTextType="uniform" />
 
-            <Button
-                android:id="@+id/buttonPickPlayerStrategy"
+            <TextView
+                android:id="@+id/adventureSummary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/start_menu_button_gap"
-                android:minHeight="@dimen/start_menu_button_min_height"
-                android:textSize="@dimen/start_menu_button_text_size"
-                app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
-                app:autoSizeMinTextSize="12sp"
-                app:autoSizeTextType="uniform" />
+                android:gravity="center"
+                android:textColor="@color/maze_status_text"
+                android:textSize="14sp" />
 
             <Button
-                android:id="@+id/buttonPickNpcStrategy"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/start_menu_button_gap"
-                android:minHeight="@dimen/start_menu_button_min_height"
-                android:textSize="@dimen/start_menu_button_text_size"
-                app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
-                app:autoSizeMinTextSize="12sp"
-                app:autoSizeTextType="uniform" />
-
-            <Button
-                android:id="@+id/buttonLegend"
+                android:id="@+id/buttonAdventureLegend"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/start_menu_button_gap"
                 android:minHeight="@dimen/start_menu_button_min_height"
                 android:text="@string/legend"
+                android:textSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMinTextSize="12sp"
+                app:autoSizeTextType="uniform" />
+
+            <Button
+                android:id="@+id/buttonAdventureBack"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/start_menu_button_gap"
+                android:minHeight="@dimen/start_menu_button_min_height"
+                android:text="@string/adventure_back"
                 android:textSize="@dimen/start_menu_button_text_size"
                 app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
                 app:autoSizeMinTextSize="12sp"

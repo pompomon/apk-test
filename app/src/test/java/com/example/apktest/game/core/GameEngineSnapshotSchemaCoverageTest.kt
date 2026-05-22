@@ -133,8 +133,8 @@ class GameEngineSnapshotSchemaCoverageTest {
         steps = 7,
         player = GameEngineSnapshot.PlayerSnapshot(x = 3, y = 5, facing = Direction.NORTH),
         npcs = listOf(
-            GameEngineSnapshot.NpcSnapshot(id = 1, x = 2, y = 4, facing = Direction.SOUTH),
-            GameEngineSnapshot.NpcSnapshot(id = 2, x = 6, y = 8, facing = Direction.WEST)
+            GameEngineSnapshot.NpcSnapshot(id = 0, x = 2, y = 4, facing = Direction.SOUTH),
+            GameEngineSnapshot.NpcSnapshot(id = 1, x = 6, y = 8, facing = Direction.WEST)
         ),
         spawnedPowerUps = listOf(
             GameEngineSnapshot.SpawnedPowerUpSnapshot(
@@ -155,7 +155,9 @@ class GameEngineSnapshotSchemaCoverageTest {
         manualOverrideRemainingSeconds = 3.0f,
         removedWalls = listOf(
             GameEngineSnapshot.RemovedWallSnapshot(x = 0, y = 0, direction = Direction.EAST)
-        )
+        ),
+        npcCountOverride = 4,
+        npcPolicies = listOf(NpcPolicyType.DIRECT_CHASE, NpcPolicyType.PATROL_GUARD)
     )
 
     /**
@@ -175,7 +177,7 @@ class GameEngineSnapshotSchemaCoverageTest {
         steps = 42,
         player = GameEngineSnapshot.PlayerSnapshot(x = 4, y = 6, facing = Direction.SOUTH),
         npcs = listOf(
-            GameEngineSnapshot.NpcSnapshot(id = 3, x = 5, y = 7, facing = Direction.EAST)
+            GameEngineSnapshot.NpcSnapshot(id = 0, x = 5, y = 7, facing = Direction.EAST)
         ),
         spawnedPowerUps = listOf(
             GameEngineSnapshot.SpawnedPowerUpSnapshot(
@@ -203,6 +205,8 @@ class GameEngineSnapshotSchemaCoverageTest {
         removedWalls = listOf(
             GameEngineSnapshot.RemovedWallSnapshot(x = 1, y = 1, direction = Direction.SOUTH),
             GameEngineSnapshot.RemovedWallSnapshot(x = 2, y = 0, direction = Direction.WEST)
-        )
+        ),
+        npcCountOverride = 7,
+        npcPolicies = listOf(NpcPolicyType.PREDICTIVE_CHASE)
     )
 }
