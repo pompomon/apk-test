@@ -286,10 +286,14 @@ data class GameEngineSnapshot(
                     npcCountOverride = npcCountOverride,
                     npcPolicies = npcPolicies
                 )
-                // Reject snapshots whose npcCountOverride is obviously
-                // corrupt (negative). Other bounds checks happen via
-                // isWithinBounds below.
+                // Reject snapshots whose NPC metadata is internally
+                // inconsistent or obviously corrupt. Snapshots produced by
+                // snapshot() always carry one per-NPC policy entry for each
+                // serialized NPC, and any explicit count override cannot be
+                // smaller than the number of serialized NPCs.
                 if (npcCountOverride != null && npcCountOverride < 0) return null
+                if (npcPolicies.size != npcs.size) return null
+                if (npcCountOverride != null && npcCountOverride < npcs.size) return null
                 // Reject snapshots whose difficulty name doesn't match a
                 // known preset exactly (DifficultyPresets.byName silently
                 // falls back to MEDIUM, which would regenerate a
