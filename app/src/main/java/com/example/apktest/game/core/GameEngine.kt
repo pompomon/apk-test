@@ -87,9 +87,11 @@ class GameEngine(
      * NPC may have its own [Npc.policyType], and we resolve the policy
      * instance through this cache so we don't allocate per tick.
      *
-     * Each cached instance gets its own deterministic [Random] derived from
-     * [npcRandom] at first use so per-type RNG stays reproducible for a
-     * given engine seed (Hard rule #4).
+     * Each cached instance gets its own deterministic [Random] seeded from
+     * [currentSeed] XOR-mixed with a per-type constant (see
+     * [resolveNpcPolicy]) so per-type RNG stays reproducible for a given
+     * engine seed and stays independent of the shared [npcRandom] stream
+     * (Hard rule #4).
      */
     private val npcPolicyCache = mutableMapOf<NpcPolicyType, NpcPolicy>()
 
@@ -198,6 +200,12 @@ class GameEngine(
         npcPolicy = PolicyFactory.npc(type, npcRandom)
         npcPolicy.reset()
         npcPolicyCache.clear()
+        // Selecting a new uniform policy at runtime is a single-maze
+        // intent: discard any lingering Adventure per-NPC override so
+        // a subsequent restart/spawnNpcs uses the freshly selected
+        // policy instead of the persisted per-NPC list.
+        npcCountOverride = null
+        npcPolicies = null
         // Single-maze re-assignment: NPCs that were spawned with an
         // Adventure-supplied per-NPC policy follow the new uniform policy.
         npcs.forEach { it.policyType = type }
@@ -363,8 +371,22 @@ class GameEngine(
         // later hits restart still gets the right NPC count + per-NPC
         // policies. The per-NPC `policyType` field below is what governs
         // the *current* spawned NPCs.
+        //
+        // Single-maze snapshots also persist `npcPolicies` (a uniform list
+        // of `snapshot.npcPolicy`) so each NPC's `policyType` can be
+        // restored individually. Re-installing that uniform list as an
+        // override would then make a later [setNpcPolicy] ineffective on
+        // restart, because [spawnNpcs] would keep preferring the persisted
+        // list. Treat the snapshot as an Adventure override only when it
+        // explicitly carries a count override or a non-uniform policy list.
         npcCountOverride = snapshot.npcCountOverride
-        npcPolicies = snapshot.npcPolicies.takeIf { it.isNotEmpty() }
+        npcPolicies = snapshot.npcPolicies
+            .takeIf { list ->
+                list.isNotEmpty() && (
+                    snapshot.npcCountOverride != null ||
+                        list.any { it != snapshot.npcPolicy }
+                )
+            }
 
         status = snapshot.status
         elapsedSeconds = snapshot.elapsedSeconds

@@ -123,10 +123,15 @@ data class AdventureRunStateSnapshot(
                     status = AdventureStatus.valueOf(obj.getString(KEY_STATUS))
                 )
 
-                // Sanity bounds. The Adventure UI never offers a difficulty
-                // outside DifficultyPresets.all, so we accept the snapshot
-                // even on unknown names (a custom future preset) provided
-                // the numeric fields look sane.
+                // Reject unknown difficulty names outright. The Adventure
+                // UI only offers names from DifficultyPresets.all, and
+                // [AdventureRunController] hard-requires `state.difficultyName`
+                // to match its config's preset name. Accepting an unknown
+                // name here would silently fall back to MEDIUM via
+                // [DifficultyPresets.byName] in the host and then crash
+                // the controller on construction; failing the load instead
+                // lets the host gracefully start a fresh run.
+                if (DifficultyPresets.all.none { it.name == snapshot.difficultyName }) return null
                 if (snapshot.currentMazeIndex < 0) return null
                 if (snapshot.livesRemaining < 0) return null
                 if (snapshot.winStreakSinceLastBonus < 0) return null
