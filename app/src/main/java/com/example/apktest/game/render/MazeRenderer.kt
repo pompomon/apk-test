@@ -45,7 +45,8 @@ class MazeRenderer {
     // here, grouped by colour to keep `shapes.color` reassignments to one
     // per group (instead of one per rect) and to cut per-frame `shapes.rect`
     // calls by ~4× (W×H×4 non-base rects + 1 base rect vs the previous
-    // W×H×16 rects, where W/H are the preset maze dimensions). Stored in
+    // W×H×16 rects), where W/H are the generated maze dimensions (after
+    // `MazeGenerator` rounds the preset width/height up to even). Stored in
     // maze-local coords
     // so origin shifts (viewport resize) require no rebuild.
     private var cachedFloorMaze: Maze? = null
