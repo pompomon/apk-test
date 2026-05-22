@@ -99,45 +99,50 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         controller = initialController
         runSeed = initialSeed
 
-        if (savedInstanceState == null) {
-            val spec = controller.prepareCurrentMaze()
-            if (spec == null) {
-                // Defensive: terminal state recovered from store. Clear and bail.
-                adventureStore.clear()
-                returnToSetup()
-                return
-            }
-            val fragment = GameFragment()
-            val args = Bundle().apply {
-                putString(GameFragment.ARG_PLAYER_POLICY, spec.playerPolicy.name)
-                // Per-NPC list is applied via configureAdventureMaze after attach;
-                // this is just the engine's default before the override lands.
+        // Always (re)create the GameFragment from the current controller
+        // spec, including on activity recreation (savedInstanceState != null,
+        // typically process-death). The FragmentManager would otherwise
+        // restore the previous GameFragment with its original arguments,
+        // which can be stale (wrong maze index / wrong mid-maze snapshot)
+        // versus the persisted controller state we just loaded. Replacing
+        // the fragment reconciles the engine/UI with controller.prepareCurrentMaze().
+        val spec = controller.prepareCurrentMaze()
+        if (spec == null) {
+            // Defensive: terminal state recovered from store. Clear and bail.
+            adventureStore.clear()
+            returnToSetup()
+            return
+        }
+        val fragment = GameFragment()
+        val args = Bundle().apply {
+            putString(GameFragment.ARG_PLAYER_POLICY, spec.playerPolicy.name)
+            // Per-NPC list is applied via configureAdventureMaze after attach;
+            // this is just the engine's default before the override lands.
+            putString(
+                GameFragment.ARG_NPC_POLICY,
+                com.example.apktest.game.core.NpcPolicyType.DIRECT_CHASE.name
+            )
+            putString(GameFragment.ARG_DIFFICULTY, spec.difficulty.name)
+            if (spec.midMazeSnapshot != null) {
+                GameFragment.pendingResumeSnapshot = spec.midMazeSnapshot
                 putString(
-                    GameFragment.ARG_NPC_POLICY,
-                    com.example.apktest.game.core.NpcPolicyType.DIRECT_CHASE.name
-                )
-                putString(GameFragment.ARG_DIFFICULTY, spec.difficulty.name)
-                if (spec.midMazeSnapshot != null) {
-                    GameFragment.pendingResumeSnapshot = spec.midMazeSnapshot
-                    putString(
-                        GameFragment.ARG_RESUME_SNAPSHOT_JSON,
-                        spec.midMazeSnapshot.toJson()
-                    )
-                }
-            }
-            fragment.arguments = args
-            supportFragmentManager.beginTransaction()
-                .replace(R.id.fragmentGameHost, fragment)
-                .commitNow()
-            if (spec.midMazeSnapshot == null) {
-                fragment.configureAdventureMaze(
-                    seed = spec.seed,
-                    difficulty = spec.difficulty.name,
-                    playerPolicy = spec.playerPolicy,
-                    npcCount = spec.npcCount,
-                    npcPolicies = spec.npcPolicies
+                    GameFragment.ARG_RESUME_SNAPSHOT_JSON,
+                    spec.midMazeSnapshot.toJson()
                 )
             }
+        }
+        fragment.arguments = args
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentGameHost, fragment)
+            .commitNow()
+        if (spec.midMazeSnapshot == null) {
+            fragment.configureAdventureMaze(
+                seed = spec.seed,
+                difficulty = spec.difficulty.name,
+                playerPolicy = spec.playerPolicy,
+                npcCount = spec.npcCount,
+                npcPolicies = spec.npcPolicies
+            )
         }
 
         setupControls()
@@ -392,7 +397,16 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             // want to advance simulation either. Safe to skip.
         }
         val outcome = controller.onMazeWon()
-        persistAdventureStateAsync()
+        // Intentionally do NOT persist controller state here. The controller
+        // has advanced (mazeIndex / lives / streak), but if the run is
+        // continuing the player still has to confirm the win dialog and,
+        // when applicable, pick an unlock. Persisting now would mean a
+        // process death while the dialogs are visible drops the unlock
+        // choice while keeping the advanced state. Instead we persist
+        // only after the user-driven follow-ups commit: [advanceToNextMaze]
+        // (no-unlock continue) or [showUnlockChooser]'s positive button.
+        // If the process dies before either fires, on resume the persisted
+        // state is still at the previous maze and the player simply replays it.
 
         val title = if (outcome.runComplete) {
             getString(R.string.adventure_run_complete_title)

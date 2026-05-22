@@ -170,12 +170,23 @@ class GameEngine(
     }
 
     fun setDifficulty(newDifficulty: DifficultyPreset) {
+        applyDifficulty(newDifficulty)
+        restart()
+    }
+
+    /**
+     * Apply [newDifficulty] without restarting. Intended for callers like
+     * Adventure mode that already perform their own [restart] (with a
+     * specific seed) immediately after configuring per-maze state — using
+     * [setDifficulty] would queue an extra full restart/spawn pass on the
+     * GL thread that the subsequent restart immediately discards.
+     */
+    fun applyDifficulty(newDifficulty: DifficultyPreset) {
         difficulty = newDifficulty
         // Changing difficulty discards any per-maze Adventure overrides so a
         // user who flips difficulty mid-session gets the preset's NPC count.
         npcCountOverride = null
         npcPolicies = null
-        restart()
     }
 
     fun setPlayerPolicy(type: PlayerPolicyType) {

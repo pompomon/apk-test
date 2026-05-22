@@ -136,6 +136,12 @@ data class AdventureRunStateSnapshot(
                 if (snapshot.livesRemaining < 0) return null
                 if (snapshot.winStreakSinceLastBonus < 0) return null
                 if (PlayerPolicyType.MANUAL !in snapshot.unlockedPlayerPolicies) return null
+                // Reject duplicates so a tampered payload like
+                // `[MANUAL, MANUAL]` can't fake an extra unlocked slot
+                // and trigger UI flows (e.g. the strategy switcher) that
+                // assume distinct entries.
+                if (snapshot.unlockedPlayerPolicies.distinct().size !=
+                    snapshot.unlockedPlayerPolicies.size) return null
                 if (snapshot.currentPlayerPolicy !in snapshot.unlockedPlayerPolicies) return null
                 snapshot
             } catch (_: Exception) {

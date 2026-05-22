@@ -87,7 +87,7 @@ class MazeGame : ApplicationAdapter() {
         npcCount: Int,
         npcPolicies: List<NpcPolicyType>
     ) = enqueue { engine ->
-        engine.setDifficulty(DifficultyPresets.byName(difficulty))
+        engine.applyDifficulty(DifficultyPresets.byName(difficulty))
         engine.setPlayerPolicy(playerPolicy)
         engine.configureAdventureMaze(npcCount, npcPolicies)
         engine.restart(seed)
