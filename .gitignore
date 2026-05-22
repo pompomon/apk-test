@@ -23,6 +23,9 @@ misc.xml
 deploymentTargetDropDown.xml
 render.experimental.xml
 
+# Local scratch artifacts (PR/review HTML exports, etc.)
+.tmp_*
+
 # Keystore files
 *.jks
 *.keystore
