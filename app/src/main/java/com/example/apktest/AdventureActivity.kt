@@ -472,8 +472,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             // resurrect the finished run), then finish to setup screen.
             clearAdventureStateBlocking()
             builder.setPositiveButton(R.string.adventure_finish) { _, _ ->
-                transitionPending = false
-                lastObservedStatus = GameStatus.RUNNING
+                // Keep [transitionPending] latched and leave [lastObservedStatus]
+                // as the terminal WIN value so a stray tick before [onPause]
+                // can't re-enter [handleMazeWon] and call
+                // [controller.onMazeWon] a second time during teardown.
                 returnToSetup()
             }
             builder.show()
@@ -557,8 +559,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             // run), then finish to setup screen.
             clearAdventureStateBlocking()
             builder.setPositiveButton(R.string.adventure_finish) { _, _ ->
-                transitionPending = false
-                lastObservedStatus = GameStatus.RUNNING
+                // Keep [transitionPending] latched and leave [lastObservedStatus]
+                // as the terminal LOSE value so a stray tick before [onPause]
+                // can't re-enter [handleMazeLost] and call
+                // [controller.onPlayerDied] a second time during teardown.
                 returnToSetup()
             }
         } else {
