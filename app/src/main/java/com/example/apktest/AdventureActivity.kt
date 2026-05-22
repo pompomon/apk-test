@@ -217,9 +217,13 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         // doesn't persist the countdown; treat as fresh-maze resume
         // by clearing the mid-maze snapshot instead of persisting a
         // snapshot that would skip the countdown on relaunch.
+        // Use the blocking persist path here so the clear is durably
+        // committed before onPause() returns; otherwise an older saved
+        // state with a mid-maze snapshot can be resurrected if the
+        // process is killed before an async apply() flushes.
         if (hud?.countdownRemainingSeconds != null) {
             controller.clearMidMazeSnapshot()
-            persistAdventureStateAsync()
+            persistAdventureStateBlocking()
             super.onPause()
             return
         }
