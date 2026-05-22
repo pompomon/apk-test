@@ -292,6 +292,31 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         }
     }
 
+    /**
+     * Mirror of [persistAdventureStateBlocking] for the terminal clear:
+     * submits a `commit()`-based clear to [autosaveExecutor] and waits
+     * briefly for it to flush, so a finished run can't be resurrected as
+     * "Resume Adventure" if the process is killed before an async
+     * `apply()` write reaches disk. Never invokes
+     * [AdventureStateStore.clearBlocking] on the calling thread.
+     */
+    private fun clearAdventureStateBlocking() {
+        try {
+            autosaveExecutor.submit { adventureStore.clearBlocking() }
+                .get(SAVE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (_: RejectedExecutionException) {
+            // Executor shut down — accept the loss rather than calling
+            // clearBlocking() (which does SharedPreferences.commit() disk
+            // I/O) on the calling thread, which may be the UI thread.
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        } catch (_: java.util.concurrent.ExecutionException) {
+            // best-effort
+        } catch (_: java.util.concurrent.TimeoutException) {
+            // best-effort
+        }
+    }
+
     private fun setupControls() {
         menuButton.setOnClickListener { showMenu() }
         findViewById<Button>(R.id.buttonUp).setOnClickListener { move(Direction.NORTH) }
@@ -442,8 +467,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
         val builder = AlertDialog.Builder(this).setTitle(title).setMessage(body).setCancelable(false)
         if (outcome.runComplete) {
-            // End of adventure — clear store, finish to setup screen.
-            adventureStore.clear()
+            // End of adventure — clear store (blocking via autosave
+            // executor so a process-kill before navigation can't
+            // resurrect the finished run), then finish to setup screen.
+            clearAdventureStateBlocking()
             builder.setPositiveButton(R.string.adventure_finish) { _, _ ->
                 transitionPending = false
                 lastObservedStatus = GameStatus.RUNNING
@@ -525,7 +552,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             .setCancelable(false)
         if (body.isNotEmpty()) builder.setMessage(body)
         if (outcome.runOver) {
-            adventureStore.clear()
+            // Run lost — clear store (blocking via autosave executor so
+            // a process-kill before navigation can't resurrect the lost
+            // run), then finish to setup screen.
+            clearAdventureStateBlocking()
             builder.setPositiveButton(R.string.adventure_finish) { _, _ ->
                 transitionPending = false
                 lastObservedStatus = GameStatus.RUNNING

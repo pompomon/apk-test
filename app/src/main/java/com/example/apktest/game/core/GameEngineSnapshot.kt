@@ -56,9 +56,11 @@ data class GameEngineSnapshot(
      * NPC's individually-assigned type. On restore, each NPC is re-assigned
      * its individual policy; if the list is non-empty it is also re-installed
      * as an Adventure override so a follow-up `restart` re-spawns NPCs with
-     * the same per-NPC policies. May be empty only for snapshots produced
-     * before this field existed (older schema versions are rejected by
-     * `fromJson`, so in practice this is always populated for v3+).
+     * the same per-NPC policies. An empty list is valid in v3+ when zero
+     * NPCs are spawned (e.g. `npcCountOverride = 0`, or no available spawn
+     * candidates); otherwise this list has exactly one entry per spawned
+     * NPC. Older schema versions that pre-date this field are rejected by
+     * `fromJson`.
      */
     val npcPolicies: List<NpcPolicyType> = emptyList()
 ) {
