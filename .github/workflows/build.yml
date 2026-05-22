@@ -103,6 +103,9 @@ jobs:
       - name: Install Android SDK components
         run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
+      - name: Pre-build debug APKs
+        run: ./gradlew assembleDebug assembleDebugAndroidTest
+
       - name: Run instrumented tests on emulator
         uses: reactivecircus/android-emulator-runner@e89f39f1abbbd05b1113a29cf4db69e7540cae5a # v2.37.0
         with:
