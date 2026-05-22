@@ -118,18 +118,22 @@ class DifficultyPresetTest {
 
     /**
      * Pins the short-session design intent: every preset's maze cell count
-     * must stay within a bounded range so a typical single-maze Classic
+     * must stay at or below an upper bound so a typical single-maze Classic
      * session lands around 2–3 minutes. The bounds give headroom for
      * future small tweaks without churning this test on every nudge. See
      * docs/lessons-learned.md "Session-length tuning".
      */
     @Test
     fun presets_targetShortSessions_cellCountsBounded() {
-        // Generator rounds up to even, so use the raw preset dimensions
-        // (which are themselves already even in the shipping presets).
-        val easyCells = DifficultyPresets.EASY.mazeWidth * DifficultyPresets.EASY.mazeHeight
-        val mediumCells = DifficultyPresets.MEDIUM.mazeWidth * DifficultyPresets.MEDIUM.mazeHeight
-        val hardCells = DifficultyPresets.HARD.mazeWidth * DifficultyPresets.HARD.mazeHeight
+        // The generator rounds preset dimensions up to even before building
+        // the maze, so mirror that here to keep this guard accurate even if
+        // a future preset tweak picks odd dimensions.
+        fun roundUpToEven(value: Int): Int = if (value % 2 == 0) value else value + 1
+        fun cells(p: DifficultyPreset): Int =
+            roundUpToEven(p.mazeWidth) * roundUpToEven(p.mazeHeight)
+        val easyCells = cells(DifficultyPresets.EASY)
+        val mediumCells = cells(DifficultyPresets.MEDIUM)
+        val hardCells = cells(DifficultyPresets.HARD)
         assertTrue("Easy maze cell count $easyCells must be <= 256", easyCells <= 256)
         assertTrue("Medium maze cell count $mediumCells must be <= 480", mediumCells <= 480)
         assertTrue("Hard maze cell count $hardCells must be <= 600", hardCells <= 600)
