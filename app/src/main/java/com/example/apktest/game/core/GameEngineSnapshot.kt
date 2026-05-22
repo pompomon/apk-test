@@ -294,6 +294,16 @@ data class GameEngineSnapshot(
                 if (npcCountOverride != null && npcCountOverride < 0) return null
                 if (npcPolicies.size != npcs.size) return null
                 if (npcCountOverride != null && npcCountOverride < npcs.size) return null
+                // `npcPolicies` is keyed by spawn id (`Npc.id`), and
+                // `GameEngine.restore()` looks each policy up via
+                // `npcPolicies.getOrNull(n.id)`. Reject snapshots whose
+                // NPC ids aren't a unique, 0-based contiguous range
+                // (`0 until npcs.size`); otherwise a corrupted/tampered
+                // payload could silently drop or misapply per-NPC
+                // policies on restore.
+                val npcIds = npcs.map { it.id }
+                if (npcIds.toSet().size != npcIds.size) return null
+                if (npcIds.any { it < 0 || it >= npcs.size }) return null
                 // Reject snapshots whose difficulty name doesn't match a
                 // known preset exactly (DifficultyPresets.byName silently
                 // falls back to MEDIUM, which would regenerate a
