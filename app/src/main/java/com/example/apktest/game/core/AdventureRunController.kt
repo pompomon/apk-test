@@ -247,8 +247,8 @@ class AdventureRunController(
     internal fun sampleLockedPlayerPolicies(count: Int, mazeIndex1Based: Int): List<PlayerPolicyType> {
         val locked = lockedPlayerPolicies()
         if (locked.isEmpty() || count <= 0) return emptyList()
-        if (locked.size <= count) return locked
         val rng = Random(deriveRewardSeed(mazeIndex1Based, REWARD_KIND_POLICY))
+        if (locked.size <= count) return locked.shuffled(rng)
         return locked.shuffled(rng).take(count)
     }
 
@@ -328,9 +328,10 @@ class AdventureRunController(
 
     /**
      * Record [type] as the power-up to activate at the start of the next
-     * maze (consumed by the next [prepareCurrentMaze]). No-op when [type]
-     * is `null`. Returns the previously pending power-up (or `null` if
-     * none) so the caller can react to an overwrite if needed.
+     * maze (consumed by the next [prepareCurrentMaze]). Passing `null`
+     * clears any previously pending starting power-up. Returns the
+     * previously pending power-up (or `null` if none) so the caller can
+     * react to an overwrite if needed.
      */
     fun applyStartingPowerUp(type: PowerUpType?): PowerUpType? {
         val previous = state.pendingStartingPowerUp

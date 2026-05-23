@@ -560,8 +560,10 @@ class PledgePolicy : RankedPlayerPolicy {
         rotation += rotationDelta(facing, picked)
         followFacing = picked
 
-        // Exit wall-following when aligned with reference AND can step toward it.
-        if (rotation == 0 && maze.canMove(from, ref) && picked == ref) {
+        // Exit wall-following when net rotation is zero and the reference
+        // direction is walkable again; the next tick will choose `ref` via
+        // the straight-walk branch regardless of what was picked this tick.
+        if (rotation == 0 && maze.canMove(from, ref)) {
             following = false
             followFacing = null
         }
@@ -629,17 +631,19 @@ class FleeToExitPolicy : RankedPlayerPolicy {
 
     override fun rankedMoves(context: PlayerPolicyContext): List<Direction> {
         val from = context.player.position
-        val walkable = Direction.entries.filter { context.maze.canMove(from, it) }
+        val maze = context.maze
+        val walkable = Direction.entries.filter { maze.canMove(from, it) }
         if (walkable.isEmpty()) return emptyList()
 
-        // Pre-compute exit BFS distances so we don't path-find per direction.
-        val exit = context.exit
+        // Pre-compute a single BFS distance field from the exit so we look
+        // up each candidate destination in O(1) instead of running BFS per
+        // direction (previously up to 4 bfsPath calls per tick).
+        val exitDistances = bfsDistanceField(maze, context.exit)
         return walkable
             .map { direction ->
                 val dest = from.moved(direction)
                 val npcDistance = minNpcChebyshev(dest, context.npcs)
-                val exitPath = context.navigator.bfsPath(dest, exit)
-                val exitDistance = if (exitPath.isEmpty()) Int.MAX_VALUE else exitPath.size - 1
+                val exitDistance = exitDistances[dest] ?: Int.MAX_VALUE
                 Triple(direction, npcDistance, exitDistance)
             }
             .sortedWith(
@@ -648,6 +652,23 @@ class FleeToExitPolicy : RankedPlayerPolicy {
                     .thenBy { it.first.ordinal }
             )
             .map { it.first }
+    }
+
+    private fun bfsDistanceField(maze: Maze, source: GridPos): Map<GridPos, Int> {
+        val distances = HashMap<GridPos, Int>()
+        distances[source] = 0
+        val queue = ArrayDeque<GridPos>()
+        queue.add(source)
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            val nextDist = distances.getValue(current) + 1
+            for (neighbor in maze.neighbors(current)) {
+                if (neighbor in distances) continue
+                distances[neighbor] = nextDist
+                queue.add(neighbor)
+            }
+        }
+        return distances
     }
 
     private fun minNpcChebyshev(cell: GridPos, npcs: List<Npc>): Int {
