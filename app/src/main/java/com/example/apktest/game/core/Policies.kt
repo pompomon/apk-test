@@ -5,11 +5,11 @@ import kotlin.random.Random
 
 enum class PlayerPolicyType(val label: String) {
     MANUAL("Manual"),
-    RANDOM_MEMORY("Random+Memory"),
     WALL_LEFT("Wall Left"),
-    WALL_RIGHT("Wall Right"),
     BFS_EXIT("BFS Exit"),
-    ASTAR_EXIT("A* Exit")
+    ASTAR_EXIT("A* Exit"),
+    PLEDGE("Pledge"),
+    FLEE_TO_EXIT("Flee + Drift to Exit")
 }
 
 enum class NpcPolicyType(val label: String) {
@@ -87,39 +87,6 @@ class ManualPolicy : PlayerPolicy {
     override fun nextMove(context: PlayerPolicyContext): Direction? = null
 }
 
-class RandomWalkMemoryPolicy(private val random: Random = Random.Default) : RankedPlayerPolicy {
-    private val visitCounts = mutableMapOf<GridPos, Int>()
-
-    internal fun visitCount(position: GridPos): Int = visitCounts.getOrDefault(position, 0)
-
-    override fun nextMove(context: PlayerPolicyContext): Direction? =
-        rankedMoves(context).firstOrNull()
-
-    override fun rankedMoves(context: PlayerPolicyContext): List<Direction> {
-        visitCounts[context.player.position] = visitCounts.getOrDefault(context.player.position, 0) + 1
-
-        val options = Direction.entries.filter { context.maze.canMove(context.player.position, it) }
-        if (options.isEmpty()) return emptyList()
-
-        // Group walkable directions by destination visit count and emit the
-        // groups in ascending order. Each group is shuffled with the policy's
-        // seeded RNG so behaviour is deterministic for a given seed and ties
-        // within a group are broken uniformly (matching the previous
-        // single-pick behaviour of [nextMove]).
-        val grouped = options.groupBy { direction ->
-            val destination = context.player.position.moved(direction)
-            visitCounts.getOrDefault(destination, 0)
-        }
-        return grouped.entries
-            .sortedBy { it.key }
-            .flatMap { it.value.shuffled(random) }
-    }
-
-    override fun reset() {
-        visitCounts.clear()
-    }
-}
-
 class WallFollowerPolicy(private val leftHand: Boolean) : RankedPlayerPolicy {
     override fun nextMove(context: PlayerPolicyContext): Direction? =
         rankedMoves(context).firstOrNull()
@@ -191,8 +158,8 @@ class AStarExitPolicy : RankedPlayerPolicy {
  *   prefers that step when it avoids both deadly *and* risky cells (or
  *   when it lands on the exit, which wins the game this tick).
  * - Otherwise the wrapper picks the highest-ranked safe candidate from
- *   [RankedPlayerPolicy.rankedMoves] (preserving wall-follower priority and
- *   random-memory visit-count ordering). A move that lands on the exit is
+ *   [RankedPlayerPolicy.rankedMoves] (preserving wall-follower priority).
+ *   A move that lands on the exit is
  *   always preferred, even if the exit is currently occupied by an NPC,
  *   since [GameEngine] evaluates the win condition before NPC collision.
  *   If every candidate enters a currently NPC-occupied (deadly) cell the
@@ -217,9 +184,8 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
         // then reused when building the ranked-moves list and again in the
         // pass-through branch, so BFS/A* is searched at most once per tick
         // for these policies (avoiding a redundant search in passThroughMove).
-        // For stateful policies (e.g. RandomWalkMemoryPolicy) always call
-        // rankedMoves so per-tick state (visit counters) is updated
-        // unconditionally, even on ticks where pickup-seeking or a winning
+        // For stateful policies (e.g. PledgePolicy) always call
+        // rankedMoves so per-tick state is updated unconditionally, even on ticks where pickup-seeking or a winning
         // move short-circuits the ranked selection.
         val exitDirection: Direction? =
             if (isStatelessExitPolicy) inner.nextMove(context) else null
@@ -530,14 +496,179 @@ class PatrolGuardPolicy : NpcPolicy {
     }
 }
 
+/**
+ * Pledge's algorithm: walk straight in a [referenceDirection] (chosen as
+ * the cardinal direction whose vector best aligns with player→exit on
+ * first use); when blocked, switch to left-hand wall-following while
+ * counting net rotations (left = -1, right = +1, opposite = ±2). When
+ * the net rotation returns to zero on a tick where the reference
+ * direction is walkable again, resume straight motion.
+ *
+ * This guarantees the player escapes finite obstacles and re-aligns
+ * with the exit when possible, without needing global path planning.
+ * Implementation is stateful; per-tick state is updated by both
+ * [nextMove] and [rankedMoves] (the wrapper calls one or the other).
+ */
+class PledgePolicy : RankedPlayerPolicy {
+    private var referenceDirection: Direction? = null
+    /** Net rotations from [referenceDirection] while wall-following (0 = aligned). */
+    private var rotation: Int = 0
+    /** True while in wall-following mode; false while walking straight. */
+    private var following: Boolean = false
+    /** Cached facing during wall-following; resets when we resume straight. */
+    private var followFacing: Direction? = null
+
+    override fun nextMove(context: PlayerPolicyContext): Direction? =
+        rankedMoves(context).firstOrNull()
+
+    override fun rankedMoves(context: PlayerPolicyContext): List<Direction> {
+        val maze = context.maze
+        val from = context.player.position
+        val walkable = Direction.entries.filter { maze.canMove(from, it) }
+        if (walkable.isEmpty()) return emptyList()
+
+        val ref = referenceDirection ?: pickReferenceDirection(from, context.exit).also {
+            referenceDirection = it
+        }
+
+        // If aligned and the reference direction is walkable, prefer it.
+        if (!following && maze.canMove(from, ref)) {
+            // Walk straight; remaining walkable directions follow as fallbacks
+            // ordered by manhattan distance to the exit so the wrapper still
+            // tends toward the exit when the primary step is unsafe.
+            return rankedWithFallback(walkable, ref, from, context.exit)
+        }
+
+        // Enter (or continue) wall-following mode.
+        if (!following) {
+            following = true
+            rotation = 0
+            // Initial facing for wall-follow: start from the player's current
+            // facing so the very first turn is deterministic.
+            followFacing = context.player.facing
+        }
+        val facing = followFacing ?: context.player.facing
+        // Left-hand wall follower preference order at facing: left, straight,
+        // right, back. Track rotation on the eventual pick so we know when
+        // to resume straight motion.
+        val order = listOf(facing.left(), facing, facing.right(), facing.opposite())
+        val picked = order.firstOrNull { maze.canMove(from, it) } ?: facing
+
+        // Update rotation counter based on the rotation from the reference
+        // direction caused by this pick. Use the relative turn from current
+        // facing to keep it bounded per tick.
+        rotation += rotationDelta(facing, picked)
+        followFacing = picked
+
+        // Exit wall-following when aligned with reference AND can step toward it.
+        if (rotation == 0 && maze.canMove(from, ref) && picked == ref) {
+            following = false
+            followFacing = null
+        }
+
+        return rankedWithFallback(walkable, picked, from, context.exit)
+    }
+
+    override fun reset() {
+        referenceDirection = null
+        rotation = 0
+        following = false
+        followFacing = null
+    }
+
+    private fun pickReferenceDirection(from: GridPos, exit: GridPos): Direction {
+        val dx = exit.x - from.x
+        val dy = exit.y - from.y
+        // Choose the dominant axis; ties go to NORTH/SOUTH by convention.
+        return if (abs(dx) > abs(dy)) {
+            if (dx >= 0) Direction.EAST else Direction.WEST
+        } else {
+            if (dy >= 0) Direction.NORTH else Direction.SOUTH
+        }
+    }
+
+    private fun rotationDelta(from: Direction, to: Direction): Int {
+        // Map (to.ordinal - from.ordinal) mod 4 → {-1, 0, +1, +2}
+        val raw = ((to.ordinal - from.ordinal) % 4 + 4) % 4
+        return when (raw) {
+            0 -> 0
+            1 -> +1  // right turn
+            2 -> +2  // about-face (count as two right turns)
+            else -> -1 // left turn (raw == 3)
+        }
+    }
+
+    private fun rankedWithFallback(
+        walkable: List<Direction>,
+        primary: Direction,
+        from: GridPos,
+        exit: GridPos
+    ): List<Direction> {
+        val others = walkable
+            .filter { it != primary }
+            .sortedBy { manhattanDistance(from.moved(it), exit) }
+        return if (primary in walkable) listOf(primary) + others else others
+    }
+}
+
+/**
+ * Heuristic survival-then-progress policy. Ranks each walkable direction by:
+ * 1. Maximising the Chebyshev distance to the nearest NPC after stepping
+ *    (so the player keeps NPCs at arm's length when threatened).
+ * 2. Minimising the BFS distance to the exit (so the player still drifts
+ *    toward the goal when the threat axis is tied).
+ * 3. Deterministic tiebreak by [Direction.ordinal].
+ *
+ * The [AvoidanceWrapperPolicy] still owns the hard-safety filtering
+ * (NPC-occupied = deadly, NPC-neighbour = risky); this policy only
+ * provides a ranked preference list within the walkable options.
+ */
+class FleeToExitPolicy : RankedPlayerPolicy {
+    override fun nextMove(context: PlayerPolicyContext): Direction? =
+        rankedMoves(context).firstOrNull()
+
+    override fun rankedMoves(context: PlayerPolicyContext): List<Direction> {
+        val from = context.player.position
+        val walkable = Direction.entries.filter { context.maze.canMove(from, it) }
+        if (walkable.isEmpty()) return emptyList()
+
+        // Pre-compute exit BFS distances so we don't path-find per direction.
+        val exit = context.exit
+        return walkable
+            .map { direction ->
+                val dest = from.moved(direction)
+                val npcDistance = minNpcChebyshev(dest, context.npcs)
+                val exitPath = context.navigator.bfsPath(dest, exit)
+                val exitDistance = if (exitPath.isEmpty()) Int.MAX_VALUE else exitPath.size - 1
+                Triple(direction, npcDistance, exitDistance)
+            }
+            .sortedWith(
+                compareByDescending<Triple<Direction, Int, Int>> { it.second }
+                    .thenBy { it.third }
+                    .thenBy { it.first.ordinal }
+            )
+            .map { it.first }
+    }
+
+    private fun minNpcChebyshev(cell: GridPos, npcs: List<Npc>): Int {
+        if (npcs.isEmpty()) return Int.MAX_VALUE
+        var best = Int.MAX_VALUE
+        for (npc in npcs) {
+            val d = maxOf(abs(cell.x - npc.position.x), abs(cell.y - npc.position.y))
+            if (d < best) best = d
+        }
+        return best
+    }
+}
+
 object PolicyFactory {
     fun player(type: PlayerPolicyType): PlayerPolicy = when (type) {
         PlayerPolicyType.MANUAL -> ManualPolicy()
-        PlayerPolicyType.RANDOM_MEMORY -> AvoidanceWrapperPolicy(RandomWalkMemoryPolicy())
         PlayerPolicyType.WALL_LEFT -> AvoidanceWrapperPolicy(WallFollowerPolicy(leftHand = true))
-        PlayerPolicyType.WALL_RIGHT -> AvoidanceWrapperPolicy(WallFollowerPolicy(leftHand = false))
         PlayerPolicyType.BFS_EXIT -> AvoidanceWrapperPolicy(BfsExitPolicy())
         PlayerPolicyType.ASTAR_EXIT -> AvoidanceWrapperPolicy(AStarExitPolicy())
+        PlayerPolicyType.PLEDGE -> AvoidanceWrapperPolicy(PledgePolicy())
+        PlayerPolicyType.FLEE_TO_EXIT -> AvoidanceWrapperPolicy(FleeToExitPolicy())
     }
 
     /**

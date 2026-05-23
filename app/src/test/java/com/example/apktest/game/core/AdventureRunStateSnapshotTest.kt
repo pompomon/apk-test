@@ -75,21 +75,22 @@ class AdventureRunStateSnapshotTest {
     }
 
     @Test
-    fun fromJson_returnsNullForUnknownEnum() {
+    fun fromJson_dropsUnknownEnumAndStillLoads() {
         val snap = AdventureRunStateSnapshot.fromState(sampleState(), runSeed = 1L)
         val tampered = snap.toJson().replace(
             "\"BFS_EXIT\"",
             "\"NO_SUCH_POLICY\""
         )
-        assertNull(AdventureRunStateSnapshot.fromJson(tampered))
+        val restored = AdventureRunStateSnapshot.fromJson(tampered)
+        assertNotNull(restored)
+        // Unknown enum silently dropped; MANUAL invariant preserved.
+        assertEquals(listOf(PlayerPolicyType.MANUAL), restored!!.unlockedPlayerPolicies)
+        // currentPolicy was BFS_EXIT (now unknown) → resets to MANUAL.
+        assertEquals(PlayerPolicyType.MANUAL, restored.currentPlayerPolicy)
     }
 
     @Test
-    fun fromJson_returnsNullWhenManualMissingFromUnlocked() {
-        // Construct a snapshot whose unlocked set is missing MANUAL — the
-        // adventure invariant requires MANUAL be always unlocked. The
-        // controller never produces such a snapshot but a tampered JSON
-        // could, and we want to reject it.
+    fun fromJson_repairsMissingManualInUnlockedSet() {
         val invalid = AdventureRunStateSnapshot(
             runSeed = 1L,
             difficultyName = DifficultyPresets.MEDIUM.name,
@@ -103,11 +104,14 @@ class AdventureRunStateSnapshotTest {
             currentMazeSnapshot = null,
             status = AdventureStatus.IN_PROGRESS
         )
-        assertNull(AdventureRunStateSnapshot.fromJson(invalid.toJson()))
+        val restored = AdventureRunStateSnapshot.fromJson(invalid.toJson())
+        assertNotNull(restored)
+        assertTrue(PlayerPolicyType.MANUAL in restored!!.unlockedPlayerPolicies)
+        assertTrue(PlayerPolicyType.BFS_EXIT in restored.unlockedPlayerPolicies)
     }
 
     @Test
-    fun fromJson_returnsNullWhenCurrentPolicyNotInUnlocked() {
+    fun fromJson_resetsCurrentPolicyToManualWhenNotInUnlocked() {
         val invalid = AdventureRunStateSnapshot(
             runSeed = 1L,
             difficultyName = DifficultyPresets.MEDIUM.name,
@@ -121,7 +125,9 @@ class AdventureRunStateSnapshotTest {
             currentMazeSnapshot = null,
             status = AdventureStatus.IN_PROGRESS
         )
-        assertNull(AdventureRunStateSnapshot.fromJson(invalid.toJson()))
+        val restored = AdventureRunStateSnapshot.fromJson(invalid.toJson())
+        assertNotNull(restored)
+        assertEquals(PlayerPolicyType.MANUAL, restored!!.currentPlayerPolicy)
     }
 
     @Test
@@ -146,6 +152,21 @@ class AdventureRunStateSnapshotTest {
     fun fromJson_returnsNullForGarbage() {
         assertNull(AdventureRunStateSnapshot.fromJson("{not json"))
         assertNull(AdventureRunStateSnapshot.fromJson("{}"))
+    }
+
+    @Test
+    fun toJsonFromJson_roundTripsPendingStartingPowerUp() {
+        val state = sampleState().apply { pendingStartingPowerUp = PowerUpType.TELEPORT }
+        val snap = AdventureRunStateSnapshot.fromState(state, runSeed = 7L)
+        val restored = AdventureRunStateSnapshot.fromJson(snap.toJson())!!
+        assertEquals(PowerUpType.TELEPORT, restored.pendingStartingPowerUp)
+    }
+
+    @Test
+    fun fromJson_treatsAbsentPendingPowerUpAsNull() {
+        val snap = AdventureRunStateSnapshot.fromState(sampleState(), runSeed = 1L)
+        val restored = AdventureRunStateSnapshot.fromJson(snap.toJson())!!
+        assertNull(restored.pendingStartingPowerUp)
     }
 
     @Test

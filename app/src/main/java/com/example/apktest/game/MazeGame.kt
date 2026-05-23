@@ -7,6 +7,7 @@ import com.example.apktest.game.core.GameEngine
 import com.example.apktest.game.core.GameEngineSnapshot
 import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
+import com.example.apktest.game.core.PowerUpType
 import com.example.apktest.game.render.MazeRenderer
 import com.example.apktest.game.ui.HudState
 import java.util.concurrent.atomic.AtomicReference
@@ -85,12 +86,14 @@ class MazeGame : ApplicationAdapter() {
         difficulty: String,
         playerPolicy: PlayerPolicyType,
         npcCount: Int,
-        npcPolicies: List<NpcPolicyType>
+        npcPolicies: List<NpcPolicyType>,
+        startingPowerUp: PowerUpType? = null
     ) = enqueue { engine ->
         engine.applyDifficulty(DifficultyPresets.byName(difficulty))
         engine.setPlayerPolicy(playerPolicy)
         engine.configureAdventureMaze(npcCount, npcPolicies)
         engine.restart(seed)
+        engine.applyStartingPowerUp(startingPowerUp)
         engine.startCountdown()
     }
 

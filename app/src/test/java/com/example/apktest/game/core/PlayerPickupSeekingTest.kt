@@ -370,31 +370,6 @@ class PlayerPickupSeekingTest {
     }
 
     @Test
-    fun randomMemory_pickupDetourStillUpdatesVisitCounts() {
-        val maze = Maze.openGrid(5, 5)
-        val navigator = MazeNavigator(maze)
-        val inner = RandomWalkMemoryPolicy(Random(42))
-        val policy = AvoidanceWrapperPolicy(inner)
-        val player = Player(position = GridPos(0, 0), facing = Direction.EAST)
-        val pickup = spawnedPowerUp(PowerUpType.SPEED_UP, GridPos(0, 1))
-
-        val move = policy.nextMove(
-            PlayerPolicyContext(
-                maze = maze,
-                navigator = navigator,
-                player = player,
-                exit = GridPos(4, 0),
-                npcs = emptyList(),
-                spawnedPowerUps = listOf(pickup),
-                pickupRadius = 1
-            )
-        )
-
-        assertEquals(Direction.NORTH, move)
-        assertEquals(1, inner.visitCount(GridPos(0, 0)))
-    }
-
-    @Test
     fun nearerPickupPreferredOverFarther() {
         // Two pickups: (0,1) at graph distance 1, (0,2) at graph distance 2.
         // With radius=2 the wrapper must pick the nearer one (NORTH step).

@@ -249,6 +249,27 @@ class GameEngine(
     }
 
     /**
+     * Adventure-mode hook: activate [type] as if the player had picked
+     * it up off the maze the instant the maze started. Safe to call
+     * after [restart] / [configureAdventureMaze] but before the first
+     * [update] tick. Reuses the regular power-up activation pipeline so
+     * timed effects (INVISIBILITY, SPEED_UP, FREEZE, GHOST_MODE) start
+     * ticking from `t=0` and instant effects (TELEPORT, BLAST) apply
+     * once. No-op when [type] is `null`.
+     */
+    fun applyStartingPowerUp(type: PowerUpType?) {
+        if (type == null) return
+        when (type) {
+            PowerUpType.INVISIBILITY -> activateTimedEffect(PowerUpType.INVISIBILITY)
+            PowerUpType.TELEPORT -> applyTeleport()
+            PowerUpType.SPEED_UP -> activateTimedEffect(PowerUpType.SPEED_UP)
+            PowerUpType.FREEZE -> activateTimedEffect(PowerUpType.FREEZE)
+            PowerUpType.BLAST -> applyBlast()
+            PowerUpType.GHOST_MODE -> activateTimedEffect(PowerUpType.GHOST_MODE)
+        }
+    }
+
+    /**
      * Capture the engine's observable state as a serialisable
      * [GameEngineSnapshot]. RNG and per-frame accumulator state are
      * intentionally omitted; see the snapshot KDoc for rationale.

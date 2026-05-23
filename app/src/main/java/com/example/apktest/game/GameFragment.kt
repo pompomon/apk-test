@@ -11,6 +11,7 @@ import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameEngineSnapshot
 import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
+import com.example.apktest.game.core.PowerUpType
 import com.example.apktest.game.ui.HudState
 
 class GameFragment : AndroidFragmentApplication() {
@@ -110,11 +111,12 @@ class GameFragment : AndroidFragmentApplication() {
         difficulty: String,
         playerPolicy: PlayerPolicyType,
         npcCount: Int,
-        npcPolicies: List<NpcPolicyType>
+        npcPolicies: List<NpcPolicyType>,
+        startingPowerUp: PowerUpType? = null
     ) {
         pendingDifficulty = difficulty
         pendingPlayerPolicy = playerPolicy
-        game?.configureAdventureMaze(seed, difficulty, playerPolicy, npcCount, npcPolicies)
+        game?.configureAdventureMaze(seed, difficulty, playerPolicy, npcCount, npcPolicies, startingPowerUp)
     }
 
     fun queueManualMove(direction: Direction) {

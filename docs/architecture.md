@@ -72,7 +72,7 @@ SetupActivity ──▶ AdventureSetupActivity ──▶ AdventureActivity ─�
                                        AdventureStateStore (separate SharedPreferences file)
 ```
 
-- **`AdventureConfig`** (`game/core/AdventureConfig.kt`): per-difficulty rules — Easy 5 lives / 5 mazes / +1 NPC per maze level, Medium 3 / 7 / +2, Hard 1 / 9 / +3. `npcCountForMaze(mazeIndex1Based)` = `mazeIndex1Based + extraNpcsPerMaze` (1-based maze index, must be ≥ 1). Unknown presets fall back to Medium rules.
+- **`AdventureConfig`** (`game/core/AdventureConfig.kt`): per-difficulty rules — Easy 5 lives / 5 mazes / base 1 NPC, Medium 3 / 7 / base 1, Hard 1 / 9 / base 2. `npcCountForMaze(mazeIndex1Based)` = `baseNpcsPerMaze + ((mazeIndex1Based - 1) / 3)` plus +1 on the final maze. Unknown presets fall back to Medium rules.
 - **`AdventureRunController`** (`game/core/AdventureRunController.kt`): pure-Kotlin state transitions (no Android imports → fully JVM-testable). Locks `currentMazeSeed` + `currentMazeNpcPolicies` on first `prepareCurrentMaze()` per maze so a death replay returns the *same* spec; clears them on win; awards +1 life every 3 consecutive wins (resets streak on death OR on bonus); manages the unlocked-policies pool starting with only `MANUAL`.
 - **`AdventureRunStateSnapshot`** (`game/core/AdventureRunStateSnapshot.kt`): JSON, schema-versioned, validates the MANUAL-always-unlocked invariant. Embeds a `GameEngineSnapshot` for paused-mid-maze resume.
 - **`AdventureStateStore`** (`AdventureStateStore.kt`): sibling of `GameStateStore` but in its own SharedPreferences file (`adventure_state`) so a saved adventure never appears as a single-maze Resume on the main start menu, and vice versa.

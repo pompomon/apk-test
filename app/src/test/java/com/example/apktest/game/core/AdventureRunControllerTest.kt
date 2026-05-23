@@ -32,8 +32,8 @@ class AdventureRunControllerTest {
         val s2 = c.prepareCurrentMaze()!!
         assertEquals(s1.seed, s2.seed)
         assertEquals(s1.npcPolicies, s2.npcPolicies)
-        assertEquals(2, s1.npcCount) // Easy maze 1 → 1 + 1 = 2
-        assertEquals(2, s1.npcPolicies.size)
+        assertEquals(1, s1.npcCount) // Easy maze 1 → base 1 + ramp 0 = 1 (last-maze bonus only at maze 5)
+        assertEquals(1, s1.npcPolicies.size)
     }
 
     @Test
@@ -187,6 +187,56 @@ class AdventureRunControllerTest {
         assertTrue(w.runComplete)
         assertEquals(9, w.mazeIndexCompleted)
         assertTrue(w.unlockCandidates.isEmpty()) // no unlock after final win
+        assertTrue(w.startingPowerUpCandidates.isEmpty())
+    }
+
+    @Test
+    fun oddMazeWinOffersUpToThreeLockedPolicies() {
+        val c = easyController()
+        c.prepareCurrentMaze()
+        val w = c.onMazeWon() // maze 1 → odd
+        assertTrue(w.unlockAvailable)
+        assertTrue(w.startingPowerUpCandidates.isEmpty())
+        assertTrue(w.unlockCandidates.size in 1..AdventureRunController.REWARD_SAMPLE_SIZE)
+        w.unlockCandidates.forEach {
+            assertFalse(it in c.state.unlockedPlayerPolicies)
+        }
+    }
+
+    @Test
+    fun evenMazeWinOffersThreeNonGhostPowerUps() {
+        val c = easyController()
+        c.prepareCurrentMaze(); c.onMazeWon() // 1 → odd
+        c.prepareCurrentMaze()
+        val w = c.onMazeWon() // maze 2 → even
+        assertTrue(w.startingPowerUpAvailable)
+        assertTrue(w.unlockCandidates.isEmpty())
+        assertEquals(AdventureRunController.REWARD_SAMPLE_SIZE, w.startingPowerUpCandidates.size)
+        assertFalse(PowerUpType.GHOST_MODE in w.startingPowerUpCandidates)
+    }
+
+    @Test
+    fun applyStartingPowerUpFlowsThroughPrepareCurrentMaze() {
+        val c = easyController()
+        c.prepareCurrentMaze(); c.onMazeWon() // odd
+        c.prepareCurrentMaze(); c.onMazeWon() // even
+        c.applyStartingPowerUp(PowerUpType.TELEPORT)
+        val spec = c.prepareCurrentMaze()!!
+        assertEquals(PowerUpType.TELEPORT, spec.startingPowerUp)
+        // Consumed: next prepare (idempotent re-entry) no longer carries it.
+        assertNull(c.state.pendingStartingPowerUp)
+        val spec2 = c.prepareCurrentMaze()!!
+        assertNull(spec2.startingPowerUp)
+    }
+
+    @Test
+    fun rewardSamplingIsDeterministicForSameRunSeed() {
+        val c1 = easyController(runSeed = 1234L)
+        val c2 = easyController(runSeed = 1234L)
+        c1.prepareCurrentMaze(); c2.prepareCurrentMaze()
+        val w1 = c1.onMazeWon()
+        val w2 = c2.onMazeWon()
+        assertEquals(w1.unlockCandidates, w2.unlockCandidates)
     }
 
     @Test

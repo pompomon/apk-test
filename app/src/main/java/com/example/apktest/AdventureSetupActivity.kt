@@ -108,7 +108,7 @@ class AdventureSetupActivity : AppCompatActivity() {
             R.string.adventure_summary_format,
             config.initialLives,
             config.totalMazes,
-            config.extraNpcsPerMaze
+            config.baseNpcsPerMaze
         )
     }
 

@@ -11,7 +11,7 @@ class AdventureConfigTest {
         val c = AdventureConfig.forDifficulty(DifficultyPresets.EASY)
         assertEquals(5, c.initialLives)
         assertEquals(5, c.totalMazes)
-        assertEquals(1, c.extraNpcsPerMaze)
+        assertEquals(1, c.baseNpcsPerMaze)
     }
 
     @Test
@@ -19,7 +19,7 @@ class AdventureConfigTest {
         val c = AdventureConfig.forDifficulty(DifficultyPresets.MEDIUM)
         assertEquals(3, c.initialLives)
         assertEquals(7, c.totalMazes)
-        assertEquals(2, c.extraNpcsPerMaze)
+        assertEquals(1, c.baseNpcsPerMaze)
     }
 
     @Test
@@ -27,29 +27,39 @@ class AdventureConfigTest {
         val c = AdventureConfig.forDifficulty(DifficultyPresets.HARD)
         assertEquals(1, c.initialLives)
         assertEquals(9, c.totalMazes)
-        assertEquals(3, c.extraNpcsPerMaze)
+        assertEquals(2, c.baseNpcsPerMaze)
     }
 
     @Test
-    fun npcCountForMaze_easyFirstMazeHasTwoNpcs() {
+    fun npcCountForMaze_easyRampsAndBonusesLastMaze() {
+        // Easy: base 1, totalMazes 5 → 1,1,1,2,3
         val c = AdventureConfig.forDifficulty(DifficultyPresets.EASY)
-        assertEquals(2, c.npcCountForMaze(1))
-        assertEquals(3, c.npcCountForMaze(2))
-        assertEquals(6, c.npcCountForMaze(5))
+        assertEquals(1, c.npcCountForMaze(1))
+        assertEquals(1, c.npcCountForMaze(2))
+        assertEquals(1, c.npcCountForMaze(3))
+        assertEquals(2, c.npcCountForMaze(4))
+        assertEquals(3, c.npcCountForMaze(5))
     }
 
     @Test
-    fun npcCountForMaze_mediumFirstMazeHasThreeNpcs() {
+    fun npcCountForMaze_mediumRampsAndBonusesLastMaze() {
+        // Medium: base 1, totalMazes 7 → 1,1,1,2,2,2,4
         val c = AdventureConfig.forDifficulty(DifficultyPresets.MEDIUM)
-        assertEquals(3, c.npcCountForMaze(1))
-        assertEquals(9, c.npcCountForMaze(7))
+        assertEquals(1, c.npcCountForMaze(1))
+        assertEquals(2, c.npcCountForMaze(4))
+        assertEquals(2, c.npcCountForMaze(6))
+        assertEquals(4, c.npcCountForMaze(7))
     }
 
     @Test
-    fun npcCountForMaze_hardFirstMazeHasFourNpcs() {
+    fun npcCountForMaze_hardRampsAndBonusesLastMaze() {
+        // Hard: base 2, totalMazes 9 → 2,2,2,3,3,3,4,4,5
         val c = AdventureConfig.forDifficulty(DifficultyPresets.HARD)
-        assertEquals(4, c.npcCountForMaze(1))
-        assertEquals(12, c.npcCountForMaze(9))
+        assertEquals(2, c.npcCountForMaze(1))
+        assertEquals(3, c.npcCountForMaze(4))
+        assertEquals(4, c.npcCountForMaze(7))
+        assertEquals(4, c.npcCountForMaze(8))
+        assertEquals(5, c.npcCountForMaze(9))
     }
 
     @Test
@@ -58,7 +68,7 @@ class AdventureConfigTest {
         val c = AdventureConfig.forDifficulty(custom)
         assertEquals(3, c.initialLives)
         assertEquals(7, c.totalMazes)
-        assertEquals(2, c.extraNpcsPerMaze)
+        assertEquals(1, c.baseNpcsPerMaze)
         // Difficulty preserved so npcCountForMaze still uses the right preset.
         assertEquals(custom, c.difficulty)
     }

@@ -61,33 +61,6 @@ class PlayerAvoidanceTest {
     }
 
     @Test
-    fun randomMemory_avoidsNpcCells() {
-        // Seeded RNG keeps the choice deterministic. Place an NPC on every
-        // direction except WEST so the safe pick is unambiguous.
-        val maze = Maze.openGrid(5, 5)
-        val navigator = MazeNavigator(maze)
-        val policy = AvoidanceWrapperPolicy(RandomWalkMemoryPolicy(Random(42)))
-        val player = Player(position = GridPos(2, 2), facing = Direction.EAST)
-        val npcs = listOf(
-            Npc(id = 1, position = GridPos(3, 2)), // EAST
-            Npc(id = 2, position = GridPos(2, 3)), // NORTH
-            Npc(id = 3, position = GridPos(2, 1))  // SOUTH
-        )
-
-        val move = policy.nextMove(
-            PlayerPolicyContext(
-                maze = maze,
-                navigator = navigator,
-                player = player,
-                exit = GridPos(4, 4),
-                npcs = npcs
-            )
-        )
-
-        assertEquals(Direction.WEST, move)
-    }
-
-    @Test
     fun policiesIgnoreNpcsWhenInvisibilityActive() {
         // With INVISIBILITY active the wrapper is a pass-through; BFS' first
         // EAST step is returned even though an NPC sits on (1,0).
