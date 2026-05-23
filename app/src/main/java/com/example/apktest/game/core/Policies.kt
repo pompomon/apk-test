@@ -635,8 +635,13 @@ class PledgePolicy : RankedPlayerPolicy {
  * provides a ranked preference list within the walkable options.
  */
 class FleeToExitPolicy : RankedPlayerPolicy {
-    // Cached BFS distance field; keyed by (maze.revision, exit) so it is
-    // recomputed only when the maze layout changes or the exit shifts.
+    // Cached BFS distance field; keyed by (maze instance, maze.revision, exit)
+    // so it is recomputed only when the maze layout changes or the exit shifts.
+    // The maze instance is tracked by reference because GameEngine.restart()
+    // reuses the same policy instance with a freshly generated Maze whose
+    // revision counter resets to 0, which would otherwise collide with cached
+    // data from the previous maze.
+    private var cachedDistanceFieldMaze: Maze? = null
     private var cachedDistanceFieldRevision: Int = -1
     private var cachedDistanceFieldExit: GridPos? = null
     private var cachedDistanceField: Map<GridPos, Int> = emptyMap()
@@ -650,9 +655,14 @@ class FleeToExitPolicy : RankedPlayerPolicy {
         val walkable = Direction.entries.filter { maze.canMove(from, it) }
         if (walkable.isEmpty()) return emptyList()
 
-        // Use the cached distance field when the maze layout and exit haven't changed.
-        if (maze.revision != cachedDistanceFieldRevision || context.exit != cachedDistanceFieldExit) {
+        // Use the cached distance field when the maze instance, layout revision,
+        // and exit all match the previous call.
+        if (maze !== cachedDistanceFieldMaze ||
+            maze.revision != cachedDistanceFieldRevision ||
+            context.exit != cachedDistanceFieldExit
+        ) {
             cachedDistanceField = bfsDistanceField(maze, context.exit)
+            cachedDistanceFieldMaze = maze
             cachedDistanceFieldRevision = maze.revision
             cachedDistanceFieldExit = context.exit
         }
@@ -669,6 +679,13 @@ class FleeToExitPolicy : RankedPlayerPolicy {
                     .thenBy { it.first.ordinal }
             )
             .map { it.first }
+    }
+
+    override fun reset() {
+        cachedDistanceFieldMaze = null
+        cachedDistanceFieldRevision = -1
+        cachedDistanceFieldExit = null
+        cachedDistanceField = emptyMap()
     }
 
     private fun bfsDistanceField(maze: Maze, source: GridPos): Map<GridPos, Int> {
