@@ -54,9 +54,13 @@ data class AdventureRunState(
     var status: AdventureStatus = AdventureStatus.IN_PROGRESS,
     /**
      * Power-up the player chose to start the next maze with (granted as an
-     * even-numbered-maze-win reward). Consumed by the next
-     * [AdventureRunController.prepareCurrentMaze] call so the resulting
-     * [MazeStartupSpec] carries it; cleared on consumption.
+     * even-numbered-maze-win reward). Treated as locked per-maze state:
+     * carried into every [AdventureRunController.prepareCurrentMaze] call
+     * (so death replays of the same maze re-apply the same reward) and
+     * cleared only when the host advances past the maze via
+     * [AdventureRunController.onMazeWon]. Survives process death/restore
+     * between persisting state and the GL thread actually applying the
+     * power-up to a fresh engine instance.
      */
     var pendingStartingPowerUp: PowerUpType? = null
 )
@@ -186,7 +190,6 @@ class AdventureRunController(
             playerPolicy = state.currentPlayerPolicy,
             midMazeSnapshot = state.currentMazeSnapshot,
             startingPowerUp = state.pendingStartingPowerUp
-                .also { state.pendingStartingPowerUp = null }
         )
     }
 
@@ -214,6 +217,10 @@ class AdventureRunController(
         state.currentMazeSeed = null
         state.currentMazeNpcPolicies = emptyList()
         state.currentMazeSnapshot = null
+        // Locked starting power-up is per-maze: clear once we advance past
+        // the maze it was reserved for. Death replays keep it so the same
+        // reward is re-applied on the retry.
+        state.pendingStartingPowerUp = null
 
         val runComplete = newIndex >= config.totalMazes
         if (runComplete) state.status = AdventureStatus.WON
@@ -328,10 +335,13 @@ class AdventureRunController(
 
     /**
      * Record [type] as the power-up to activate at the start of the next
-     * maze (consumed by the next [prepareCurrentMaze]). Passing `null`
-     * clears any previously pending starting power-up. Returns the
-     * previously pending power-up (or `null` if none) so the caller can
-     * react to an overwrite if needed.
+     * maze. Persists as locked per-maze state across
+     * [prepareCurrentMaze] re-entries and across process death/restore,
+     * and is consumed (cleared) by [onMazeWon] when the run advances past
+     * the maze it was reserved for. Passing `null` clears any previously
+     * pending starting power-up. Returns the previously pending power-up
+     * (or `null` if none) so the caller can react to an overwrite if
+     * needed.
      */
     fun applyStartingPowerUp(type: PowerUpType?): PowerUpType? {
         val previous = state.pendingStartingPowerUp

@@ -223,10 +223,33 @@ class AdventureRunControllerTest {
         c.applyStartingPowerUp(PowerUpType.TELEPORT)
         val spec = c.prepareCurrentMaze()!!
         assertEquals(PowerUpType.TELEPORT, spec.startingPowerUp)
-        // Consumed: next prepare (idempotent re-entry) no longer carries it.
-        assertNull(c.state.pendingStartingPowerUp)
+        // Locked per-maze: re-entering prepareCurrentMaze still carries it,
+        // so process-death-then-restore cannot lose the reward before the
+        // engine actually applies it.
+        assertEquals(PowerUpType.TELEPORT, c.state.pendingStartingPowerUp)
         val spec2 = c.prepareCurrentMaze()!!
-        assertNull(spec2.startingPowerUp)
+        assertEquals(PowerUpType.TELEPORT, spec2.startingPowerUp)
+        // Cleared when we advance past the maze it was reserved for.
+        c.onMazeWon()
+        assertNull(c.state.pendingStartingPowerUp)
+        val spec3 = c.prepareCurrentMaze()!!
+        assertNull(spec3.startingPowerUp)
+    }
+
+    @Test
+    fun startingPowerUpSurvivesDeathReplayUntilMazeWon() {
+        val c = easyController()
+        c.prepareCurrentMaze(); c.onMazeWon() // odd
+        c.prepareCurrentMaze(); c.onMazeWon() // even
+        c.applyStartingPowerUp(PowerUpType.TELEPORT)
+        val spec = c.prepareCurrentMaze()!!
+        assertEquals(PowerUpType.TELEPORT, spec.startingPowerUp)
+        // Player dies on the maze; the reward must be preserved so the
+        // replay re-applies it.
+        c.onPlayerDied()
+        assertEquals(PowerUpType.TELEPORT, c.state.pendingStartingPowerUp)
+        val replaySpec = c.prepareCurrentMaze()!!
+        assertEquals(PowerUpType.TELEPORT, replaySpec.startingPowerUp)
     }
 
     @Test
