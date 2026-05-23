@@ -300,8 +300,16 @@ class ExampleInstrumentedTest {
         val rootHeight = rootView.height.toFloat()
         val signX = if (rootWidth > 0f && startX > rootWidth / 2f) -1f else 1f
         val signY = if (rootHeight > 0f && startY > rootHeight / 2f) -1f else 1f
-        dispatchSwipeViaTouchEvent(activity, startX, startY, startX + signX * swipeSpan, startY)
-        dispatchSwipeViaTouchEvent(activity, startX, startY, startX, startY + signY * swipeSpan)
+        val rawEndX = startX + signX * swipeSpan
+        val rawEndY = startY + signY * swipeSpan
+        // Clamp end coordinates into window bounds so synthetic ACTION_MOVE/UP
+        // events never travel off-screen. If decorView reports zero size (some
+        // emulator quirks), fall back to leaving the value unclamped so the
+        // swipe still has enough displacement to exceed minDistance.
+        val endX = if (rootWidth > 0f) rawEndX.coerceIn(0f, rootWidth - 1f) else rawEndX
+        val endY = if (rootHeight > 0f) rawEndY.coerceIn(0f, rootHeight - 1f) else rawEndY
+        dispatchSwipeViaTouchEvent(activity, startX, startY, endX, startY)
+        dispatchSwipeViaTouchEvent(activity, startX, startY, startX, endY)
     }
 
     private fun dispatchSwipeViaTouchEvent(
