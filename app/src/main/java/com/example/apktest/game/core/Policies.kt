@@ -512,13 +512,14 @@ class PatrolGuardPolicy : NpcPolicy {
 class PledgePolicy : RankedPlayerPolicy {
     private var referenceDirection: Direction? = null
     /**
-     * Net rotations accumulated **during wall-following**, measured as turns
-     * from the wall-follow entry facing (right = +1, left = -1, about-face
-     * = +2). Reset to 0 each time the policy enters wall-following mode.
-     * Wall-following exits when this counter returns to 0 on a tick where
-     * [referenceDirection] is walkable again; this signals the policy has
-     * "unwound" the detour and can resume straight motion along the
-     * reference direction.
+     * Net rotations accumulated **during wall-following**, computed as the
+     * running sum of per-tick turn deltas (right = +1, left = -1,
+     * about-face = +2) between the previous and current wall-follow
+     * facings. Reset to 0 each time the policy (re-)enters wall-following
+     * mode, so it equivalently measures net rotation relative to the
+     * entry facing. Wall-following exits when this counter returns to 0
+     * on a tick where [referenceDirection] is walkable again, signalling
+     * the policy has "unwound" the detour and can resume straight motion.
      */
     private var rotation: Int = 0
     /** True while in wall-following mode; false while walking straight. */
