@@ -8,7 +8,7 @@ class Maze(
     val exit: GridPos
 ) {
     init {
-        require(width > 1 && height > 1)
+        require(width >= 1 && height >= 1)
         require(cells.size == width * height)
     }
 

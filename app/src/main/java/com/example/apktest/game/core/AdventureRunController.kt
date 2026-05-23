@@ -260,8 +260,8 @@ class AdventureRunController(
     internal fun sampleStartingPowerUps(count: Int, mazeIndex1Based: Int): List<PowerUpType> {
         val pool = PowerUpType.entries.filter { it != PowerUpType.GHOST_MODE }
         if (pool.isEmpty() || count <= 0) return emptyList()
-        if (pool.size <= count) return pool
         val rng = Random(deriveRewardSeed(mazeIndex1Based, REWARD_KIND_POWERUP))
+        if (pool.size <= count) return pool.shuffled(rng)
         return pool.shuffled(rng).take(count)
     }
 

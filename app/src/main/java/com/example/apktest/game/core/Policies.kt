@@ -500,7 +500,7 @@ class PatrolGuardPolicy : NpcPolicy {
  * Pledge's algorithm: walk straight in a [referenceDirection] (chosen as
  * the cardinal direction whose vector best aligns with player→exit on
  * first use); when blocked, switch to left-hand wall-following while
- * counting net rotations (left = -1, right = +1, opposite = ±2). When
+ * counting net rotations (left = -1, right = +1, opposite = +2). When
  * the net rotation returns to zero on a tick where the reference
  * direction is walkable again, resume straight motion.
  *
@@ -626,6 +626,12 @@ class PledgePolicy : RankedPlayerPolicy {
  * provides a ranked preference list within the walkable options.
  */
 class FleeToExitPolicy : RankedPlayerPolicy {
+    // Cached BFS distance field; keyed by (maze.revision, exit) so it is
+    // recomputed only when the maze layout changes or the exit shifts.
+    private var cachedDistanceFieldRevision: Int = -1
+    private var cachedDistanceFieldExit: GridPos? = null
+    private var cachedDistanceField: Map<GridPos, Int> = emptyMap()
+
     override fun nextMove(context: PlayerPolicyContext): Direction? =
         rankedMoves(context).firstOrNull()
 
@@ -635,15 +641,17 @@ class FleeToExitPolicy : RankedPlayerPolicy {
         val walkable = Direction.entries.filter { maze.canMove(from, it) }
         if (walkable.isEmpty()) return emptyList()
 
-        // Pre-compute a single BFS distance field from the exit so we look
-        // up each candidate destination in O(1) instead of running BFS per
-        // direction (previously up to 4 bfsPath calls per tick).
-        val exitDistances = bfsDistanceField(maze, context.exit)
+        // Use the cached distance field when the maze layout and exit haven't changed.
+        if (maze.revision != cachedDistanceFieldRevision || context.exit != cachedDistanceFieldExit) {
+            cachedDistanceField = bfsDistanceField(maze, context.exit)
+            cachedDistanceFieldRevision = maze.revision
+            cachedDistanceFieldExit = context.exit
+        }
         return walkable
             .map { direction ->
                 val dest = from.moved(direction)
                 val npcDistance = minNpcChebyshev(dest, context.npcs)
-                val exitDistance = exitDistances[dest] ?: Int.MAX_VALUE
+                val exitDistance = cachedDistanceField[dest] ?: Int.MAX_VALUE
                 Triple(direction, npcDistance, exitDistance)
             }
             .sortedWith(

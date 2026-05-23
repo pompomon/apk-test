@@ -11,7 +11,10 @@ import org.json.JSONObject
  * Mirrors the conventions of [GameEngineSnapshot]: bumping
  * [SCHEMA_VERSION] in code transparently invalidates any stale payload
  * via the version check in [fromJson], which returns `null` for any
- * unreadable / out-of-range / unknown-enum payload (Hard rule #9).
+ * unreadable / out-of-range payload (Hard rule #9). Unknown enum values
+ * in the unlocked-policies list or currentPlayerPolicy are tolerated:
+ * removed entries are silently dropped, and an unreadable
+ * currentPlayerPolicy falls back to MANUAL rather than failing the load.
  */
 data class AdventureRunStateSnapshot(
     val schemaVersion: Int = SCHEMA_VERSION,
