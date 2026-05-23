@@ -802,7 +802,7 @@ class GameEngine(
     private fun processPowerUpLifecycles(deltaSeconds: Float) {
         expireTimedPowerUpsOnMap()
         expireActiveEffects()
-        scheduleEasyModeRespawns(deltaSeconds)
+        schedulePowerUpRespawns(deltaSeconds)
     }
 
     private fun expireTimedPowerUpsOnMap() {
@@ -826,7 +826,7 @@ class GameEngine(
         }
     }
 
-    private fun scheduleEasyModeRespawns(deltaSeconds: Float) {
+    private fun schedulePowerUpRespawns(deltaSeconds: Float) {
         val interval = difficulty.powerUpRespawnIntervalSeconds ?: return
         if (interval <= 0f) return
 

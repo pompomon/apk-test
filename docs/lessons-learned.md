@@ -133,6 +133,18 @@ Each entry follows: **Rule** — *what goes wrong* — *how to avoid it* — cit
 2. **JVM tests need `org.json:json` because `android.jar` ships `Stub!` stubs.** Already in `app/build.gradle.kts` as `testImplementation`. Don't remove it.
 3. **Instrumented tests run on API 29, x86_64, Nexus 6** via `reactivecircus/android-emulator-runner`. Most historical flakes track back to this emulator — see [`testing.md`](testing.md).
 
+## 15. Session-length tuning
+
+> Owner files: `app/src/main/java/com/example/apktest/game/core/Difficulty.kt`, `app/src/main/java/com/example/apktest/game/core/AdventureConfig.kt`.
+
+The presets aim for **~2–3 minute** Classic single-maze sessions and **~10–20 minute** full Adventure runs. When tuning preset constants, keep that target in mind and update the bounded assertions (not exact-equality assertions) below if you change the design intent.
+
+1. **Heuristic for maze size:** at the configured `playerMovesPerSecond`, a 2.5 min Medium session at 4.5 mps yields ~675 total moves. Competent play involves backtracking, so unique cells visited typically land around ~30–40 % of moves (~200–270 unique cells). Sizing the preset so the *total* cell count sits in the ~400 range (Medium = 16×24 = 384) leaves room for an explore-then-exit run without forcing exhaustive coverage. `DifficultyPresetTest.presets_targetShortSessions_cellCountsBounded` pins the upper bounds on total cell count (Easy ≤ 256, Medium ≤ 480, Hard ≤ 600) so future nudges don't need to re-pin exact widths/heights.
+2. **Heuristic for Adventure length:** a full run should land around 10–20 minutes; `AdventureConfigTest.totalMazesTargetShortRuns` pins the upper bounds on `totalMazes` and the strict ladder ordering Easy < Medium < Hard.
+3. **Power-up cadence should match session length.** If a session lasts ~3 min, a respawn interval of 60 s+ means players see at most one wave. Keep `powerUpRespawnIntervalSeconds` ≤ ~half the session target on the modes that respawn.
+4. **Prefer bounded assertions over exact-equality** for design-intent tests. Exact-equality tests are appropriate for *one* canonical value per preset (e.g. "Medium's lifetime is 45 s"), but range/ladder assertions should bracket the design target so cosmetic tuning PRs don't churn every test.
+5. **Shrinking maze dimensions invalidates saved snapshots** whose persisted coordinates fall outside the new bounds. `GameStateStore.load()` (Hard rule #9) silently rejects and clears them — graceful, but mention the user-visible "saved game gone after update" effect in the PR description.
+
 ---
 
 ## How to update this document

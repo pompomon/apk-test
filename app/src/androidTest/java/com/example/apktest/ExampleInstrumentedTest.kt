@@ -289,8 +289,27 @@ class ExampleInstrumentedTest {
             // scaledTouchSlop * 4 (minDistance) even on high-density screens.
             maxOf(view.width, view.height) * OVERLAY_SWIPE_FALLBACK_MULTIPLIER
         }
-        dispatchSwipeViaTouchEvent(activity, startX, startY, startX + swipeSpan, startY)
-        dispatchSwipeViaTouchEvent(activity, startX, startY, startX, startY + swipeSpan)
+        // Direct each swipe *inward* (toward the screen interior) so synthetic
+        // ACTION_MOVE/UP coordinates stay on-screen. Overlay views sit at the
+        // window edges (menu button at top-right, D-pad strip at the bottom),
+        // so pushing end coordinates further outward generates far-off-screen
+        // touches that some emulator input stacks have crashed on. Span is
+        // unchanged so the fling threshold remains comfortably exceeded.
+        val rootView = activity.window.decorView
+        val rootWidth = rootView.width.toFloat()
+        val rootHeight = rootView.height.toFloat()
+        val signX = if (rootWidth > 0f && startX > rootWidth / 2f) -1f else 1f
+        val signY = if (rootHeight > 0f && startY > rootHeight / 2f) -1f else 1f
+        val rawEndX = startX + signX * swipeSpan
+        val rawEndY = startY + signY * swipeSpan
+        // Clamp end coordinates into window bounds so synthetic ACTION_MOVE/UP
+        // events never travel off-screen. If decorView reports zero size (some
+        // emulator quirks), fall back to leaving the value unclamped so the
+        // swipe still has enough displacement to exceed minDistance.
+        val endX = if (rootWidth > 0f) rawEndX.coerceIn(0f, rootWidth - 1f) else rawEndX
+        val endY = if (rootHeight > 0f) rawEndY.coerceIn(0f, rootHeight - 1f) else rawEndY
+        dispatchSwipeViaTouchEvent(activity, startX, startY, endX, startY)
+        dispatchSwipeViaTouchEvent(activity, startX, startY, startX, endY)
     }
 
     private fun dispatchSwipeViaTouchEvent(

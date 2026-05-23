@@ -40,19 +40,19 @@ data class AdventureConfig(
 
         private val builtIn: Map<String, (DifficultyPreset) -> AdventureConfig> = mapOf(
             DifficultyPresets.EASY.name to { p ->
-                AdventureConfig(p, initialLives = 5, totalMazes = 7, extraNpcsPerMaze = 1)
+                AdventureConfig(p, initialLives = 5, totalMazes = 5, extraNpcsPerMaze = 1)
             },
             DifficultyPresets.MEDIUM.name to { p ->
-                AdventureConfig(p, initialLives = 3, totalMazes = 11, extraNpcsPerMaze = 2)
+                AdventureConfig(p, initialLives = 3, totalMazes = 7, extraNpcsPerMaze = 2)
             },
             DifficultyPresets.HARD.name to { p ->
-                AdventureConfig(p, initialLives = 1, totalMazes = 13, extraNpcsPerMaze = 3)
+                AdventureConfig(p, initialLives = 1, totalMazes = 9, extraNpcsPerMaze = 3)
             }
         )
 
         /**
          * Build a config for [preset]. Falls back to MEDIUM's rules
-         * (3 lives / 11 mazes / +2 NPCs) for unknown preset names so
+         * (3 lives / 7 mazes / +2 NPCs) for unknown preset names so
          * future or test-only presets remain playable in Adventure mode.
          */
         fun forDifficulty(preset: DifficultyPreset): AdventureConfig {
