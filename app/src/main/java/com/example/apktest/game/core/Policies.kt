@@ -12,10 +12,36 @@ enum class PlayerPolicyType(val label: String) {
     FLEE_TO_EXIT("Flee + Drift to Exit")
 }
 
-enum class NpcPolicyType(val label: String) {
-    DIRECT_CHASE("Direct Chase"),
-    PREDICTIVE_CHASE("Predictive"),
-    PATROL_GUARD("Patrol/Guard")
+/**
+ * NPC behaviour catalogue. Each entry carries its display [label], a short
+ * player-facing [description] (shown in the in-game legend) and a [colorRgb]
+ * body tint so the renderer can visually distinguish NPCs by policy. Keeping
+ * presentation metadata on the enum mirrors [PowerUpType] and lets the legend,
+ * renderer and any future per-policy UI share a single source of truth.
+ *
+ * [colorRgb] components are floats in `[0f, 1f]` matching the libGDX
+ * `Color(r, g, b, a)` convention used in `PixelSprites.kt`.
+ */
+enum class NpcPolicyType(
+    val label: String,
+    val description: String,
+    val colorRgb: Triple<Float, Float, Float>
+) {
+    DIRECT_CHASE(
+        label = "Direct Chase",
+        description = "Walks straight toward the player along the shortest maze path.",
+        colorRgb = Triple(0.78f, 0.18f, 0.20f) // red (legacy goblin tint)
+    ),
+    PREDICTIVE_CHASE(
+        label = "Predictive",
+        description = "Anticipates the player's next moves and cuts them off.",
+        colorRgb = Triple(0.62f, 0.30f, 0.78f) // purple/magenta
+    ),
+    PATROL_GUARD(
+        label = "Patrol/Guard",
+        description = "Patrols a region and only chases when the player is nearby.",
+        colorRgb = Triple(0.95f, 0.55f, 0.15f) // orange/amber
+    )
 }
 
 data class PlayerPolicyContext(

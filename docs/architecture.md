@@ -94,6 +94,7 @@ Tie-breaker order across all ranking sites: **risk → path distance → `PowerU
 ## NPC behaviour
 
 - NPC policies live in `Policies.kt` alongside player policies.
+- Each `NpcPolicyType` entry carries presentation metadata — `label`, `description` and `colorRgb` — so the renderer (`MazeRenderer` via `Sprites.monsterPaletteFor(type)`) and the in-game `LegendDialog` both tint NPCs and document the mapping from a single source of truth. Adding a new policy automatically picks up a tinted sprite and a legend row.
 - NPC wander RNG uses an independent stream `npcRandom = Random(seed xor NPC_RANDOM_SEED_MIX)` so it stays reproducible even if power-up spawning consumes more or fewer numbers from the main `random`.
 
 ## Rendering
