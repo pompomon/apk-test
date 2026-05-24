@@ -427,6 +427,47 @@ class GameEngineTest {
     }
 
     @Test
+    fun applyStartingPowerUp_nullIsNoOp() {
+        val engine = GameEngine(testPreset(), seed)
+        val activeBefore = engine.activePowerUps.toList()
+        val posBefore = engine.player.position
+
+        engine.applyStartingPowerUp(null)
+
+        assertEquals(activeBefore, engine.activePowerUps)
+        assertEquals(posBefore, engine.player.position)
+    }
+
+    @Test
+    fun applyStartingPowerUp_invisibilityStartsTimedEffect() {
+        val engine = GameEngine(testPreset(), seed)
+        assertTrue(engine.activePowerUps.none { it.type == PowerUpType.INVISIBILITY })
+
+        engine.applyStartingPowerUp(PowerUpType.INVISIBILITY)
+
+        val active = engine.activePowerUps.first { it.type == PowerUpType.INVISIBILITY }
+        assertEquals(
+            PowerUpType.INVISIBILITY.metadata.defaultDurationSeconds,
+            (active.endsAtSeconds ?: 0f) - active.startedAtSeconds,
+            0.0001f
+        )
+    }
+
+    @Test
+    fun applyStartingPowerUp_teleportRelocatesPlayerInstantly() {
+        val engine = GameEngine(testPreset(), seed)
+        val before = engine.player.position
+
+        engine.applyStartingPowerUp(PowerUpType.TELEPORT)
+
+        // Instant effect: no entry in activePowerUps, but the player has
+        // been moved to a different cell still connected to the exit.
+        assertTrue(engine.activePowerUps.none { it.type == PowerUpType.TELEPORT })
+        assertNotEquals(before, engine.player.position)
+        assertTrue(engine.navigator.bfsPath(engine.player.position, engine.maze.exit).isNotEmpty())
+    }
+
+    @Test
     fun player_animationFrameDoesNotAdvanceOnBlockedMove() {
         val engine = GameEngine(testPreset(), seed)
         engine.setPlayerPolicy(PlayerPolicyType.MANUAL)

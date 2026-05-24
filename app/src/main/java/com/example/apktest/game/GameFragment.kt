@@ -11,6 +11,7 @@ import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameEngineSnapshot
 import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
+import com.example.apktest.game.core.PowerUpType
 import com.example.apktest.game.ui.HudState
 
 class GameFragment : AndroidFragmentApplication() {
@@ -104,17 +105,23 @@ class GameFragment : AndroidFragmentApplication() {
      * policy + NPC count + per-NPC policy list) and forces a restart with
      * the supplied seed. Safe to call from the UI thread; the engine
      * command is enqueued onto the GL thread.
+     *
+     * If [startingPowerUp] is non-null it is applied immediately after the
+     * engine restarts, before the countdown begins, so the player enters the
+     * maze with that power-up already active. Passing null is a no-op and
+     * leaves the player without any starting power-up.
      */
     fun configureAdventureMaze(
         seed: Long,
         difficulty: String,
         playerPolicy: PlayerPolicyType,
         npcCount: Int,
-        npcPolicies: List<NpcPolicyType>
+        npcPolicies: List<NpcPolicyType>,
+        startingPowerUp: PowerUpType? = null
     ) {
         pendingDifficulty = difficulty
         pendingPlayerPolicy = playerPolicy
-        game?.configureAdventureMaze(seed, difficulty, playerPolicy, npcCount, npcPolicies)
+        game?.configureAdventureMaze(seed, difficulty, playerPolicy, npcCount, npcPolicies, startingPowerUp)
     }
 
     fun queueManualMove(direction: Direction) {

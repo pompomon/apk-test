@@ -11,7 +11,10 @@ import org.json.JSONObject
  * Mirrors the conventions of [GameEngineSnapshot]: bumping
  * [SCHEMA_VERSION] in code transparently invalidates any stale payload
  * via the version check in [fromJson], which returns `null` for any
- * unreadable / out-of-range / unknown-enum payload (Hard rule #9).
+ * unreadable / out-of-range payload (Hard rule #9). Unknown enum values
+ * in the unlocked-policies list or currentPlayerPolicy are tolerated:
+ * removed entries are silently dropped, and an unreadable
+ * currentPlayerPolicy falls back to MANUAL rather than failing the load.
  */
 data class AdventureRunStateSnapshot(
     val schemaVersion: Int = SCHEMA_VERSION,
@@ -25,7 +28,8 @@ data class AdventureRunStateSnapshot(
     val currentMazeSeed: Long?,
     val currentMazeNpcPolicies: List<NpcPolicyType>,
     val currentMazeSnapshot: GameEngineSnapshot?,
-    val status: AdventureStatus
+    val status: AdventureStatus,
+    val pendingStartingPowerUp: PowerUpType? = null
 ) {
     fun toJson(): String = JSONObject().apply {
         put(KEY_VERSION, schemaVersion)
@@ -48,6 +52,9 @@ data class AdventureRunStateSnapshot(
             put(KEY_MAZE_SNAPSHOT, currentMazeSnapshot.toJson())
         }
         put(KEY_STATUS, status.name)
+        if (pendingStartingPowerUp != null) {
+            put(KEY_PENDING_POWERUP, pendingStartingPowerUp.name)
+        }
     }.toString()
 
     companion object {
@@ -65,6 +72,7 @@ data class AdventureRunStateSnapshot(
         private const val KEY_MAZE_NPC_POLICIES = "mazeNpcPolicies"
         private const val KEY_MAZE_SNAPSHOT = "mazeSnapshot"
         private const val KEY_STATUS = "status"
+        private const val KEY_PENDING_POWERUP = "pendingPowerUp"
 
         fun fromState(state: AdventureRunState, runSeed: Long): AdventureRunStateSnapshot =
             AdventureRunStateSnapshot(
@@ -78,7 +86,8 @@ data class AdventureRunStateSnapshot(
                 currentMazeSeed = state.currentMazeSeed,
                 currentMazeNpcPolicies = state.currentMazeNpcPolicies,
                 currentMazeSnapshot = state.currentMazeSnapshot,
-                status = state.status
+                status = state.status,
+                pendingStartingPowerUp = state.pendingStartingPowerUp
             )
 
         fun fromJson(json: String): AdventureRunStateSnapshot? {
@@ -86,9 +95,25 @@ data class AdventureRunStateSnapshot(
                 val obj = JSONObject(json)
                 val version = obj.optInt(KEY_VERSION, 0)
                 if (version != SCHEMA_VERSION) return null
+                // Silently drop unknown enum names from the unlocked-policies
+                // list so legacy payloads that referenced now-removed entries
+                // (e.g. RANDOM_MEMORY, WALL_RIGHT) still load instead of
+                // discarding the entire run. We re-add MANUAL below to keep
+                // the invariant that MANUAL is always available.
                 val unlocked = obj.getJSONArray(KEY_UNLOCKED).let { arr ->
-                    List(arr.length()) { i -> PlayerPolicyType.valueOf(arr.getString(i)) }
-                }
+                    (0 until arr.length()).mapNotNull { i ->
+                        runCatching { PlayerPolicyType.valueOf(arr.getString(i)) }.getOrNull()
+                    }
+                }.toMutableList()
+                if (PlayerPolicyType.MANUAL !in unlocked) unlocked.add(0, PlayerPolicyType.MANUAL)
+                val distinctUnlocked = unlocked.distinct()
+                // Tolerate a removed currentPlayerPolicy by resetting to
+                // MANUAL (always unlocked) rather than failing the load.
+                val currentPolicy = runCatching {
+                    PlayerPolicyType.valueOf(obj.getString(KEY_CURRENT_POLICY))
+                }.getOrNull()
+                    ?.takeIf { it in distinctUnlocked }
+                    ?: PlayerPolicyType.MANUAL
                 val mazePolicies = if (obj.has(KEY_MAZE_NPC_POLICIES)) {
                     obj.getJSONArray(KEY_MAZE_NPC_POLICIES).let { arr ->
                         List(arr.length()) { i -> NpcPolicyType.valueOf(arr.getString(i)) }
@@ -107,6 +132,9 @@ data class AdventureRunStateSnapshot(
                 // but their run-level progress (lives, maze index, unlocks)
                 // is preserved.
                 val mazeSnapshot = mazeSnapshotJson?.let { GameEngineSnapshot.fromJson(it) }
+                val pendingPowerUp = if (obj.has(KEY_PENDING_POWERUP) && !obj.isNull(KEY_PENDING_POWERUP)) {
+                    runCatching { PowerUpType.valueOf(obj.getString(KEY_PENDING_POWERUP)) }.getOrNull()
+                } else null
 
                 val snapshot = AdventureRunStateSnapshot(
                     schemaVersion = version,
@@ -115,12 +143,13 @@ data class AdventureRunStateSnapshot(
                     currentMazeIndex = obj.getInt(KEY_MAZE_INDEX),
                     livesRemaining = obj.getInt(KEY_LIVES),
                     winStreakSinceLastBonus = obj.getInt(KEY_STREAK),
-                    unlockedPlayerPolicies = unlocked,
-                    currentPlayerPolicy = PlayerPolicyType.valueOf(obj.getString(KEY_CURRENT_POLICY)),
+                    unlockedPlayerPolicies = distinctUnlocked,
+                    currentPlayerPolicy = currentPolicy,
                     currentMazeSeed = mazeSeed,
                     currentMazeNpcPolicies = mazePolicies,
                     currentMazeSnapshot = mazeSnapshot,
-                    status = AdventureStatus.valueOf(obj.getString(KEY_STATUS))
+                    status = AdventureStatus.valueOf(obj.getString(KEY_STATUS)),
+                    pendingStartingPowerUp = pendingPowerUp
                 )
 
                 // Reject unknown difficulty names outright. The Adventure
@@ -135,14 +164,7 @@ data class AdventureRunStateSnapshot(
                 if (snapshot.currentMazeIndex < 0) return null
                 if (snapshot.livesRemaining < 0) return null
                 if (snapshot.winStreakSinceLastBonus < 0) return null
-                if (PlayerPolicyType.MANUAL !in snapshot.unlockedPlayerPolicies) return null
-                // Reject duplicates so a tampered payload like
-                // `[MANUAL, MANUAL]` can't fake an extra unlocked slot
-                // and trigger UI flows (e.g. the strategy switcher) that
-                // assume distinct entries.
-                if (snapshot.unlockedPlayerPolicies.distinct().size !=
-                    snapshot.unlockedPlayerPolicies.size) return null
-                if (snapshot.currentPlayerPolicy !in snapshot.unlockedPlayerPolicies) return null
+                // MANUAL invariant was enforced above by re-adding it if absent.
                 snapshot
             } catch (_: Exception) {
                 // Same rationale as [GameEngineSnapshot.fromJson]: swallow
@@ -166,6 +188,7 @@ data class AdventureRunStateSnapshot(
         currentMazeSeed = currentMazeSeed,
         currentMazeNpcPolicies = currentMazeNpcPolicies,
         currentMazeSnapshot = currentMazeSnapshot,
-        status = status
+        status = status,
+        pendingStartingPowerUp = pendingStartingPowerUp
     )
 }

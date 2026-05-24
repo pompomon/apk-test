@@ -51,7 +51,18 @@ data class AdventureRunState(
     var currentMazeSeed: Long? = null,
     var currentMazeNpcPolicies: List<NpcPolicyType> = emptyList(),
     var currentMazeSnapshot: GameEngineSnapshot? = null,
-    var status: AdventureStatus = AdventureStatus.IN_PROGRESS
+    var status: AdventureStatus = AdventureStatus.IN_PROGRESS,
+    /**
+     * Power-up the player chose to start the next maze with (granted as an
+     * even-numbered-maze-win reward). Treated as locked per-maze state:
+     * carried into every [AdventureRunController.prepareCurrentMaze] call
+     * (so death replays of the same maze re-apply the same reward) and
+     * cleared only when the host advances past the maze via
+     * [AdventureRunController.onMazeWon]. Survives process death/restore
+     * between persisting state and the GL thread actually applying the
+     * power-up to a fresh engine instance.
+     */
+    var pendingStartingPowerUp: PowerUpType? = null
 )
 
 /**
@@ -67,25 +78,41 @@ data class MazeStartupSpec(
     val npcCount: Int,
     val npcPolicies: List<NpcPolicyType>,
     val playerPolicy: PlayerPolicyType,
-    val midMazeSnapshot: GameEngineSnapshot?
+    val midMazeSnapshot: GameEngineSnapshot?,
+    /**
+     * Power-up to activate at the very start of this maze (granted as the
+     * reward for the previous even-maze win). Applied once by the host
+     * after engine restart; `null` for mazes with no starting bonus.
+     */
+    val startingPowerUp: PowerUpType? = null
 )
 
 /**
  * Returned from [AdventureRunController.onMazeWon] to communicate what
- * the host should surface on the win overlay: the new lives count,
- * whether a bonus life was just awarded, and the candidate
- * [PlayerPolicyType]s the player can choose from for their unlock
- * reward (empty when all policies are already unlocked).
+ * the host should surface on the win overlay:
+ * - the new lives count and whether a bonus life was just awarded,
+ * - either a list of [unlockCandidates] (3 random locked
+ *   [PlayerPolicyType]s on odd-numbered maze wins), or
+ * - a list of [startingPowerUpCandidates] (3 random non-GHOST
+ *   [PowerUpType]s on even-numbered maze wins),
+ * - the maze index just completed and total mazes for messaging.
+ *
+ * Exactly one of [unlockCandidates] / [startingPowerUpCandidates] will
+ * be populated on a non-terminal win (and both are empty on the final
+ * run-complete win or when there are no locked policies left to offer).
  */
 data class WinOutcome(
     val livesRemaining: Int,
     val bonusLifeAwarded: Boolean,
     val unlockCandidates: List<PlayerPolicyType>,
+    val startingPowerUpCandidates: List<PowerUpType>,
     val mazeIndexCompleted: Int,
     val totalMazes: Int,
     val runComplete: Boolean
 ) {
     val unlockAvailable: Boolean get() = unlockCandidates.isNotEmpty() && !runComplete
+    val startingPowerUpAvailable: Boolean
+        get() = startingPowerUpCandidates.isNotEmpty() && !runComplete
 }
 
 /**
@@ -161,7 +188,8 @@ class AdventureRunController(
             npcCount = npcCount,
             npcPolicies = state.currentMazeNpcPolicies,
             playerPolicy = state.currentPlayerPolicy,
-            midMazeSnapshot = state.currentMazeSnapshot
+            midMazeSnapshot = state.currentMazeSnapshot,
+            startingPowerUp = state.pendingStartingPowerUp
         )
     }
 
@@ -189,19 +217,59 @@ class AdventureRunController(
         state.currentMazeSeed = null
         state.currentMazeNpcPolicies = emptyList()
         state.currentMazeSnapshot = null
+        // Locked starting power-up is per-maze: clear once we advance past
+        // the maze it was reserved for. Death replays keep it so the same
+        // reward is re-applied on the retry.
+        state.pendingStartingPowerUp = null
 
         val runComplete = newIndex >= config.totalMazes
         if (runComplete) state.status = AdventureStatus.WON
 
-        val unlockCandidates = if (runComplete) emptyList() else lockedPlayerPolicies()
+        // Per-parity reward: odd-numbered maze wins (1, 3, 5…) unlock a
+        // new player policy; even-numbered maze wins (2, 4, 6…) grant a
+        // starting power-up for the next maze.
+        val isOdd = newIndex % 2 == 1
+        val unlockCandidates = if (runComplete || !isOdd) emptyList()
+        else sampleLockedPlayerPolicies(REWARD_SAMPLE_SIZE, newIndex)
+        val powerUpCandidates = if (runComplete || isOdd) emptyList()
+        else sampleStartingPowerUps(REWARD_SAMPLE_SIZE, newIndex)
+
         return WinOutcome(
             livesRemaining = state.livesRemaining,
             bonusLifeAwarded = bonus,
             unlockCandidates = unlockCandidates,
+            startingPowerUpCandidates = powerUpCandidates,
             mazeIndexCompleted = newIndex,
             totalMazes = config.totalMazes,
             runComplete = runComplete
         )
+    }
+
+    /**
+     * Deterministically samples up to [count] still-locked
+     * [PlayerPolicyType]s using an RNG derived from [runSeed] and
+     * [mazeIndex1Based] so the same sample is produced on a death/replay
+     * path or a snapshot rehydration.
+     */
+    internal fun sampleLockedPlayerPolicies(count: Int, mazeIndex1Based: Int): List<PlayerPolicyType> {
+        val locked = lockedPlayerPolicies()
+        if (locked.isEmpty() || count <= 0) return emptyList()
+        val rng = Random(deriveRewardSeed(mazeIndex1Based, REWARD_KIND_POLICY))
+        if (locked.size <= count) return locked.shuffled(rng)
+        return locked.shuffled(rng).take(count)
+    }
+
+    /**
+     * Deterministically samples up to [count] [PowerUpType]s (excluding
+     * [PowerUpType.GHOST_MODE]) using an RNG derived from [runSeed] and
+     * [mazeIndex1Based].
+     */
+    internal fun sampleStartingPowerUps(count: Int, mazeIndex1Based: Int): List<PowerUpType> {
+        val pool = PowerUpType.entries.filter { it != PowerUpType.GHOST_MODE }
+        if (pool.isEmpty() || count <= 0) return emptyList()
+        val rng = Random(deriveRewardSeed(mazeIndex1Based, REWARD_KIND_POWERUP))
+        if (pool.size <= count) return pool.shuffled(rng)
+        return pool.shuffled(rng).take(count)
     }
 
     /** PlayerPolicyTypes not yet unlocked, in declaration order. */
@@ -265,11 +333,30 @@ class AdventureRunController(
         state.currentMazeSnapshot = null
     }
 
+    /**
+     * Record [type] as the power-up to activate at the start of the next
+     * maze. Persists as locked per-maze state across
+     * [prepareCurrentMaze] re-entries and across process death/restore,
+     * and is consumed (cleared) by [onMazeWon] when the run advances past
+     * the maze it was reserved for. Passing `null` clears any previously
+     * pending starting power-up. Returns the previously pending power-up
+     * (or `null` if none) so the caller can react to an overwrite if
+     * needed.
+     */
+    fun applyStartingPowerUp(type: PowerUpType?): PowerUpType? {
+        val previous = state.pendingStartingPowerUp
+        state.pendingStartingPowerUp = type
+        return previous
+    }
+
     private fun deriveMazeSeed(mazeIndex1Based: Int): Long =
         runSeed xor (mazeIndex1Based.toLong() * MAZE_SEED_STRIDE) xor MAZE_SEED_MIX
 
     private fun deriveNpcPolicySeed(mazeIndex1Based: Int): Long =
         runSeed xor (mazeIndex1Based.toLong() * NPC_POLICY_SEED_STRIDE) xor NPC_POLICY_SEED_MIX
+
+    private fun deriveRewardSeed(mazeIndex1Based: Int, kind: Long): Long =
+        runSeed xor (mazeIndex1Based.toLong() * REWARD_SEED_STRIDE) xor REWARD_SEED_MIX xor kind
 
     companion object {
         // Arbitrary mix constants — chosen as signed-Long literals so they
@@ -279,5 +366,12 @@ class AdventureRunController(
         private const val MAZE_SEED_MIX: Long = -0x4F2C5D6E7A8B9C0DL
         private const val NPC_POLICY_SEED_STRIDE: Long = 0x6A09E667F3BCC908L
         private const val NPC_POLICY_SEED_MIX: Long = -0x123456789ABCDEFL
+        private const val REWARD_SEED_STRIDE: Long = 0x243F6A8885A308D3L
+        private const val REWARD_SEED_MIX: Long = -0x7E1B2C3D4E5F6071L
+        private const val REWARD_KIND_POLICY: Long = 0x0101010101010101L
+        private const val REWARD_KIND_POWERUP: Long = 0x2020202020202020L
+
+        /** Maximum number of choices offered to the player on a non-final maze win. */
+        const val REWARD_SAMPLE_SIZE = 3
     }
 }

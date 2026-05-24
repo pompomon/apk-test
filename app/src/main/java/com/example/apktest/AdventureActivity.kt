@@ -27,6 +27,7 @@ import com.example.apktest.game.core.DifficultyPresets
 import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.PlayerPolicyType
+import com.example.apktest.game.core.PowerUpType
 import com.example.apktest.ui.LegendDialog
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -141,7 +142,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 difficulty = spec.difficulty.name,
                 playerPolicy = spec.playerPolicy,
                 npcCount = spec.npcCount,
-                npcPolicies = spec.npcPolicies
+                npcPolicies = spec.npcPolicies,
+                startingPowerUp = spec.startingPowerUp
             )
         }
 
@@ -459,10 +461,12 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 outcome.totalMazes, outcome.livesRemaining, livesWord
             ) + bonusMsg
         } else {
-            (if (outcome.unlockAvailable)
-                getString(R.string.adventure_unlock_prompt)
-            else
-                getString(R.string.adventure_no_unlock_available)) + bonusMsg
+            val rewardPrompt = when {
+                outcome.unlockAvailable -> getString(R.string.adventure_unlock_prompt)
+                outcome.startingPowerUpAvailable -> getString(R.string.adventure_powerup_prompt)
+                else -> getString(R.string.adventure_no_unlock_available)
+            }
+            rewardPrompt + bonusMsg
         }
 
         val builder = AlertDialog.Builder(this).setTitle(title).setMessage(body).setCancelable(false)
@@ -486,6 +490,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             // Present the unlock chooser as a follow-up dialog.
             builder.setPositiveButton(R.string.adventure_continue) { _, _ ->
                 showUnlockChooser(outcome.unlockCandidates)
+            }
+        } else if (outcome.startingPowerUpAvailable) {
+            builder.setPositiveButton(R.string.adventure_continue) { _, _ ->
+                showStartingPowerUpChooser(outcome.startingPowerUpCandidates)
             }
         } else {
             builder.setPositiveButton(R.string.adventure_continue) { _, _ ->
@@ -511,6 +519,22 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             .show()
     }
 
+    private fun showStartingPowerUpChooser(candidates: List<PowerUpType>) {
+        val items = candidates.map { it.label }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.adventure_powerup_prompt)
+            .setCancelable(false)
+            .setSingleChoiceItems(items, 0, null)
+            .setPositiveButton(R.string.adventure_continue) { dialog, _ ->
+                val listView = (dialog as AlertDialog).listView
+                val picked = listView.checkedItemPosition.coerceAtLeast(0)
+                controller.applyStartingPowerUp(candidates[picked])
+                persistAdventureStateAsync()
+                advanceToNextMaze()
+            }
+            .show()
+    }
+
     private fun advanceToNextMaze() {
         val spec = controller.prepareCurrentMaze()
         if (spec == null) {
@@ -524,7 +548,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             difficulty = spec.difficulty.name,
             playerPolicy = spec.playerPolicy,
             npcCount = spec.npcCount,
-            npcPolicies = spec.npcPolicies
+            npcPolicies = spec.npcPolicies,
+            startingPowerUp = spec.startingPowerUp
         )
         persistAdventureStateAsync()
         // transitionPending stays `true` until pollEngineStatus observes

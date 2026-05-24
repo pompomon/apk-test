@@ -104,11 +104,16 @@ class AdventureSetupActivity : AppCompatActivity() {
         buttonPickDifficulty.text = getString(R.string.menu_difficulty, selectedDifficultyName)
         val preset = DifficultyPresets.byName(selectedDifficultyName)
         val config = AdventureConfig.forDifficulty(preset)
+        val npcText = resources.getQuantityString(
+            R.plurals.adventure_npc_count,
+            config.baseNpcsPerMaze,
+            config.baseNpcsPerMaze
+        )
         summaryText.text = getString(
             R.string.adventure_summary_format,
             config.initialLives,
             config.totalMazes,
-            config.extraNpcsPerMaze
+            npcText
         )
     }
 

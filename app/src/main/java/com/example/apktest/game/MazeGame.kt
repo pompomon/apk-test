@@ -7,6 +7,7 @@ import com.example.apktest.game.core.GameEngine
 import com.example.apktest.game.core.GameEngineSnapshot
 import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
+import com.example.apktest.game.core.PowerUpType
 import com.example.apktest.game.render.MazeRenderer
 import com.example.apktest.game.ui.HudState
 import java.util.concurrent.atomic.AtomicReference
@@ -79,18 +80,25 @@ class MazeGame : ApplicationAdapter() {
      * so the next render tick spawns into the configured maze. Also
      * re-arms the 3-2-1 countdown so the player gets the usual
      * "assess the layout" window before NPCs start moving.
+     *
+     * If [startingPowerUp] is non-null it is applied immediately after the
+     * engine restarts, before the countdown begins, so the player enters the
+     * maze with that power-up already active. Passing null is a no-op and
+     * leaves the player without any starting power-up.
      */
     fun configureAdventureMaze(
         seed: Long,
         difficulty: String,
         playerPolicy: PlayerPolicyType,
         npcCount: Int,
-        npcPolicies: List<NpcPolicyType>
+        npcPolicies: List<NpcPolicyType>,
+        startingPowerUp: PowerUpType? = null
     ) = enqueue { engine ->
         engine.applyDifficulty(DifficultyPresets.byName(difficulty))
         engine.setPlayerPolicy(playerPolicy)
         engine.configureAdventureMaze(npcCount, npcPolicies)
         engine.restart(seed)
+        engine.applyStartingPowerUp(startingPowerUp)
         engine.startCountdown()
     }
 
