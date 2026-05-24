@@ -563,9 +563,10 @@ class PledgePolicy : RankedPlayerPolicy {
         val order = listOf(facing.left(), facing, facing.right(), facing.opposite())
         val picked = order.firstOrNull { maze.canMove(from, it) } ?: facing
 
-        // Update rotation counter based on the rotation from the reference
-        // direction caused by this pick. Use the relative turn from current
-        // facing to keep it bounded per tick.
+        // Update rotation counter using the turn delta from the previous
+        // wall-follow facing to this tick's picked facing. Since `rotation`
+        // resets when wall-follow starts, this accumulates net turns relative
+        // to the wall-follow entry facing.
         rotation += rotationDelta(facing, picked)
         followFacing = picked
 
