@@ -80,6 +80,11 @@ class MazeGame : ApplicationAdapter() {
      * so the next render tick spawns into the configured maze. Also
      * re-arms the 3-2-1 countdown so the player gets the usual
      * "assess the layout" window before NPCs start moving.
+     *
+     * If [startingPowerUp] is non-null it is applied immediately after the
+     * engine restarts, before the countdown begins, so the player enters the
+     * maze with that power-up already active. Passing null is a no-op and
+     * leaves the player without any starting power-up.
      */
     fun configureAdventureMaze(
         seed: Long,
