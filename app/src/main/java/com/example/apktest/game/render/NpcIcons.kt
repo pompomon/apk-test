@@ -6,19 +6,12 @@ import com.example.apktest.game.core.NpcPolicyType
  * Single source of truth for NPC sprite presentation outside the libGDX
  * renderer (currently: the legend dialog's [com.example.apktest.ui.NpcIconView]).
  *
- * The pixel pattern is shared with the in-game renderer ([Sprites.monsterIdle])
- * so the legend swatch is byte-for-byte the idle goblin frame. Per-policy
- * Android colors are derived from [NpcPolicyType.colorRgb] using the same
- * dark-shading factor as [Sprites.monsterPaletteFor], keeping the legend in
- * lock-step with what the player sees on the maze.
+ * The pixel pattern and shading factor are shared with the in-game renderer
+ * ([Sprites.monsterIdle] / [Sprites.MONSTER_DARK_SHADE_FACTOR]) so the legend
+ * swatch is byte-for-byte the idle goblin frame, tinted to match what the
+ * player sees on the maze.
  */
 object NpcIcons {
-    // Shading factor must mirror PixelSprites.MONSTER_DARK_SHADE_FACTOR. We
-    // duplicate the literal here (rather than exposing the constant) because
-    // the libGDX Sprites object lives in a different module surface and
-    // exposing internal palette math just for a 0.55f would invite drift.
-    private const val DARK_SHADE_FACTOR = 0.55f
-
     /** Idle NPC pattern reused from the in-game renderer. */
     fun pattern(): Array<String> = Sprites.monsterIdle
 
@@ -35,8 +28,9 @@ object NpcIcons {
 
     private fun buildColors(type: NpcPolicyType): Map<Char, Int> {
         val (r, g, b) = type.colorRgb
+        val f = Sprites.MONSTER_DARK_SHADE_FACTOR
         val body = argb(r, g, b)
-        val dark = argb(r * DARK_SHADE_FACTOR, g * DARK_SHADE_FACTOR, b * DARK_SHADE_FACTOR)
+        val dark = argb(r * f, g * f, b * f)
         return mapOf(
             'M' to body,
             'D' to dark,
