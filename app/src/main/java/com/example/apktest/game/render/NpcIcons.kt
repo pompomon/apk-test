@@ -6,10 +6,10 @@ import com.example.apktest.game.core.NpcPolicyType
  * Single source of truth for NPC sprite presentation outside the libGDX
  * renderer (currently: the legend dialog's [com.example.apktest.ui.NpcIconView]).
  *
- * The pixel pattern and shading factor are shared with the in-game renderer
- * ([Sprites.monsterIdle] / [Sprites.MONSTER_DARK_SHADE_FACTOR]) so the legend
- * swatch is byte-for-byte the idle goblin frame, tinted to match what the
- * player sees on the maze.
+ * The pixel pattern is shared with the in-game renderer
+ * ([Sprites.monsterIdle]), and dark-shading colors are sourced from
+ * [Sprites.monsterPaletteFor] so the legend swatch is byte-for-byte the idle
+ * goblin frame, tinted to match what the player sees on the maze.
  */
 object NpcIcons {
     /** Idle NPC pattern reused from the in-game renderer. */
@@ -28,9 +28,10 @@ object NpcIcons {
 
     private fun buildColors(type: NpcPolicyType): Map<Char, Int> {
         val (r, g, b) = type.colorRgb
-        val f = Sprites.MONSTER_DARK_SHADE_FACTOR
+        val palette = Sprites.monsterPaletteFor(type)
+        val d = palette.getValue('D')
         val body = argb(r, g, b)
-        val dark = argb(r * f, g * f, b * f)
+        val dark = argb(d.r, d.g, d.b)
         return mapOf(
             'M' to body,
             'D' to dark,
