@@ -105,6 +105,11 @@ class GameFragment : AndroidFragmentApplication() {
      * policy + NPC count + per-NPC policy list) and forces a restart with
      * the supplied seed. Safe to call from the UI thread; the engine
      * command is enqueued onto the GL thread.
+     *
+     * If [startingPowerUp] is non-null it is applied immediately after the
+     * engine restarts, before the countdown begins, so the player enters the
+     * maze with that power-up already active. Passing null is a no-op and
+     * leaves the player without any starting power-up.
      */
     fun configureAdventureMaze(
         seed: Long,
