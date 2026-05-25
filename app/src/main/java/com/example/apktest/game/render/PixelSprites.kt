@@ -131,11 +131,10 @@ object Sprites {
     // Constant shading factor used to derive the 'D' channel from the body
     // color for non-legacy policies: 0.45 / 0.78 ≈ 0.58 matches the original
     // DIRECT_CHASE palette (and 0.08 / 0.18 ≈ 0.44; we average toward the
-    // brighter channel to avoid muddy dark shades on saturated hues). Exposed
-    // so [NpcIcons] (Android-color helper for the legend) can stay in lock-step.
+    // brighter channel to avoid muddy dark shades on saturated hues).
     // DIRECT_CHASE itself is special-cased below to exactly reproduce the
     // legacy palette, so this factor is only used for other policies.
-    const val MONSTER_DARK_SHADE_FACTOR: Float = 0.55f
+    private const val MONSTER_DARK_SHADE_FACTOR: Float = 0.55f
     // Eye-white and pupil colors are kept constant across policies so the
     // monster face remains readable regardless of body color.
     private val monsterEyeWhite = Color(0.96f, 0.96f, 0.98f, 1f)
