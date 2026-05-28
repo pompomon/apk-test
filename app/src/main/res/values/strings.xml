@@ -28,8 +28,10 @@
 
     <!-- Legend dialog -->
     <string name="legend">Legend</string>
-    <string name="legend_title">Power-up Legend</string>
+    <string name="legend_title">Legend</string>
     <string name="legend_close">Close</string>
+    <string name="legend_section_powerups">Power-ups</string>
+    <string name="legend_section_npcs">NPC policies</string>
 
     <!-- Setup screen -->
     <string name="setup_title">Maze Escape</string>

@@ -387,7 +387,7 @@ class MazeRenderer {
             PixelSpriteRenderer.draw(
                 shapes = shapes,
                 pattern = npcPattern,
-                palette = Sprites.monsterPalette(),
+                palette = Sprites.monsterPaletteFor(npc.policyType),
                 centerX = mazeOriginX + npc.position.x + 0.5f,
                 centerY = mazeOriginY + npc.position.y + 0.5f,
                 size = 0.72f

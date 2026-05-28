@@ -2,6 +2,7 @@ package com.example.apktest.game.render
 
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
+import com.example.apktest.game.core.NpcPolicyType
 
 /**
  * Renders multi-color pixel-art sprites described by a rectangular character
@@ -117,12 +118,44 @@ object Sprites {
     val heroFrames: Array<Array<String>> = arrayOf(heroIdle, heroStep1, heroStep2)
 
     // Monster: red goblin/ghost with white eyes and jagged bottom (7x7).
+    // The default palette below preserves the legacy DIRECT_CHASE colors and is
+    // exposed via [monsterPalette]; per-policy variants are built by
+    // [monsterPaletteFor] so each NPC can be tinted to match its
+    // [NpcPolicyType.colorRgb].
     private val monsterPalette = mapOf(
         'M' to Color(0.78f, 0.18f, 0.20f, 1f), // body
         'D' to Color(0.45f, 0.08f, 0.10f, 1f), // dark shading
         'W' to Color(0.96f, 0.96f, 0.98f, 1f), // eye whites
         'E' to Color(0.05f, 0.05f, 0.08f, 1f)  // pupils
     )
+    // Constant shading factor used to derive the 'D' channel from the body
+    // color for non-legacy policies: 0.45 / 0.78 ≈ 0.58 matches the original
+    // DIRECT_CHASE palette (and 0.08 / 0.18 ≈ 0.44; we average toward the
+    // brighter channel to avoid muddy dark shades on saturated hues).
+    // DIRECT_CHASE itself is special-cased below to exactly reproduce the
+    // legacy palette, so this factor is only used for other policies.
+    private const val MONSTER_DARK_SHADE_FACTOR: Float = 0.55f
+    // Eye-white and pupil colors are kept constant across policies so the
+    // monster face remains readable regardless of body color.
+    private val monsterEyeWhite = Color(0.96f, 0.96f, 0.98f, 1f)
+    private val monsterPupil = Color(0.05f, 0.05f, 0.08f, 1f)
+    // Cache per-policy palettes so per-frame rendering does not allocate.
+    private val monsterPaletteByPolicy: Map<NpcPolicyType, Map<Char, Color>> =
+        NpcPolicyType.entries.associateWith { buildMonsterPalette(it) }
+
+    private fun buildMonsterPalette(type: NpcPolicyType): Map<Char, Color> {
+        // Preserve the legacy DIRECT_CHASE palette exactly so existing
+        // visuals and the [monsterPalette] back-compat alias do not shift.
+        if (type == NpcPolicyType.DIRECT_CHASE) return monsterPalette
+        val (r, g, b) = type.colorRgb
+        val f = MONSTER_DARK_SHADE_FACTOR
+        return mapOf(
+            'M' to Color(r, g, b, 1f),
+            'D' to Color(r * f, g * f, b * f, 1f),
+            'W' to monsterEyeWhite,
+            'E' to monsterPupil
+        )
+    }
     // Idle: symmetric jagged hem.
     val monsterIdle: Array<String> = arrayOf(
         "0DMMMD0",
@@ -177,6 +210,12 @@ object Sprites {
 
     fun heroPalette(): Map<Char, Color> = heroPalette
     fun monsterPalette(): Map<Char, Color> = monsterPalette
+    /**
+     * Per-policy NPC palette, derived from [NpcPolicyType.colorRgb]. Cached at
+     * class init so calls are allocation-free in the render loop.
+     */
+    fun monsterPaletteFor(type: NpcPolicyType): Map<Char, Color> =
+        monsterPaletteByPolicy.getValue(type)
     fun doorPalette(): Map<Char, Color> = doorPalette
 
     init {
