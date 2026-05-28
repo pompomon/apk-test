@@ -1,6 +1,7 @@
 package com.example.apktest.game.render
 
 import com.example.apktest.game.core.NpcPolicyType
+import kotlin.math.roundToInt
 
 /**
  * Single source of truth for NPC sprite presentation outside the libGDX
@@ -41,9 +42,9 @@ object NpcIcons {
     }
 
     private fun argb(r: Float, g: Float, b: Float): Int {
-        val rb = (r.coerceIn(0f, 1f) * 255f).toInt()
-        val gb = (g.coerceIn(0f, 1f) * 255f).toInt()
-        val bb = (b.coerceIn(0f, 1f) * 255f).toInt()
+        val rb = (r.coerceIn(0f, 1f) * 255f).roundToInt().coerceIn(0, 255)
+        val gb = (g.coerceIn(0f, 1f) * 255f).roundToInt().coerceIn(0, 255)
+        val bb = (b.coerceIn(0f, 1f) * 255f).roundToInt().coerceIn(0, 255)
         return (0xFF shl 24) or (rb shl 16) or (gb shl 8) or bb
     }
 }
