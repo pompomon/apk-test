@@ -2,6 +2,7 @@ package com.example.apktest.game.core
 
 import androidx.annotation.VisibleForTesting
 import com.example.apktest.game.ui.HudState
+import kotlin.math.abs
 import kotlin.random.Random
 
 class GameEngine(
@@ -750,15 +751,7 @@ class GameEngine(
     }
 
     private fun spawnNpcs() {
-        val reserved = setOf(maze.start, maze.exit)
-        val candidates = ArrayList<GridPos>(maze.width * maze.height - reserved.size)
-        for (y in 0 until maze.height) {
-            for (x in 0 until maze.width) {
-                val pos = GridPos(x, y)
-                if (pos !in reserved) candidates += pos
-            }
-        }
-        candidates.shuffle(random)
+        val candidates = npcSpawnCandidates()
         val requestedCount = npcCountOverride ?: difficulty.npcCount
         val spawnCount = requestedCount.coerceAtMost(candidates.size).coerceAtLeast(0)
         val policies = npcPolicies
@@ -776,6 +769,33 @@ class GameEngine(
             )
         }
     }
+
+    private fun npcSpawnCandidates(): List<GridPos> {
+        val reserved = setOf(maze.start, maze.exit)
+        val shuffled = ArrayList<GridPos>(maze.width * maze.height - reserved.size)
+        for (y in 0 until maze.height) {
+            for (x in 0 until maze.width) {
+                val pos = GridPos(x, y)
+                if (pos !in reserved) shuffled += pos
+            }
+        }
+        shuffled.shuffle(random)
+
+        val directPath = navigator.bfsPath(maze.start, maze.exit).toSet()
+        if (directPath.isEmpty()) return shuffled
+
+        val buffer = difficulty.npcDirectPathSpawnBuffer
+        val preferred = shuffled.filter { pos ->
+            directPath.minOf { pathCell -> chebyshevDistance(pos, pathCell) } > buffer
+        }
+        if (preferred.size == shuffled.size) return shuffled
+
+        val preferredSet = preferred.toSet()
+        return preferred + shuffled.filter { it !in preferredSet }
+    }
+
+    private fun chebyshevDistance(a: GridPos, b: GridPos): Int =
+        maxOf(abs(a.x - b.x), abs(a.y - b.y))
 
     private fun patrolRouteFrom(origin: GridPos): List<GridPos> {
         val neighbors = maze.neighbors(origin)
