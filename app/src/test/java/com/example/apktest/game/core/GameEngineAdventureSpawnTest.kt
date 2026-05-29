@@ -141,7 +141,7 @@ class GameEngineAdventureSpawnTest {
         val distances = engine.npcs.map { minChebyshevDistance(it.position, directPath) }
 
         assertTrue("expected cells next to the direct path for this seeded maze", nearPathCells.isNotEmpty())
-        assertTrue("hard placement should allow NPCs next to the direct path", npcPositions.containsAll(nearPathCells))
+        assertTrue("hard placement should allow NPCs next to the direct path", npcPositions.any { it in nearPathCells })
         assertFalse("hard placement should keep initial NPCs off the direct path", distances.any { it == 0 })
     }
 

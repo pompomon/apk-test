@@ -2,7 +2,6 @@ package com.example.apktest.game.core
 
 import androidx.annotation.VisibleForTesting
 import com.example.apktest.game.ui.HudState
-import kotlin.math.abs
 import kotlin.random.Random
 
 class GameEngine(
@@ -784,18 +783,26 @@ class GameEngine(
         val directPath = navigator.bfsPath(maze.start, maze.exit)
         if (directPath.isEmpty()) return shuffled
 
-        val buffer = difficulty.npcDirectPathSpawnBuffer
-        val preferred = shuffled.filter { pos ->
-            directPath.minOf { pathCell -> chebyshevDistance(pos, pathCell) } > buffer
-        }
+        val bufferedPathCells = directPathBufferCells(directPath, difficulty.npcDirectPathSpawnBuffer)
+        val preferred = shuffled.filter { pos -> pos !in bufferedPathCells }
         if (preferred.size == shuffled.size) return shuffled
 
         val preferredSet = preferred.toSet()
         return preferred + shuffled.filter { it !in preferredSet }
     }
 
-    private fun chebyshevDistance(a: GridPos, b: GridPos): Int =
-        maxOf(abs(a.x - b.x), abs(a.y - b.y))
+    private fun directPathBufferCells(directPath: List<GridPos>, buffer: Int): Set<GridPos> {
+        val cells = mutableSetOf<GridPos>()
+        directPath.forEach { pathCell ->
+            for (dy in -buffer..buffer) {
+                for (dx in -buffer..buffer) {
+                    val pos = GridPos(pathCell.x + dx, pathCell.y + dy)
+                    if (maze.inBounds(pos)) cells += pos
+                }
+            }
+        }
+        return cells
+    }
 
     private fun patrolRouteFrom(origin: GridPos): List<GridPos> {
         val neighbors = maze.neighbors(origin)
