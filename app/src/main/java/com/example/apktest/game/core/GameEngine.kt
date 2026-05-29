@@ -781,11 +781,13 @@ class GameEngine(
         shuffled.shuffle(random)
 
         val directPath = navigator.bfsPath(maze.start, maze.exit)
+        // Generated mazes are connected; keep a fallback for restored/test
+        // mazes that may be malformed so spawning still produces NPCs.
         if (directPath.isEmpty()) return shuffled
 
         val bufferedPathCells = directPathBufferCells(directPath, difficulty.npcDirectPathSpawnBuffer)
         val preferred = shuffled.filter { pos -> pos !in bufferedPathCells }
-        if (preferred.size == shuffled.size) return shuffled
+        if (preferred.size == shuffled.size) return preferred
 
         val preferredSet = preferred.toSet()
         return preferred + shuffled.filter { it !in preferredSet }
