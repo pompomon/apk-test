@@ -109,7 +109,7 @@ class GameEngineAdventureSpawnTest {
         val preset = placementPreset(
             name = "Placement-Medium",
             npcDirectPathSpawnBuffer = 1,
-            npcCount = preferredSpawnCount(seed, npcDirectPathSpawnBuffer = 1)
+            npcCount = bufferedSpawnCellCount(seed, npcDirectPathSpawnBuffer = 1)
         )
 
         val engine = GameEngine(preset, seed)
@@ -129,14 +129,19 @@ class GameEngineAdventureSpawnTest {
         val preset = placementPreset(
             name = "Placement-Hard",
             npcDirectPathSpawnBuffer = 0,
-            npcCount = preferredSpawnCount(seed, npcDirectPathSpawnBuffer = 0)
+            npcCount = bufferedSpawnCellCount(seed, npcDirectPathSpawnBuffer = 0)
         )
 
         val engine = GameEngine(preset, seed)
         val directPath = engine.navigator.bfsPath(engine.maze.start, engine.maze.exit)
+        val nearPathCells = allSpawnCells(engine.maze)
+            .filter { minChebyshevDistance(it, directPath) == 1 }
+            .toSet()
+        val npcPositions = engine.npcs.map { it.position }.toSet()
         val distances = engine.npcs.map { minChebyshevDistance(it.position, directPath) }
 
-        assertTrue("hard placement should allow an NPC next to the direct path", distances.any { it == 1 })
+        assertTrue("expected cells next to the direct path for this seeded maze", nearPathCells.isNotEmpty())
+        assertTrue("hard placement should allow NPCs next to the direct path", npcPositions.containsAll(nearPathCells))
         assertFalse("hard placement should keep initial NPCs off the direct path", distances.any { it == 0 })
     }
 
@@ -183,7 +188,7 @@ class GameEngineAdventureSpawnTest {
         npcDirectPathSpawnBuffer = npcDirectPathSpawnBuffer
     )
 
-    private fun preferredSpawnCount(seed: Long, npcDirectPathSpawnBuffer: Int): Int {
+    private fun bufferedSpawnCellCount(seed: Long, npcDirectPathSpawnBuffer: Int): Int {
         val maze = MazeGenerator.generate(PLACEMENT_MAZE_WIDTH, PLACEMENT_MAZE_HEIGHT, seed)
         val directPath = MazeNavigator(maze).bfsPath(maze.start, maze.exit)
         return allSpawnCells(maze).count { pos ->

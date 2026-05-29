@@ -781,7 +781,7 @@ class GameEngine(
         }
         shuffled.shuffle(random)
 
-        val directPath = navigator.bfsPath(maze.start, maze.exit).toSet()
+        val directPath = navigator.bfsPath(maze.start, maze.exit)
         if (directPath.isEmpty()) return shuffled
 
         val buffer = difficulty.npcDirectPathSpawnBuffer
