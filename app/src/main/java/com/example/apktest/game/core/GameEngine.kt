@@ -651,11 +651,12 @@ class GameEngine(
         }
 
         var processedAny = false
-        while (manualQueue.isNotEmpty() && status == GameStatus.RUNNING && !isPlayerFrozenByNpc()) {
+        while (manualQueue.isNotEmpty() && status == GameStatus.RUNNING) {
             val direction = manualQueue.removeFirst()
             attemptPlayerMove(direction)
-            evaluateEndConditions()
             processedAny = true
+            evaluateEndConditions()
+            if (status != GameStatus.RUNNING) break
         }
         return processedAny
     }
