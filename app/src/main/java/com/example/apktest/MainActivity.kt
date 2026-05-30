@@ -260,15 +260,12 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     if (repeatingDirection != direction) {
+                        stopRepeatingManualMove()
                         startRepeatingManualMove(direction)
                     }
                     true
                 }
-                MotionEvent.ACTION_UP -> {
-                    stopRepeatingManualMove()
-                    true
-                }
-                MotionEvent.ACTION_CANCEL -> {
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     stopRepeatingManualMove()
                     true
                 }

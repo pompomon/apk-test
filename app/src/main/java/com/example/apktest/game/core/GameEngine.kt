@@ -485,7 +485,7 @@ class GameEngine(
      * direction instead of asking the policy for a move.
      */
     fun queueManualMove(direction: Direction) {
-        if (status != GameStatus.RUNNING || countdownRemainingSeconds > 0f || isPlayerFrozenByNpc()) {
+        if (!canAcceptManualInput()) {
             return
         }
         if (manualQueue.size >= MAX_MANUAL_QUEUE) {
@@ -646,7 +646,7 @@ class GameEngine(
     private fun processQueuedManualMoves(): Boolean {
         val canConsumeManualInput = playerPolicyType == PlayerPolicyType.MANUAL ||
             elapsedSeconds < manualOverrideUntilSeconds
-        if (!canConsumeManualInput || manualQueue.isEmpty() || isPlayerFrozenByNpc()) {
+        if (!canAcceptManualInput() || !canConsumeManualInput || manualQueue.isEmpty()) {
             return false
         }
 
@@ -656,8 +656,15 @@ class GameEngine(
             attemptPlayerMove(direction)
             processedAny = true
             evaluateEndConditions()
+            if (status != GameStatus.RUNNING) break
         }
         return processedAny
+    }
+
+    private fun canAcceptManualInput(): Boolean {
+        return status == GameStatus.RUNNING &&
+            countdownRemainingSeconds <= 0f &&
+            !isPlayerFrozenByNpc()
     }
 
     private fun attemptPlayerMove(requestedDirection: Direction) {
