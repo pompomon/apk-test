@@ -485,6 +485,9 @@ class GameEngine(
      * direction instead of asking the policy for a move.
      */
     fun queueManualMove(direction: Direction) {
+        if (status != GameStatus.RUNNING || countdownRemainingSeconds > 0f || isPlayerFrozenByNpc()) {
+            return
+        }
         if (manualQueue.size >= MAX_MANUAL_QUEUE) {
             manualQueue.removeFirst()
         }
@@ -565,6 +568,10 @@ class GameEngine(
 
         processPowerUpLifecycles(effectiveDelta)
 
+        if (processQueuedManualMoves()) {
+            playerAccumulator = 0f
+        }
+
         val playerInterval = 1f / effectivePlayerMovesPerSecond()
         while (
             !isPlayerFrozenByNpc() &&
@@ -633,6 +640,27 @@ class GameEngine(
                 ) ?: return
             }
 
+        attemptPlayerMove(requestedDirection)
+    }
+
+    private fun processQueuedManualMoves(): Boolean {
+        val canConsumeManualInput = playerPolicyType == PlayerPolicyType.MANUAL ||
+            elapsedSeconds < manualOverrideUntilSeconds
+        if (!canConsumeManualInput || manualQueue.isEmpty() || isPlayerFrozenByNpc()) {
+            return false
+        }
+
+        var processedAny = false
+        while (manualQueue.isNotEmpty() && status == GameStatus.RUNNING && !isPlayerFrozenByNpc()) {
+            val direction = manualQueue.removeFirst()
+            attemptPlayerMove(direction)
+            evaluateEndConditions()
+            processedAny = true
+        }
+        return processedAny
+    }
+
+    private fun attemptPlayerMove(requestedDirection: Direction) {
         // GHOST_MODE lets the player walk through walls; NPCs intentionally do
         // not gain this ability (NpcPolicyContext is unchanged) so the power-up
         // gives the player a distinct movement advantage rather than full
@@ -1008,7 +1036,7 @@ class GameEngine(
 
     companion object {
         private const val MAX_EXTRA_PATROL_WAYPOINTS = 2
-        private const val MAX_MANUAL_QUEUE = 8
+        private const val MAX_MANUAL_QUEUE = 64
         private const val SPEED_UP_MULTIPLIER = 2f
         /** Default duration of the manual-input override (see [queueManualMove]). */
         const val MANUAL_OVERRIDE_DURATION_SECONDS = 3f

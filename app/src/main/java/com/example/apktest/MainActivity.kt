@@ -69,6 +69,15 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             hudHandler.postDelayed(this, HUD_REFRESH_INTERVAL_MS)
         }
     }
+    private val inputRepeatHandler = Handler(Looper.getMainLooper())
+    private var repeatingDirection: Direction? = null
+    private val inputRepeatRunnable = object : Runnable {
+        override fun run() {
+            val direction = repeatingDirection ?: return
+            move(direction)
+            inputRepeatHandler.postDelayed(this, DPAD_REPEAT_INTERVAL_MS)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -160,6 +169,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     override fun onPause() {
         hudHandler.removeCallbacks(hudRefreshRunnable)
+        stopRepeatingManualMove()
         menuPopover?.dismiss()
         // Autosave so the user can resume after a process death, switching
         // away, or just to be safe before any incidental finish(). Skip
@@ -230,6 +240,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     }
 
     override fun onDestroy() {
+        stopRepeatingManualMove()
         autosaveExecutor.shutdown()
         super.onDestroy()
     }
@@ -237,10 +248,60 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private fun setupControls() {
         menuButton.setOnClickListener { showMenuPopover() }
 
-        findViewById<Button>(R.id.buttonUp).setOnClickListener { move(Direction.NORTH) }
-        findViewById<Button>(R.id.buttonDown).setOnClickListener { move(Direction.SOUTH) }
-        findViewById<Button>(R.id.buttonLeft).setOnClickListener { move(Direction.WEST) }
-        findViewById<Button>(R.id.buttonRight).setOnClickListener { move(Direction.EAST) }
+        bindMoveButton(R.id.buttonUp, Direction.NORTH)
+        bindMoveButton(R.id.buttonDown, Direction.SOUTH)
+        bindMoveButton(R.id.buttonLeft, Direction.WEST)
+        bindMoveButton(R.id.buttonRight, Direction.EAST)
+    }
+
+    private fun bindMoveButton(buttonId: Int, direction: Direction) {
+        val button = findViewById<Button>(buttonId)
+        var suppressTouchClick = false
+        button.setOnClickListener {
+            if (!suppressTouchClick) {
+                move(direction)
+            }
+        }
+        button.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    if (!view.isPressed) {
+                        view.isPressed = true
+                        startRepeatingManualMove(direction)
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    val wasPressed = view.isPressed
+                    stopRepeatingManualMove()
+                    view.isPressed = false
+                    if (wasPressed) {
+                        suppressTouchClick = true
+                        view.performClick()
+                        suppressTouchClick = false
+                    }
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    stopRepeatingManualMove()
+                    view.isPressed = false
+                    true
+                }
+                else -> true
+            }
+        }
+    }
+
+    private fun startRepeatingManualMove(direction: Direction) {
+        inputRepeatHandler.removeCallbacks(inputRepeatRunnable)
+        repeatingDirection = direction
+        move(direction)
+        inputRepeatHandler.postDelayed(inputRepeatRunnable, DPAD_INITIAL_REPEAT_DELAY_MS)
+    }
+
+    private fun stopRepeatingManualMove() {
+        repeatingDirection = null
+        inputRepeatHandler.removeCallbacks(inputRepeatRunnable)
     }
 
     private fun showMenuPopover() {
@@ -499,6 +560,8 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     companion object {
         private const val HUD_REFRESH_INTERVAL_MS = 250L
+        private const val DPAD_INITIAL_REPEAT_DELAY_MS = 180L
+        private const val DPAD_REPEAT_INTERVAL_MS = 90L
         // 4x touch slop requires a deliberate drag, reducing accidental move input from taps/jitter.
         private const val SWIPE_DISTANCE_TOUCH_SLOP_MULTIPLIER = 4
         // Upper bound on how long Pause & Exit will wait for the snapshot

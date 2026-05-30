@@ -58,6 +58,102 @@ class GameEngineTest {
     }
 
     @Test
+    fun manualMove_appliesImmediatelyWithTinyDelta() {
+        val engine = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed)
+        engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        val start = engine.player.position
+        val direction = Direction.entries.first { engine.maze.canMove(start, it) }
+
+        engine.queueManualMove(direction)
+        engine.update(0.001f)
+
+        assertEquals(start.moved(direction), engine.player.position)
+        assertEquals(1, engine.steps)
+    }
+
+    @Test
+    fun rapidManualMoves_areAppliedImmediatelyInFifoOrder() {
+        val engine = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed)
+        engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        val path = engine.navigator.bfsPath(engine.player.position, engine.maze.exit)
+        assertTrue("expected a path with at least three moves", path.size >= 4)
+        val directions = (0 until 3).map { index ->
+            Direction.fromDelta(path[index + 1].x - path[index].x, path[index + 1].y - path[index].y)
+                ?: error("expected adjacent path cells")
+        }
+
+        directions.forEach { engine.queueManualMove(it) }
+        engine.update(0.001f)
+
+        assertEquals(path[3], engine.player.position)
+        assertEquals(3, engine.steps)
+    }
+
+    @Test
+    fun immediateBlockedManualMove_doesNotMoveOrIncrementSteps() {
+        val engine = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed)
+        engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        val start = findCellWithAnyWall(engine.maze)
+        val blockedDirection = findBlockedDirection(engine.maze, start)
+        engine.player.position = start
+
+        engine.queueManualMove(blockedDirection)
+        engine.update(0.001f)
+
+        assertEquals(start, engine.player.position)
+        assertEquals(0, engine.steps)
+    }
+
+    @Test
+    fun immediateManualMove_collectsPowerUp() {
+        val engine = GameEngine(
+            testPreset(initialPowerUpTypes = listOf(PowerUpType.SPEED_UP)),
+            seed
+        )
+        engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        val pickup = engine.spawnedPowerUps.first { it.type == PowerUpType.SPEED_UP }
+        var configured = false
+        var pickupDirection: Direction? = null
+        for (direction in Direction.entries) {
+            val start = pickup.position.moved(direction.opposite())
+            if (!engine.maze.inBounds(start)) continue
+            if (!engine.maze.canMove(start, direction)) continue
+            engine.player.position = start
+            pickupDirection = direction
+            configured = true
+            break
+        }
+        assertTrue("expected an adjacent walkable setup for SPEED_UP pickup", configured)
+
+        engine.queueManualMove(requireNotNull(pickupDirection))
+        engine.update(0.001f)
+
+        assertEquals(pickup.position, engine.player.position)
+        assertFalse(engine.spawnedPowerUps.any { it.position == pickup.position })
+        assertTrue(engine.activePowerUps.any { it.type == PowerUpType.SPEED_UP })
+    }
+
+    @Test
+    fun immediateManualMove_evaluatesWinCondition() {
+        val engine = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed)
+        engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        val path = engine.navigator.bfsPath(engine.maze.start, engine.maze.exit)
+        assertTrue("expected a path to the exit", path.size >= 2)
+        val beforeExit = path[path.lastIndex - 1]
+        val direction = Direction.fromDelta(
+            engine.maze.exit.x - beforeExit.x,
+            engine.maze.exit.y - beforeExit.y
+        ) ?: error("expected adjacent exit path cells")
+        engine.player.position = beforeExit
+
+        engine.queueManualMove(direction)
+        engine.update(0.001f)
+
+        assertEquals(engine.maze.exit, engine.player.position)
+        assertEquals(GameStatus.WIN, engine.status)
+    }
+
+    @Test
     fun restart_withSameSeed_isDeterministic() {
         val a = GameEngine(testPreset(), seed)
         val b = GameEngine(testPreset(), seed)

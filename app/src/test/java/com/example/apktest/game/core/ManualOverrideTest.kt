@@ -39,9 +39,9 @@ class ManualOverrideTest {
             hud.manualOverrideRemainingSeconds!! > minRemaining
         )
 
-        // Step the engine just long enough to consume one player tick.
-        val tick = 1f / 6f + 0.001f
-        engine.update(tick)
+        // Manual input should apply immediately, without waiting for the
+        // automated policy's normal player movement interval.
+        engine.update(0.001f)
         assertEquals(start.moved(walkable), engine.player.position)
     }
 
