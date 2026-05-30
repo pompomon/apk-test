@@ -256,9 +256,6 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     private fun bindMoveButton(buttonId: Int, direction: Direction) {
         val button = findViewById<Button>(buttonId)
-        button.setOnClickListener {
-            move(direction)
-        }
         button.setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
@@ -275,7 +272,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
                     stopRepeatingManualMove()
                     true
                 }
-                else -> true
+                else -> false
             }
         }
     }

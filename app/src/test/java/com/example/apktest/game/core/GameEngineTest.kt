@@ -76,7 +76,7 @@ class GameEngineTest {
         val engine = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed)
         engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
         val path = engine.navigator.bfsPath(engine.player.position, engine.maze.exit)
-        assertTrue("expected a path with at least three moves", path.size >= 4)
+        assertTrue("expected a path with at least four cells (three moves)", path.size >= 4)
         val directions = (0 until 3).map { index ->
             Direction.fromDelta(path[index + 1].x - path[index].x, path[index + 1].y - path[index].y)
                 ?: error("expected adjacent path cells")
