@@ -21,9 +21,11 @@ data class DifficultyPreset(
     val powerUpRespawnIntervalSeconds: Float? = null,
     val initialPowerUpTypes: List<PowerUpType> = PowerUpType.entries,
     /**
-     * Minimum Chebyshev-cell buffer around the direct start-to-exit path used
-     * for initial NPC placement. `0` keeps NPCs off the direct path itself but
-     * allows them next to it; larger values keep early spawns farther away.
+     * Preferred minimum Chebyshev-cell buffer around the direct start-to-exit
+     * path for initial NPC placement. Candidates outside this buffer are ranked
+     * first, with fallback to inside-buffer cells when needed to satisfy NPC
+     * count. `0` prefers keeping NPCs off the direct path itself while allowing
+     * adjacent placements.
      */
     val npcDirectPathSpawnBuffer: Int = 1,
     /**
