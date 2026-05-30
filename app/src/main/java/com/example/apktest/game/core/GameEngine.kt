@@ -656,7 +656,6 @@ class GameEngine(
             attemptPlayerMove(direction)
             processedAny = true
             evaluateEndConditions()
-            if (status != GameStatus.RUNNING) break
         }
         return processedAny
     }
