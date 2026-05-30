@@ -542,6 +542,8 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     companion object {
         private const val HUD_REFRESH_INTERVAL_MS = 250L
+        // Shorter than Android key-repeat defaults so held D-pad input feels responsive in-game
+        // while still leaving a small delay after the initial press to distinguish taps.
         private const val DPAD_INITIAL_REPEAT_DELAY_MS = 180L
         private const val DPAD_REPEAT_INTERVAL_MS = 90L
         // 4x touch slop requires a deliberate drag, reducing accidental move input from taps/jitter.
