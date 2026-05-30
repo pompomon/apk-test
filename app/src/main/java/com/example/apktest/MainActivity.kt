@@ -266,6 +266,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
                 }
                 MotionEvent.ACTION_UP -> {
                     stopRepeatingManualMove()
+                    button.performClick()
                     true
                 }
                 MotionEvent.ACTION_CANCEL -> {
