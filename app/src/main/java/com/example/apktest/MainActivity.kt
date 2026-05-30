@@ -256,18 +256,33 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     private fun bindMoveButton(buttonId: Int, direction: Direction) {
         val button = findViewById<Button>(buttonId)
+        var suppressNextClickFromTouch = false
+        button.setOnClickListener {
+            if (suppressNextClickFromTouch) {
+                suppressNextClickFromTouch = false
+            } else {
+                move(direction)
+            }
+        }
         button.setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    suppressNextClickFromTouch = true
                     if (repeatingDirection != direction) {
                         stopRepeatingManualMove()
                         startRepeatingManualMove(direction)
                     }
-                    true
+                    false
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                MotionEvent.ACTION_UP -> {
                     stopRepeatingManualMove()
-                    true
+                    inputRepeatHandler.post { suppressNextClickFromTouch = false }
+                    false
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    stopRepeatingManualMove()
+                    suppressNextClickFromTouch = false
+                    false
                 }
                 else -> false
             }
