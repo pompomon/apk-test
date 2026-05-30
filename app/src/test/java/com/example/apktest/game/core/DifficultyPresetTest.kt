@@ -54,11 +54,32 @@ class DifficultyPresetTest {
         )
     }
 
+    @Test(expected = IllegalArgumentException::class)
+    fun difficultyPreset_rejectsNegativeNpcDirectPathSpawnBuffer() {
+        DifficultyPreset(
+            name = "BadNpcPathBuffer",
+            mazeWidth = 10,
+            mazeHeight = 10,
+            npcCount = 1,
+            playerMovesPerSecond = 4f,
+            npcMovesPerSecond = 1f,
+            npcVisionRange = 3,
+            npcDirectPathSpawnBuffer = -1
+        )
+    }
+
     @Test
     fun defaultPresets_useAutomaticPickupRadiusOfOne() {
         assertEquals(1, DifficultyPresets.EASY.automaticPickupRadius)
         assertEquals(1, DifficultyPresets.MEDIUM.automaticPickupRadius)
         assertEquals(1, DifficultyPresets.HARD.automaticPickupRadius)
+    }
+
+    @Test
+    fun defaultPresets_useNpcDirectPathSpawnBuffersByDifficulty() {
+        assertEquals(2, DifficultyPresets.EASY.npcDirectPathSpawnBuffer)
+        assertEquals(1, DifficultyPresets.MEDIUM.npcDirectPathSpawnBuffer)
+        assertEquals(0, DifficultyPresets.HARD.npcDirectPathSpawnBuffer)
     }
 
     @Test

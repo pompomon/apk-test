@@ -21,6 +21,14 @@ data class DifficultyPreset(
     val powerUpRespawnIntervalSeconds: Float? = null,
     val initialPowerUpTypes: List<PowerUpType> = PowerUpType.entries,
     /**
+     * Preferred minimum Chebyshev-cell buffer around the direct start-to-exit
+     * path for initial NPC placement. Candidates outside this buffer are ranked
+     * first, with fallback to inside-buffer cells when needed to satisfy NPC
+     * count. `0` prefers keeping NPCs off the direct path itself while allowing
+     * adjacent placements.
+     */
+    val npcDirectPathSpawnBuffer: Int = 1,
+    /**
      * Chebyshev (king-move) cell radius around the player within which
      * automated (non-`MANUAL`) player policies will divert one step to pick
      * up a nearby power-up, provided a walkable path of length ≤ this radius
@@ -42,6 +50,9 @@ data class DifficultyPreset(
         require(powerUpExpirationStaggerSeconds >= 0f) {
             "powerUpExpirationStaggerSeconds ($powerUpExpirationStaggerSeconds) must be >= 0 for $name."
         }
+        require(npcDirectPathSpawnBuffer >= 0) {
+            "npcDirectPathSpawnBuffer ($npcDirectPathSpawnBuffer) must be >= 0 for $name."
+        }
     }
 }
 
@@ -61,7 +72,8 @@ object DifficultyPresets {
         npcVisionRange = 4,
         balanceRule = NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER,
         powerUpPickupLifetimeSeconds = 0f,
-        powerUpRespawnIntervalSeconds = 12f
+        powerUpRespawnIntervalSeconds = 12f,
+        npcDirectPathSpawnBuffer = 2
     )
 
     val MEDIUM = DifficultyPreset(
@@ -74,7 +86,8 @@ object DifficultyPresets {
         npcVisionRange = 5,
         balanceRule = NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER,
         powerUpPickupLifetimeSeconds = 45f,
-        powerUpRespawnIntervalSeconds = 20f
+        powerUpRespawnIntervalSeconds = 20f,
+        npcDirectPathSpawnBuffer = 1
     )
 
     val HARD = DifficultyPreset(
@@ -87,7 +100,8 @@ object DifficultyPresets {
         npcVisionRange = 6,
         balanceRule = NpcSpeedBalanceRule.NONE,
         powerUpPickupLifetimeSeconds = 40f,
-        powerUpRespawnIntervalSeconds = 25f
+        powerUpRespawnIntervalSeconds = 25f,
+        npcDirectPathSpawnBuffer = 0
     )
 
     val all = listOf(EASY, MEDIUM, HARD)

@@ -750,15 +750,7 @@ class GameEngine(
     }
 
     private fun spawnNpcs() {
-        val reserved = setOf(maze.start, maze.exit)
-        val candidates = ArrayList<GridPos>(maze.width * maze.height - reserved.size)
-        for (y in 0 until maze.height) {
-            for (x in 0 until maze.width) {
-                val pos = GridPos(x, y)
-                if (pos !in reserved) candidates += pos
-            }
-        }
-        candidates.shuffle(random)
+        val candidates = npcSpawnCandidates()
         val requestedCount = npcCountOverride ?: difficulty.npcCount
         val spawnCount = requestedCount.coerceAtMost(candidates.size).coerceAtLeast(0)
         val policies = npcPolicies
@@ -775,6 +767,43 @@ class GameEngine(
                 policyType = perNpcPolicy
             )
         }
+    }
+
+    private fun npcSpawnCandidates(): List<GridPos> {
+        val reserved = setOf(maze.start, maze.exit)
+        val shuffled = ArrayList<GridPos>(maze.width * maze.height - reserved.size)
+        for (y in 0 until maze.height) {
+            for (x in 0 until maze.width) {
+                val pos = GridPos(x, y)
+                if (pos !in reserved) shuffled += pos
+            }
+        }
+        shuffled.shuffle(random)
+
+        val directPath = navigator.bfsPath(maze.start, maze.exit)
+        // Generated mazes are connected; keep a fallback for restored/test
+        // mazes that may be malformed so spawning still produces NPCs.
+        if (directPath.isEmpty()) return shuffled
+
+        val bufferedPathCells = directPathBufferCells(directPath, difficulty.npcDirectPathSpawnBuffer)
+        val preferred = shuffled.filter { pos -> pos !in bufferedPathCells }
+        if (preferred.size == shuffled.size) return preferred
+
+        val preferredSet = preferred.toSet()
+        return preferred + shuffled.filter { it !in preferredSet }
+    }
+
+    private fun directPathBufferCells(directPath: List<GridPos>, buffer: Int): Set<GridPos> {
+        val cells = mutableSetOf<GridPos>()
+        directPath.forEach { pathCell ->
+            for (dy in -buffer..buffer) {
+                for (dx in -buffer..buffer) {
+                    val pos = GridPos(pathCell.x + dx, pathCell.y + dy)
+                    if (maze.inBounds(pos)) cells += pos
+                }
+            }
+        }
+        return cells
     }
 
     private fun patrolRouteFrom(origin: GridPos): List<GridPos> {
