@@ -40,9 +40,10 @@ class DPadRepeatController(
                 }
                 MotionEvent.ACTION_UP -> {
                     stop()
-                    handler.post {
-                        handler.post { suppressNextClickFromTouch = false }
-                    }
+                    handler.postDelayed(
+                        { suppressNextClickFromTouch = false },
+                        DPAD_CLICK_SUPPRESSION_RESET_DELAY_MS
+                    )
                     false
                 }
                 MotionEvent.ACTION_CANCEL -> {
@@ -72,5 +73,6 @@ class DPadRepeatController(
         // while still leaving a small delay after the initial press to distinguish taps.
         private const val DPAD_INITIAL_REPEAT_DELAY_MS = 180L
         private const val DPAD_REPEAT_INTERVAL_MS = 90L
+        private const val DPAD_CLICK_SUPPRESSION_RESET_DELAY_MS = 50L
     }
 }

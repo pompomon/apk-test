@@ -202,6 +202,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     override fun onPause() {
         tickHandler.removeCallbacks(tickRunnable)
+        // Stop held D-pad repeats while the activity is backgrounded.
         dPadRepeatController.stop()
         // Adventure runs that are already terminal (WON/LOST) clear the
         // store so the next launch doesn't try to "resume" a finished run.
