@@ -73,6 +73,7 @@ class DPadRepeatController(
         // while still leaving a small delay after the initial press to distinguish taps.
         private const val DPAD_INITIAL_REPEAT_DELAY_MS = 180L
         private const val DPAD_REPEAT_INTERVAL_MS = 90L
+        // Long enough for Button's synthesized click runnable to consume the suppression flag.
         private const val DPAD_CLICK_SUPPRESSION_RESET_DELAY_MS = 50L
     }
 }
