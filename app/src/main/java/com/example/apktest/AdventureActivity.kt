@@ -53,7 +53,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     private lateinit var menuButton: ImageButton
     private lateinit var statusBar: TextView
-    private val dPadRepeatController = DPadRepeatController { direction -> move(direction) }
+    private val dPadRepeatController = DPadRepeatController { direction: Direction -> move(direction) }
 
     // Tracks the previous tick's engine status so we can detect WIN/LOSE
     // transitions exactly once and run the corresponding overlay flow.
@@ -202,6 +202,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     override fun onPause() {
         tickHandler.removeCallbacks(tickRunnable)
+        dPadRepeatController.stop()
         // Adventure runs that are already terminal (WON/LOST) clear the
         // store so the next launch doesn't try to "resume" a finished run.
         if (controller.state.status != AdventureStatus.IN_PROGRESS) {

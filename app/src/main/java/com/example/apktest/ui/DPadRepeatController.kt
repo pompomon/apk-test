@@ -40,7 +40,9 @@ class DPadRepeatController(
                 }
                 MotionEvent.ACTION_UP -> {
                     stop()
-                    handler.post { suppressNextClickFromTouch = false }
+                    handler.post {
+                        handler.post { suppressNextClickFromTouch = false }
+                    }
                     false
                 }
                 MotionEvent.ACTION_CANCEL -> {

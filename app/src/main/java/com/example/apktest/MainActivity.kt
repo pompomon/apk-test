@@ -33,7 +33,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private lateinit var menuButton: ImageButton
     private lateinit var stateStore: GameStateStore
     private val autosaveExecutor: ExecutorService = Executors.newSingleThreadExecutor()
-    private val dPadRepeatController = DPadRepeatController { direction -> move(direction) }
+    private val dPadRepeatController = DPadRepeatController { direction: Direction -> move(direction) }
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal var resolvedSwipeCount: Int = 0
