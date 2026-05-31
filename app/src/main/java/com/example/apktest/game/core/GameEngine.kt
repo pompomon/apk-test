@@ -569,11 +569,9 @@ class GameEngine(
 
         processPowerUpLifecycles(effectiveDelta)
 
-        if (processQueuedManualMoves()) {
-            playerAccumulator = 0f
-        }
-
         val playerInterval = 1f / effectivePlayerMovesPerSecond()
+        processQueuedManualMoves(playerInterval)
+
         while (
             !isPlayerFrozenByNpc() &&
             playerAccumulator >= playerInterval &&
@@ -644,17 +642,18 @@ class GameEngine(
         attemptPlayerMove(requestedDirection)
     }
 
-    private fun processQueuedManualMoves(): Boolean {
+    private fun processQueuedManualMoves(playerInterval: Float) {
         val canConsumeManualInput = playerPolicyType == PlayerPolicyType.MANUAL ||
             elapsedSeconds < manualOverrideUntilSeconds
-        if (!canAcceptManualInput() || !canConsumeManualInput || manualQueue.isEmpty()) {
-            return false
+        if (!canAcceptManualInput() || !canConsumeManualInput || manualQueue.isEmpty() || playerAccumulator < 0f) {
+            return
         }
 
         val direction = manualQueue.removeFirst()
-        attemptPlayerMove(direction)
+        if (attemptPlayerMove(direction)) {
+            playerAccumulator -= playerInterval
+        }
         evaluateEndConditions()
-        return true
     }
 
     private fun canAcceptManualInput(): Boolean {
@@ -663,7 +662,7 @@ class GameEngine(
             !isPlayerFrozenByNpc()
     }
 
-    private fun attemptPlayerMove(requestedDirection: Direction) {
+    private fun attemptPlayerMove(requestedDirection: Direction): Boolean {
         // GHOST_MODE lets the player walk through walls; NPCs intentionally do
         // not gain this ability (NpcPolicyContext is unchanged) so the power-up
         // gives the player a distinct movement advantage rather than full
@@ -674,7 +673,7 @@ class GameEngine(
         } else {
             maze.canMove(player.position, requestedDirection)
         }
-        if (!canTraverse) return
+        if (!canTraverse) return false
 
         player.position = nextPosition
         player.facing = requestedDirection
@@ -682,6 +681,7 @@ class GameEngine(
         player.lastMoveAtSeconds = elapsedSeconds
         steps += 1
         collectPowerUpAtPlayer()
+        return true
     }
 
     private fun updateNpcs() {

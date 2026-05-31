@@ -53,7 +53,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     private lateinit var menuButton: ImageButton
     private lateinit var statusBar: TextView
-    private val dPadRepeatController = DPadRepeatController { direction: Direction -> move(direction) }
+    private val dPadRepeatController = DPadRepeatController(move = { direction: Direction -> move(direction) })
 
     // Tracks the previous tick's engine status so we can detect WIN/LOSE
     // transitions exactly once and run the corresponding overlay flow.

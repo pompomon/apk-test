@@ -72,11 +72,12 @@ class GameEngineTest {
     }
 
     @Test
-    fun rapidManualMoves_applyOnePerUpdateInFifoOrder() {
+    fun rapidManualMoves_areRateLimitedInFifoOrder() {
         val engine = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed)
         engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
         val path = engine.navigator.bfsPath(engine.player.position, engine.maze.exit)
         assertTrue("expected a path with at least four cells (three moves)", path.size >= 4)
+        val playerInterval = 1f / engine.difficulty.playerMovesPerSecond
         val directions = (0 until 3).map { index ->
             Direction.fromDelta(path[index + 1].x - path[index].x, path[index + 1].y - path[index].y)
                 ?: error("expected adjacent path cells")
@@ -88,10 +89,14 @@ class GameEngineTest {
         assertEquals(1, engine.steps)
 
         engine.update(0.001f)
+        assertEquals(path[1], engine.player.position)
+        assertEquals(1, engine.steps)
+
+        engine.update(playerInterval)
         assertEquals(path[2], engine.player.position)
         assertEquals(2, engine.steps)
 
-        engine.update(0.001f)
+        engine.update(playerInterval)
         assertEquals(path[3], engine.player.position)
         assertEquals(3, engine.steps)
     }
