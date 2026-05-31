@@ -477,12 +477,13 @@ class GameEngine(
     }
 
     /**
-     * Accept a manual movement request. Always queued regardless of the
-     * active [playerPolicyType] so the player can nudge the character even
-     * under an automated policy. When the policy is not [PlayerPolicyType.MANUAL],
-     * a successful queue arms a [MANUAL_OVERRIDE_DURATION_SECONDS]-long
-     * override window during which [updatePlayer] consumes the queued
-     * direction instead of asking the policy for a move.
+     * Accept a manual movement request while gameplay input is active. Requests
+     * are queued regardless of the active [playerPolicyType] so the player can
+     * nudge the character even under an automated policy. When the policy is not
+     * [PlayerPolicyType.MANUAL], a successful queue arms a
+     * [MANUAL_OVERRIDE_DURATION_SECONDS]-long override window during which
+     * [updatePlayer] consumes the queued direction instead of asking the policy
+     * for a move.
      */
     fun queueManualMove(direction: Direction) {
         if (!canAcceptManualInput()) {
@@ -650,15 +651,10 @@ class GameEngine(
             return false
         }
 
-        var processedAny = false
-        while (manualQueue.isNotEmpty() && status == GameStatus.RUNNING) {
-            val direction = manualQueue.removeFirst()
-            attemptPlayerMove(direction)
-            processedAny = true
-            evaluateEndConditions()
-            if (status != GameStatus.RUNNING) break
-        }
-        return processedAny
+        val direction = manualQueue.removeFirst()
+        attemptPlayerMove(direction)
+        evaluateEndConditions()
+        return true
     }
 
     private fun canAcceptManualInput(): Boolean {

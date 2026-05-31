@@ -8,7 +8,6 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
-import android.widget.Button
 import android.widget.ImageButton
 import android.widget.TextView
 import androidx.annotation.VisibleForTesting
@@ -28,6 +27,7 @@ import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.game.core.PowerUpType
+import com.example.apktest.ui.DPadRepeatController
 import com.example.apktest.ui.LegendDialog
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -53,6 +53,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     private lateinit var menuButton: ImageButton
     private lateinit var statusBar: TextView
+    private val dPadRepeatController = DPadRepeatController { direction -> move(direction) }
 
     // Tracks the previous tick's engine status so we can detect WIN/LOSE
     // transitions exactly once and run the corresponding overlay flow.
@@ -263,6 +264,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     override fun onDestroy() {
+        dPadRepeatController.stop()
         autosaveExecutor.shutdown()
         super.onDestroy()
     }
@@ -321,10 +323,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     private fun setupControls() {
         menuButton.setOnClickListener { showMenu() }
-        findViewById<Button>(R.id.buttonUp).setOnClickListener { move(Direction.NORTH) }
-        findViewById<Button>(R.id.buttonDown).setOnClickListener { move(Direction.SOUTH) }
-        findViewById<Button>(R.id.buttonLeft).setOnClickListener { move(Direction.WEST) }
-        findViewById<Button>(R.id.buttonRight).setOnClickListener { move(Direction.EAST) }
+        dPadRepeatController.bind(findViewById(R.id.buttonUp), Direction.NORTH)
+        dPadRepeatController.bind(findViewById(R.id.buttonDown), Direction.SOUTH)
+        dPadRepeatController.bind(findViewById(R.id.buttonLeft), Direction.WEST)
+        dPadRepeatController.bind(findViewById(R.id.buttonRight), Direction.EAST)
     }
 
     private fun showMenu() {

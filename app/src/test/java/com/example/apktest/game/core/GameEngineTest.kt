@@ -72,7 +72,7 @@ class GameEngineTest {
     }
 
     @Test
-    fun rapidManualMoves_areAppliedImmediatelyInFifoOrder() {
+    fun rapidManualMoves_applyOnePerUpdateInFifoOrder() {
         val engine = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed)
         engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
         val path = engine.navigator.bfsPath(engine.player.position, engine.maze.exit)
@@ -84,7 +84,14 @@ class GameEngineTest {
 
         directions.forEach { engine.queueManualMove(it) }
         engine.update(0.001f)
+        assertEquals(path[1], engine.player.position)
+        assertEquals(1, engine.steps)
 
+        engine.update(0.001f)
+        assertEquals(path[2], engine.player.position)
+        assertEquals(2, engine.steps)
+
+        engine.update(0.001f)
         assertEquals(path[3], engine.player.position)
         assertEquals(3, engine.steps)
     }

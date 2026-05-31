@@ -8,7 +8,6 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
-import android.widget.Button
 import android.widget.ImageButton
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatActivity
@@ -22,6 +21,7 @@ import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
+import com.example.apktest.ui.DPadRepeatController
 import com.example.apktest.ui.GameMenuPopover
 import com.example.apktest.ui.LegendDialog
 import java.util.concurrent.ExecutorService
@@ -33,6 +33,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private lateinit var menuButton: ImageButton
     private lateinit var stateStore: GameStateStore
     private val autosaveExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val dPadRepeatController = DPadRepeatController { direction -> move(direction) }
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal var resolvedSwipeCount: Int = 0
@@ -69,16 +70,6 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             hudHandler.postDelayed(this, HUD_REFRESH_INTERVAL_MS)
         }
     }
-    private val inputRepeatHandler = Handler(Looper.getMainLooper())
-    private var repeatingDirection: Direction? = null
-    private val inputRepeatRunnable = object : Runnable {
-        override fun run() {
-            val direction = repeatingDirection ?: return
-            move(direction)
-            inputRepeatHandler.postDelayed(this, DPAD_REPEAT_INTERVAL_MS)
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -169,7 +160,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     override fun onPause() {
         hudHandler.removeCallbacks(hudRefreshRunnable)
-        stopRepeatingManualMove()
+        dPadRepeatController.stop()
         menuPopover?.dismiss()
         // Autosave so the user can resume after a process death, switching
         // away, or just to be safe before any incidental finish(). Skip
@@ -240,7 +231,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     }
 
     override fun onDestroy() {
-        stopRepeatingManualMove()
+        dPadRepeatController.stop()
         autosaveExecutor.shutdown()
         super.onDestroy()
     }
@@ -248,57 +239,10 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private fun setupControls() {
         menuButton.setOnClickListener { showMenuPopover() }
 
-        bindMoveButton(R.id.buttonUp, Direction.NORTH)
-        bindMoveButton(R.id.buttonDown, Direction.SOUTH)
-        bindMoveButton(R.id.buttonLeft, Direction.WEST)
-        bindMoveButton(R.id.buttonRight, Direction.EAST)
-    }
-
-    private fun bindMoveButton(buttonId: Int, direction: Direction) {
-        val button = findViewById<Button>(buttonId)
-        var suppressNextClickFromTouch = false
-        button.setOnClickListener {
-            if (suppressNextClickFromTouch) {
-                suppressNextClickFromTouch = false
-            } else {
-                move(direction)
-            }
-        }
-        button.setOnTouchListener { _, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    suppressNextClickFromTouch = true
-                    if (repeatingDirection != direction) {
-                        stopRepeatingManualMove()
-                        startRepeatingManualMove(direction)
-                    }
-                    false
-                }
-                MotionEvent.ACTION_UP -> {
-                    stopRepeatingManualMove()
-                    inputRepeatHandler.post { suppressNextClickFromTouch = false }
-                    false
-                }
-                MotionEvent.ACTION_CANCEL -> {
-                    stopRepeatingManualMove()
-                    suppressNextClickFromTouch = false
-                    false
-                }
-                else -> false
-            }
-        }
-    }
-
-    private fun startRepeatingManualMove(direction: Direction) {
-        inputRepeatHandler.removeCallbacks(inputRepeatRunnable)
-        repeatingDirection = direction
-        move(direction)
-        inputRepeatHandler.postDelayed(inputRepeatRunnable, DPAD_INITIAL_REPEAT_DELAY_MS)
-    }
-
-    private fun stopRepeatingManualMove() {
-        repeatingDirection = null
-        inputRepeatHandler.removeCallbacks(inputRepeatRunnable)
+        dPadRepeatController.bind(findViewById(R.id.buttonUp), Direction.NORTH)
+        dPadRepeatController.bind(findViewById(R.id.buttonDown), Direction.SOUTH)
+        dPadRepeatController.bind(findViewById(R.id.buttonLeft), Direction.WEST)
+        dPadRepeatController.bind(findViewById(R.id.buttonRight), Direction.EAST)
     }
 
     private fun showMenuPopover() {
@@ -557,10 +501,6 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     companion object {
         private const val HUD_REFRESH_INTERVAL_MS = 250L
-        // Shorter than Android key-repeat defaults so held D-pad input feels responsive in-game
-        // while still leaving a small delay after the initial press to distinguish taps.
-        private const val DPAD_INITIAL_REPEAT_DELAY_MS = 180L
-        private const val DPAD_REPEAT_INTERVAL_MS = 90L
         // 4x touch slop requires a deliberate drag, reducing accidental move input from taps/jitter.
         private const val SWIPE_DISTANCE_TOUCH_SLOP_MULTIPLIER = 4
         // Upper bound on how long Pause & Exit will wait for the snapshot
