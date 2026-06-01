@@ -477,14 +477,18 @@ class GameEngine(
     }
 
     /**
-     * Accept a manual movement request. Always queued regardless of the
-     * active [playerPolicyType] so the player can nudge the character even
-     * under an automated policy. When the policy is not [PlayerPolicyType.MANUAL],
-     * a successful queue arms a [MANUAL_OVERRIDE_DURATION_SECONDS]-long
-     * override window during which [updatePlayer] consumes the queued
-     * direction instead of asking the policy for a move.
+     * Accept a manual movement request while gameplay input is active. Requests
+     * are queued regardless of the active [playerPolicyType] so the player can
+     * nudge the character even under an automated policy. When the policy is not
+     * [PlayerPolicyType.MANUAL], a successful queue arms a
+     * [MANUAL_OVERRIDE_DURATION_SECONDS]-long override window during which
+     * [updatePlayer] consumes the queued direction instead of asking the policy
+     * for a move.
      */
     fun queueManualMove(direction: Direction) {
+        if (!canAcceptManualInput()) {
+            return
+        }
         if (manualQueue.size >= MAX_MANUAL_QUEUE) {
             manualQueue.removeFirst()
         }
@@ -566,6 +570,8 @@ class GameEngine(
         processPowerUpLifecycles(effectiveDelta)
 
         val playerInterval = 1f / effectivePlayerMovesPerSecond()
+        processQueuedManualMoves(playerInterval)
+
         while (
             !isPlayerFrozenByNpc() &&
             playerAccumulator >= playerInterval &&
@@ -633,6 +639,35 @@ class GameEngine(
                 ) ?: return
             }
 
+        attemptPlayerMove(requestedDirection)
+    }
+
+    private fun processQueuedManualMoves(playerInterval: Float) {
+        val canConsumeManualInput = playerPolicyType == PlayerPolicyType.MANUAL ||
+            elapsedSeconds < manualOverrideUntilSeconds
+        if (!canAcceptManualInput() || !canConsumeManualInput || manualQueue.isEmpty()) {
+            return
+        }
+        // Require positive accumulated player time so zero-delta updates cannot
+        // consume queued manual moves and bypass the player-move cooldown.
+        if (playerAccumulator <= 0f) {
+            return
+        }
+
+        val direction = manualQueue.removeFirst()
+        if (attemptPlayerMove(direction)) {
+            playerAccumulator -= playerInterval
+        }
+        evaluateEndConditions()
+    }
+
+    private fun canAcceptManualInput(): Boolean {
+        return status == GameStatus.RUNNING &&
+            countdownRemainingSeconds <= 0f &&
+            !isPlayerFrozenByNpc()
+    }
+
+    private fun attemptPlayerMove(requestedDirection: Direction): Boolean {
         // GHOST_MODE lets the player walk through walls; NPCs intentionally do
         // not gain this ability (NpcPolicyContext is unchanged) so the power-up
         // gives the player a distinct movement advantage rather than full
@@ -643,7 +678,7 @@ class GameEngine(
         } else {
             maze.canMove(player.position, requestedDirection)
         }
-        if (!canTraverse) return
+        if (!canTraverse) return false
 
         player.position = nextPosition
         player.facing = requestedDirection
@@ -651,6 +686,7 @@ class GameEngine(
         player.lastMoveAtSeconds = elapsedSeconds
         steps += 1
         collectPowerUpAtPlayer()
+        return true
     }
 
     private fun updateNpcs() {
@@ -1008,7 +1044,7 @@ class GameEngine(
 
     companion object {
         private const val MAX_EXTRA_PATROL_WAYPOINTS = 2
-        private const val MAX_MANUAL_QUEUE = 8
+        private const val MAX_MANUAL_QUEUE = 64
         private const val SPEED_UP_MULTIPLIER = 2f
         /** Default duration of the manual-input override (see [queueManualMove]). */
         const val MANUAL_OVERRIDE_DURATION_SECONDS = 3f

@@ -8,7 +8,6 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
-import android.widget.Button
 import android.widget.ImageButton
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatActivity
@@ -22,6 +21,7 @@ import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
+import com.example.apktest.ui.DPadRepeatController
 import com.example.apktest.ui.GameMenuPopover
 import com.example.apktest.ui.LegendDialog
 import java.util.concurrent.ExecutorService
@@ -33,6 +33,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private lateinit var menuButton: ImageButton
     private lateinit var stateStore: GameStateStore
     private val autosaveExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val dPadRepeatController = DPadRepeatController(move = { direction: Direction -> move(direction) })
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal var resolvedSwipeCount: Int = 0
@@ -69,7 +70,6 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             hudHandler.postDelayed(this, HUD_REFRESH_INTERVAL_MS)
         }
     }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -160,6 +160,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     override fun onPause() {
         hudHandler.removeCallbacks(hudRefreshRunnable)
+        dPadRepeatController.stop()
         menuPopover?.dismiss()
         // Autosave so the user can resume after a process death, switching
         // away, or just to be safe before any incidental finish(). Skip
@@ -230,6 +231,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     }
 
     override fun onDestroy() {
+        dPadRepeatController.stop()
         autosaveExecutor.shutdown()
         super.onDestroy()
     }
@@ -237,10 +239,10 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private fun setupControls() {
         menuButton.setOnClickListener { showMenuPopover() }
 
-        findViewById<Button>(R.id.buttonUp).setOnClickListener { move(Direction.NORTH) }
-        findViewById<Button>(R.id.buttonDown).setOnClickListener { move(Direction.SOUTH) }
-        findViewById<Button>(R.id.buttonLeft).setOnClickListener { move(Direction.WEST) }
-        findViewById<Button>(R.id.buttonRight).setOnClickListener { move(Direction.EAST) }
+        dPadRepeatController.bind(findViewById(R.id.buttonUp), Direction.NORTH)
+        dPadRepeatController.bind(findViewById(R.id.buttonDown), Direction.SOUTH)
+        dPadRepeatController.bind(findViewById(R.id.buttonLeft), Direction.WEST)
+        dPadRepeatController.bind(findViewById(R.id.buttonRight), Direction.EAST)
     }
 
     private fun showMenuPopover() {
