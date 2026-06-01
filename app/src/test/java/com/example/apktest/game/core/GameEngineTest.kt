@@ -88,6 +88,10 @@ class GameEngineTest {
         assertEquals(path[1], engine.player.position)
         assertEquals(1, engine.steps)
 
+        engine.update(0f)
+        assertEquals(path[1], engine.player.position)
+        assertEquals(1, engine.steps)
+
         engine.update(0.001f)
         assertEquals(path[1], engine.player.position)
         assertEquals(1, engine.steps)

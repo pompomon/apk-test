@@ -645,7 +645,7 @@ class GameEngine(
     private fun processQueuedManualMoves(playerInterval: Float) {
         val canConsumeManualInput = playerPolicyType == PlayerPolicyType.MANUAL ||
             elapsedSeconds < manualOverrideUntilSeconds
-        if (!canAcceptManualInput() || !canConsumeManualInput || manualQueue.isEmpty() || playerAccumulator < 0f) {
+        if (!canAcceptManualInput() || !canConsumeManualInput || manualQueue.isEmpty() || playerAccumulator <= 0f) {
             return
         }
 
