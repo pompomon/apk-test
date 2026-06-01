@@ -645,7 +645,12 @@ class GameEngine(
     private fun processQueuedManualMoves(playerInterval: Float) {
         val canConsumeManualInput = playerPolicyType == PlayerPolicyType.MANUAL ||
             elapsedSeconds < manualOverrideUntilSeconds
-        if (!canAcceptManualInput() || !canConsumeManualInput || manualQueue.isEmpty() || playerAccumulator <= 0f) {
+        if (!canAcceptManualInput() || !canConsumeManualInput || manualQueue.isEmpty()) {
+            return
+        }
+        // Require positive accumulated player time so zero-delta updates cannot
+        // consume queued manual moves and bypass the player-move cooldown.
+        if (playerAccumulator <= 0f) {
             return
         }
 
