@@ -422,7 +422,7 @@ class GameEngineTest {
             source.applyStartingPowerUp(it)
         }
         val parsed = requireNotNull(GameEngineSnapshot.fromJson(source.snapshot().toJson()))
-        val restored = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed + 1)
+        val restored = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed)
 
         restored.restore(parsed)
 
