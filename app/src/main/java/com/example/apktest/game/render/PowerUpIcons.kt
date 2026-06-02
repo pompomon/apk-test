@@ -71,6 +71,27 @@ object PowerUpIcons {
             "01110",
             "10001"
         )
+        PowerUpType.SHIELD -> arrayOf(
+            "01110",
+            "11111",
+            "11011",
+            "11111",
+            "01110"
+        )
+        PowerUpType.SLOW_TIME -> arrayOf(
+            "11111",
+            "10100",
+            "10111",
+            "10001",
+            "11111"
+        )
+        PowerUpType.MAGNET -> arrayOf(
+            "10001",
+            "10001",
+            "11111",
+            "11011",
+            "10001"
+        )
         PowerUpType.BLAST -> arrayOf(
             "10101",
             "11011",
@@ -93,6 +114,9 @@ object PowerUpIcons {
         PowerUpType.TELEPORT -> Color(0.25f, 0.86f, 0.96f, 1f)
         PowerUpType.SPEED_UP -> Color(1f, 0.91f, 0.3f, 1f)
         PowerUpType.FREEZE -> Color(0.63f, 0.9f, 1f, 1f)
+        PowerUpType.SHIELD -> Color(0.35f, 0.62f, 1f, 1f)
+        PowerUpType.SLOW_TIME -> Color(0.45f, 1f, 0.65f, 1f)
+        PowerUpType.MAGNET -> Color(1f, 0.25f, 0.55f, 1f)
         PowerUpType.BLAST -> Color(1f, 0.45f, 0.2f, 1f)
         PowerUpType.GHOST_MODE -> Color(0.82f, 0.88f, 1f, 1f)
     }
@@ -102,6 +126,9 @@ object PowerUpIcons {
         PowerUpType.TELEPORT -> 0xFF40DBF5.toInt()
         PowerUpType.SPEED_UP -> 0xFFFFE84D.toInt()
         PowerUpType.FREEZE -> 0xFFA0E6FF.toInt()
+        PowerUpType.SHIELD -> 0xFF599EFF.toInt()
+        PowerUpType.SLOW_TIME -> 0xFF73FFA6.toInt()
+        PowerUpType.MAGNET -> 0xFFFF408C.toInt()
         PowerUpType.BLAST -> 0xFFFF7333.toInt()
         PowerUpType.GHOST_MODE -> 0xFFD1E0FF.toInt()
     }

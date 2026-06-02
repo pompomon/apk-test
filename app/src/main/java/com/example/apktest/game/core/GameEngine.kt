@@ -2,6 +2,7 @@ package com.example.apktest.game.core
 
 import androidx.annotation.VisibleForTesting
 import com.example.apktest.game.ui.HudState
+import kotlin.math.abs
 import kotlin.random.Random
 
 class GameEngine(
@@ -253,7 +254,8 @@ class GameEngine(
      * it up off the maze the instant the maze started. Safe to call
      * after [restart] / [configureAdventureMaze] but before the first
      * [update] tick. Reuses the regular power-up activation pipeline so
-     * timed effects (INVISIBILITY, SPEED_UP, FREEZE, GHOST_MODE) start
+     * timed effects (INVISIBILITY, SPEED_UP, FREEZE, SHIELD, SLOW_TIME,
+     * MAGNET, GHOST_MODE) start
      * ticking from `t=0` and instant effects (TELEPORT, BLAST) apply
      * once. No-op when [type] is `null`.
      */
@@ -264,6 +266,12 @@ class GameEngine(
             PowerUpType.TELEPORT -> applyTeleport()
             PowerUpType.SPEED_UP -> activateTimedEffect(PowerUpType.SPEED_UP)
             PowerUpType.FREEZE -> activateTimedEffect(PowerUpType.FREEZE)
+            PowerUpType.SHIELD -> activateTimedEffect(PowerUpType.SHIELD)
+            PowerUpType.SLOW_TIME -> activateTimedEffect(PowerUpType.SLOW_TIME)
+            PowerUpType.MAGNET -> {
+                activateTimedEffect(PowerUpType.MAGNET)
+                collectMagnetPowerUps()
+            }
             PowerUpType.BLAST -> applyBlast()
             PowerUpType.GHOST_MODE -> activateTimedEffect(PowerUpType.GHOST_MODE)
         }
@@ -568,6 +576,7 @@ class GameEngine(
         }
 
         processPowerUpLifecycles(effectiveDelta)
+        collectMagnetPowerUps()
 
         val playerInterval = 1f / effectivePlayerMovesPerSecond()
         processQueuedManualMoves(playerInterval)
@@ -583,7 +592,7 @@ class GameEngine(
         }
 
         if (!isEffectActive(PowerUpType.FREEZE)) {
-            val npcInterval = 1f / difficulty.npcMovesPerSecond
+            val npcInterval = 1f / effectiveNpcMovesPerSecond()
             while (npcAccumulator >= npcInterval && status == GameStatus.RUNNING) {
                 npcAccumulator -= npcInterval
                 updateNpcs()
@@ -600,7 +609,7 @@ class GameEngine(
         playerPolicyLabel = playerPolicyType.label,
         npcPolicyLabel = npcPolicyType.label,
         playerSpeed = effectivePlayerMovesPerSecond(),
-        npcSpeed = difficulty.npcMovesPerSecond,
+        npcSpeed = effectiveNpcMovesPerSecond(),
         activePowerUps = activePowerUpSnapshots().map { snapshot ->
             val remaining = snapshot.remainingSeconds?.coerceAtLeast(0f)
             if (remaining == null) snapshot.type.label else "${snapshot.type.label} %.1fs".format(remaining)
@@ -686,6 +695,7 @@ class GameEngine(
         player.lastMoveAtSeconds = elapsedSeconds
         steps += 1
         collectPowerUpAtPlayer()
+        collectMagnetPowerUps()
         return true
     }
 
@@ -779,7 +789,9 @@ class GameEngine(
             return
         }
 
-        val collisionImmune = isEffectActive(PowerUpType.INVISIBILITY) || isEffectActive(PowerUpType.FREEZE)
+        val collisionImmune = isEffectActive(PowerUpType.INVISIBILITY) ||
+            isEffectActive(PowerUpType.FREEZE) ||
+            isEffectActive(PowerUpType.SHIELD)
         if (!collisionImmune && npcs.any { it.position == player.position }) {
             status = GameStatus.LOSE
         }
@@ -951,15 +963,45 @@ class GameEngine(
 
     private fun collectPowerUpAtPlayer() {
         val powerUp = powerUpsByCell.remove(player.position) ?: return
-        when (powerUp.type) {
+        activatePlayerPowerUp(powerUp.type)
+    }
+
+    private fun activatePlayerPowerUp(type: PowerUpType) {
+        when (type) {
             PowerUpType.INVISIBILITY -> activateTimedEffect(PowerUpType.INVISIBILITY)
             PowerUpType.TELEPORT -> applyTeleport()
             PowerUpType.SPEED_UP -> activateTimedEffect(PowerUpType.SPEED_UP)
             PowerUpType.FREEZE -> activateTimedEffect(PowerUpType.FREEZE)
+            PowerUpType.SHIELD -> activateTimedEffect(PowerUpType.SHIELD)
+            PowerUpType.SLOW_TIME -> activateTimedEffect(PowerUpType.SLOW_TIME)
+            PowerUpType.MAGNET -> activateTimedEffect(PowerUpType.MAGNET)
             PowerUpType.BLAST -> applyBlast()
             PowerUpType.GHOST_MODE -> activateTimedEffect(PowerUpType.GHOST_MODE)
         }
     }
+
+    private fun collectMagnetPowerUps() {
+        if (!isEffectActive(PowerUpType.MAGNET)) return
+        val playerPos = player.position
+        val nearby = powerUpsByCell.values
+            .filter { chebyshevDistance(playerPos, it.position) <= MAGNET_PICKUP_RADIUS }
+            .sortedWith(
+                compareBy<SpawnedPowerUp>(
+                    { chebyshevDistance(playerPos, it.position) },
+                    { it.type.ordinal },
+                    { it.position.y },
+                    { it.position.x }
+                )
+            )
+        nearby.forEach { powerUp ->
+            if (powerUpsByCell.remove(powerUp.position) != null) {
+                activatePlayerPowerUp(powerUp.type)
+            }
+        }
+    }
+
+    private fun chebyshevDistance(a: GridPos, b: GridPos): Int =
+        maxOf(abs(a.x - b.x), abs(a.y - b.y))
 
     private fun activateTimedEffect(type: PowerUpType) {
         val duration = type.metadata.defaultDurationSeconds
@@ -1042,10 +1084,17 @@ class GameEngine(
         return difficulty.playerMovesPerSecond * speedMultiplier
     }
 
+    private fun effectiveNpcMovesPerSecond(): Float {
+        val speedMultiplier = if (isEffectActive(PowerUpType.SLOW_TIME)) SLOW_TIME_NPC_MULTIPLIER else 1f
+        return difficulty.npcMovesPerSecond * speedMultiplier
+    }
+
     companion object {
         private const val MAX_EXTRA_PATROL_WAYPOINTS = 2
         private const val MAX_MANUAL_QUEUE = 64
         private const val SPEED_UP_MULTIPLIER = 2f
+        private const val SLOW_TIME_NPC_MULTIPLIER = 0.5f
+        private const val MAGNET_PICKUP_RADIUS = 2
         /** Default duration of the manual-input override (see [queueManualMove]). */
         const val MANUAL_OVERRIDE_DURATION_SECONDS = 3f
         /** Default duration of the pre-game countdown (see [startCountdown]). */
