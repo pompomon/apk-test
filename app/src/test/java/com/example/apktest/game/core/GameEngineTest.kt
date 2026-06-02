@@ -780,13 +780,13 @@ class GameEngineTest {
     private fun cellsNear(engine: GameEngine, origin: GridPos, maxDistance: Int): List<GridPos> {
         return allCells(engine)
             .filter { it != origin && it != engine.maze.exit && chebyshevDistance(origin, it) <= maxDistance }
-            .sortedWith(compareBy({ chebyshevDistance(origin, it) }, { it.y }, { it.x }))
+            .sortedWith(compareBy({ chebyshevDistance(origin, it) }, { it.x }, { it.y }))
     }
 
     private fun cellsFarFrom(engine: GameEngine, origin: GridPos, minDistance: Int): List<GridPos> {
         return allCells(engine)
             .filter { it != origin && it != engine.maze.exit && chebyshevDistance(origin, it) >= minDistance }
-            .sortedWith(compareBy({ chebyshevDistance(origin, it) }, { it.y }, { it.x }))
+            .sortedWith(compareBy({ chebyshevDistance(origin, it) }, { it.x }, { it.y }))
     }
 
     private fun allCells(engine: GameEngine): List<GridPos> {

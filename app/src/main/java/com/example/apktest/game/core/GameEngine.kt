@@ -261,19 +261,9 @@ class GameEngine(
      */
     fun applyStartingPowerUp(type: PowerUpType?) {
         if (type == null) return
-        when (type) {
-            PowerUpType.INVISIBILITY -> activateTimedEffect(PowerUpType.INVISIBILITY)
-            PowerUpType.TELEPORT -> applyTeleport()
-            PowerUpType.SPEED_UP -> activateTimedEffect(PowerUpType.SPEED_UP)
-            PowerUpType.FREEZE -> activateTimedEffect(PowerUpType.FREEZE)
-            PowerUpType.SHIELD -> activateTimedEffect(PowerUpType.SHIELD)
-            PowerUpType.SLOW_TIME -> activateTimedEffect(PowerUpType.SLOW_TIME)
-            PowerUpType.MAGNET -> {
-                activateTimedEffect(PowerUpType.MAGNET)
-                collectMagnetPowerUps()
-            }
-            PowerUpType.BLAST -> applyBlast()
-            PowerUpType.GHOST_MODE -> activateTimedEffect(PowerUpType.GHOST_MODE)
+        activatePlayerPowerUp(type)
+        if (type == PowerUpType.MAGNET) {
+            collectMagnetPowerUps()
         }
     }
 
@@ -989,8 +979,8 @@ class GameEngine(
                 compareBy<SpawnedPowerUp>(
                     { chebyshevDistance(playerPos, it.position) },
                     { it.type.ordinal },
-                    { it.position.y },
-                    { it.position.x }
+                    { it.position.x },
+                    { it.position.y }
                 )
             )
         nearby.forEach { powerUp ->
