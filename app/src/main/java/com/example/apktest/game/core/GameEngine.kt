@@ -986,6 +986,10 @@ class GameEngine(
         nearby.forEach { powerUp ->
             if (powerUpsByCell.remove(powerUp.position) != null) {
                 activatePlayerPowerUp(powerUp.type)
+                // Position-changing effects (e.g. TELEPORT) can relocate the
+                // player mid-iteration; stop so we don't keep collecting
+                // pickups that were only near the old position.
+                if (player.position != playerPos) return
             }
         }
     }

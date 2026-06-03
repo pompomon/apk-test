@@ -417,12 +417,14 @@ class GameEngineTest {
 
     @Test
     fun newTimedPowerUps_surviveSnapshotRoundTrip() {
-        val source = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed)
+        val preset = testPreset(initialPowerUpTypes = emptyList())
+            .copy(name = DifficultyPresets.MEDIUM.name)
+        val source = GameEngine(preset, seed)
         listOf(PowerUpType.SHIELD, PowerUpType.SLOW_TIME, PowerUpType.MAGNET).forEach {
             source.applyStartingPowerUp(it)
         }
         val parsed = requireNotNull(GameEngineSnapshot.fromJson(source.snapshot().toJson()))
-        val restored = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed)
+        val restored = GameEngine(preset, seed)
 
         restored.restore(parsed)
 
@@ -532,7 +534,7 @@ class GameEngineTest {
 
     @Test
     fun ghostMode_activatesTimedEffectForThreeSeconds() {
-        val engine = GameEngine(testPreset(), seed)
+        val engine = GameEngine(testPreset(initialPowerUpTypes = listOf(PowerUpType.GHOST_MODE)), seed)
         collectPowerUp(engine, PowerUpType.GHOST_MODE)
 
         val active = engine.activePowerUps.first { it.type == PowerUpType.GHOST_MODE }
@@ -546,7 +548,7 @@ class GameEngineTest {
 
     @Test
     fun ghostMode_letsPlayerWalkThroughWalls() {
-        val engine = GameEngine(testPreset(), seed)
+        val engine = GameEngine(testPreset(initialPowerUpTypes = listOf(PowerUpType.GHOST_MODE)), seed)
         // Find a wall adjacent to a known cell and try to move through it.
         val origin = findCellWithAnyWall(engine.maze)
         engine.player.position = origin
@@ -573,7 +575,7 @@ class GameEngineTest {
 
     @Test
     fun ghostMode_expiresAfterDurationAndWallsBlockAgain() {
-        val engine = GameEngine(testPreset(), seed)
+        val engine = GameEngine(testPreset(initialPowerUpTypes = listOf(PowerUpType.GHOST_MODE)), seed)
         val origin = findCellWithAnyWall(engine.maze)
         val blockedDirection = findBlockedDirection(engine.maze, origin)
 
@@ -593,7 +595,10 @@ class GameEngineTest {
 
     @Test
     fun ghostMode_doesNotPreventLossOnNpcCollision() {
-        val engine = GameEngine(testPreset(npcCount = 1), seed)
+        val engine = GameEngine(
+            testPreset(npcCount = 1, initialPowerUpTypes = listOf(PowerUpType.GHOST_MODE)),
+            seed
+        )
         collectPowerUp(engine, PowerUpType.GHOST_MODE)
         engine.player.position = engine.npcs.first().position
 
