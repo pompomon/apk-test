@@ -332,13 +332,18 @@ class GameEngineTest {
         val engine = GameEngine(testPreset(npcCount = 1, npcMovesPerSecond = 0.01f), seed)
         engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
         engine.applyStartingPowerUp(PowerUpType.SHIELD)
-        engine.player.position = engine.npcs.first().position
+        val origin = findCellWithAnyWall(engine.maze)
+        val blockedDirection = findBlockedDirection(engine.maze, origin)
+        engine.player.position = origin
+        engine.npcs.first().position = origin
 
+        engine.queueManualMove(blockedDirection)
         engine.update(1f)
 
         assertNotEquals(GameStatus.LOSE, engine.status)
         assertTrue(engine.activePowerUps.any { it.type == PowerUpType.SHIELD })
 
+        engine.queueManualMove(blockedDirection)
         engine.update(PowerUpType.SHIELD.metadata.defaultDurationSeconds + 0.1f)
 
         assertTrue(engine.activePowerUps.none { it.type == PowerUpType.SHIELD })
