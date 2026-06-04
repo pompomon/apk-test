@@ -14,7 +14,7 @@ import org.json.JSONObject
  * unreadable / out-of-range payload (Hard rule #9). Unknown enum values
  * in the unlocked-policies list or currentPlayerPolicy are tolerated:
  * removed entries are silently dropped, and an unreadable
- * currentPlayerPolicy falls back to MANUAL rather than failing the load.
+ * currentPlayerPolicy becomes absent rather than failing the load.
  */
 data class AdventureRunStateSnapshot(
     val schemaVersion: Int = SCHEMA_VERSION,
@@ -24,7 +24,7 @@ data class AdventureRunStateSnapshot(
     val livesRemaining: Int,
     val winStreakSinceLastBonus: Int,
     val unlockedPlayerPolicies: List<PlayerPolicyType>,
-    val currentPlayerPolicy: PlayerPolicyType,
+    val currentPlayerPolicy: PlayerPolicyType?,
     val currentMazeSeed: Long?,
     val currentMazeNpcPolicies: List<NpcPolicyType>,
     val currentMazeSnapshot: GameEngineSnapshot?,
@@ -39,7 +39,7 @@ data class AdventureRunStateSnapshot(
         put(KEY_LIVES, livesRemaining)
         put(KEY_STREAK, winStreakSinceLastBonus)
         put(KEY_UNLOCKED, JSONArray().apply { unlockedPlayerPolicies.forEach { put(it.name) } })
-        put(KEY_CURRENT_POLICY, currentPlayerPolicy.name)
+        if (currentPlayerPolicy != null) put(KEY_CURRENT_POLICY, currentPlayerPolicy.name)
         if (currentMazeSeed != null) put(KEY_MAZE_SEED, currentMazeSeed)
         put(KEY_MAZE_NPC_POLICIES, JSONArray().apply {
             currentMazeNpcPolicies.forEach { put(it.name) }
@@ -107,13 +107,15 @@ data class AdventureRunStateSnapshot(
                 }.toMutableList()
                 if (PlayerPolicyType.MANUAL !in unlocked) unlocked.add(0, PlayerPolicyType.MANUAL)
                 val distinctUnlocked = unlocked.distinct()
-                // Tolerate a removed currentPlayerPolicy by resetting to
-                // MANUAL (always unlocked) rather than failing the load.
-                val currentPolicy = runCatching {
-                    PlayerPolicyType.valueOf(obj.getString(KEY_CURRENT_POLICY))
-                }.getOrNull()
-                    ?.takeIf { it in distinctUnlocked }
-                    ?: PlayerPolicyType.MANUAL
+                // Tolerate a missing, locked, or removed currentPlayerPolicy
+                // by preserving "no current selection" so the host can force
+                // the user to choose from the unlocked set before continuing.
+                val currentPolicy = if (obj.has(KEY_CURRENT_POLICY) && !obj.isNull(KEY_CURRENT_POLICY)) {
+                    runCatching {
+                        PlayerPolicyType.valueOf(obj.getString(KEY_CURRENT_POLICY))
+                    }.getOrNull()
+                        ?.takeIf { it in distinctUnlocked }
+                } else null
                 val mazePolicies = if (obj.has(KEY_MAZE_NPC_POLICIES)) {
                     obj.getJSONArray(KEY_MAZE_NPC_POLICIES).let { arr ->
                         List(arr.length()) { i -> NpcPolicyType.valueOf(arr.getString(i)) }

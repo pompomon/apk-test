@@ -101,13 +101,54 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         controller = initialController
         runSeed = initialSeed
 
-        // Always (re)create the GameFragment from the current controller
-        // spec, including on activity recreation (savedInstanceState != null,
-        // typically process-death). The FragmentManager would otherwise
-        // restore the previous GameFragment with its original arguments,
-        // which can be stale (wrong maze index / wrong mid-maze snapshot)
-        // versus the persisted controller state we just loaded. Replacing
-        // the fragment reconciles the engine/UI with controller.prepareCurrentMaze().
+        setupControls()
+        setupSwipeControls()
+        refreshStatusBar()
+
+        if (isFreshStart) {
+            // Eagerly persist the freshly-built run state with commit() so a
+            // process death before the first autosave can't resurrect a
+            // previous run (AdventureSetupActivity's clear() uses async
+            // apply(), which is not flushed yet at this point).
+            persistAdventureStateBlocking()
+        }
+        startCurrentMazeOrPrompt()
+    }
+
+    private fun loadOrBuildController(
+        intent: Intent,
+        savedInstanceState: Bundle?
+    ): Triple<AdventureRunController, Long, Boolean> {
+        // Always attempt to load a persisted run when the activity is being
+        // recreated by the OS (savedInstanceState != null). Process death
+        // recreates the activity with the original launch Intent, which for a
+        // fresh-Start launch lacks EXTRA_RESUME — without this we'd build a
+        // fresh controller and lose the in-flight run. Honour EXTRA_RESUME
+        // for explicit Resume launches from setup as well.
+        val explicitResume = intent.getBooleanExtra(AdventureSetupActivity.EXTRA_RESUME, false)
+        val shouldTryLoad = explicitResume || savedInstanceState != null
+        val saved = if (shouldTryLoad) adventureStore.load() else null
+        if (saved != null) {
+            val config = AdventureConfig.forDifficultyName(saved.difficultyName)
+            val controller = AdventureRunController(
+                config = config,
+                initialState = saved.toState(),
+                runSeed = saved.runSeed
+            )
+            return Triple(controller, saved.runSeed, false)
+        }
+        val difficultyName = intent.getStringExtra(AdventureSetupActivity.EXTRA_DIFFICULTY)
+            ?: DifficultyPresets.EASY.name
+        val config = AdventureConfig.forDifficulty(DifficultyPresets.byName(difficultyName))
+        val seed = System.currentTimeMillis()
+        return Triple(AdventureRunController(config = config, runSeed = seed), seed, true)
+    }
+
+    private fun startCurrentMazeOrPrompt() {
+        if (controller.currentPlayerPolicyOrNull() == null) {
+            showRequiredPlayerStrategyPicker { startCurrentMazeOrPrompt() }
+            return
+        }
         val spec = controller.prepareCurrentMaze()
         if (spec == null) {
             // Defensive: terminal state recovered from store. Clear and bail.
@@ -115,6 +156,30 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             returnToSetup()
             return
         }
+        val existingFragment = gameFragment()
+        if (existingFragment == null) {
+            attachGameFragment(spec)
+        } else {
+            existingFragment.configureAdventureMaze(
+                seed = spec.seed,
+                difficulty = spec.difficulty.name,
+                playerPolicy = spec.playerPolicy,
+                npcCount = spec.npcCount,
+                npcPolicies = spec.npcPolicies,
+                startingPowerUp = spec.startingPowerUp
+            )
+        }
+        persistAdventureStateAsync()
+        refreshStatusBar()
+    }
+
+    private fun attachGameFragment(spec: com.example.apktest.game.core.MazeStartupSpec) {
+        // Always (re)create the GameFragment from the current controller
+        // spec, including on activity recreation (savedInstanceState != null,
+        // typically process-death). The FragmentManager would otherwise
+        // restore the previous GameFragment with its original arguments,
+        // which can be stale (wrong maze index / wrong mid-maze snapshot)
+        // versus the persisted controller state we just loaded.
         val fragment = GameFragment()
         val args = Bundle().apply {
             putString(GameFragment.ARG_PLAYER_POLICY, spec.playerPolicy.name)
@@ -147,47 +212,6 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 startingPowerUp = spec.startingPowerUp
             )
         }
-
-        setupControls()
-        setupSwipeControls()
-        refreshStatusBar()
-
-        if (isFreshStart) {
-            // Eagerly persist the freshly-built run state with commit() so a
-            // process death before the first autosave can't resurrect a
-            // previous run (AdventureSetupActivity's clear() uses async
-            // apply(), which is not flushed yet at this point).
-            persistAdventureStateBlocking()
-        }
-    }
-
-    private fun loadOrBuildController(
-        intent: Intent,
-        savedInstanceState: Bundle?
-    ): Triple<AdventureRunController, Long, Boolean> {
-        // Always attempt to load a persisted run when the activity is being
-        // recreated by the OS (savedInstanceState != null). Process death
-        // recreates the activity with the original launch Intent, which for a
-        // fresh-Start launch lacks EXTRA_RESUME — without this we'd build a
-        // fresh controller and lose the in-flight run. Honour EXTRA_RESUME
-        // for explicit Resume launches from setup as well.
-        val explicitResume = intent.getBooleanExtra(AdventureSetupActivity.EXTRA_RESUME, false)
-        val shouldTryLoad = explicitResume || savedInstanceState != null
-        val saved = if (shouldTryLoad) adventureStore.load() else null
-        if (saved != null) {
-            val config = AdventureConfig.forDifficultyName(saved.difficultyName)
-            val controller = AdventureRunController(
-                config = config,
-                initialState = saved.toState(),
-                runSeed = saved.runSeed
-            )
-            return Triple(controller, saved.runSeed, false)
-        }
-        val difficultyName = intent.getStringExtra(AdventureSetupActivity.EXTRA_DIFFICULTY)
-            ?: DifficultyPresets.EASY.name
-        val config = AdventureConfig.forDifficulty(DifficultyPresets.byName(difficultyName))
-        val seed = System.currentTimeMillis()
-        return Triple(AdventureRunController(config = config, runSeed = seed), seed, true)
     }
 
     override fun exit() {
@@ -343,7 +367,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             add(MenuEntry(R.string.legend) { LegendDialog.show(this@AdventureActivity) })
             // Only show the strategy switcher when the player has unlocked
             // more than just MANUAL.
-            if (controller.state.unlockedPlayerPolicies.size > 1) {
+            if (controller.unlockedPlayerPolicies().size > 1) {
                 add(MenuEntry(R.string.adventure_pick_player_strategy) { showSwitchPlayerStrategy() })
             }
             add(MenuEntry(R.string.pause_and_exit) { onPauseAndExit() })
@@ -358,21 +382,63 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun showSwitchPlayerStrategy() {
-        val unlocked = controller.state.unlockedPlayerPolicies.toList()
+        val unlocked = controller.unlockedPlayerPolicies()
         if (unlocked.size < 2) return
         val items = unlocked.map { it.label }.toTypedArray()
-        val current = unlocked.indexOf(controller.state.currentPlayerPolicy).coerceAtLeast(0)
+        val current = controller.currentPlayerPolicyOrNull()
+            ?.let { unlocked.indexOf(it) }
+            ?: -1
         AlertDialog.Builder(this)
             .setTitle(R.string.adventure_pick_player_strategy)
             .setSingleChoiceItems(items, current) { dialog, which ->
                 val chosen = unlocked[which]
                 if (controller.setCurrentPlayerPolicy(chosen)) {
                     gameFragment()?.setPlayerPolicy(chosen)
+                    persistAdventureStateAsync()
                     refreshStatusBar()
                 }
                 dialog.dismiss()
             }
             .show()
+    }
+
+    private fun showRequiredPlayerStrategyPicker(onSelected: () -> Unit) {
+        val unlocked = controller.unlockedPlayerPolicies()
+        if (unlocked.isEmpty()) {
+            adventureStore.clear()
+            returnToSetup()
+            return
+        }
+        val items = unlocked.map { it.label }.toTypedArray()
+        var picked = controller.currentPlayerPolicyOrNull()
+            ?.let { unlocked.indexOf(it) }
+            ?: -1
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.adventure_pick_player_strategy)
+            .setMessage(R.string.adventure_player_strategy_required)
+            .setCancelable(false)
+            .setSingleChoiceItems(items, picked) { _, which ->
+                picked = which
+            }
+            .setPositiveButton(R.string.adventure_continue, null)
+            .create()
+        dialog.setOnShowListener {
+            val continueButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            continueButton.isEnabled = picked in unlocked.indices
+            dialog.listView.setOnItemClickListener { _, _, which, _ ->
+                picked = which
+                continueButton.isEnabled = true
+            }
+            continueButton.setOnClickListener {
+                val chosen = unlocked.getOrNull(picked) ?: return@setOnClickListener
+                if (controller.setCurrentPlayerPolicy(chosen)) {
+                    persistAdventureStateAsync()
+                    dialog.dismiss()
+                    onSelected()
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun onPauseAndExit() {
@@ -540,22 +606,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun advanceToNextMaze() {
-        val spec = controller.prepareCurrentMaze()
-        if (spec == null) {
-            // Defensive: controller already terminal, return to setup.
-            adventureStore.clear()
-            returnToSetup()
-            return
-        }
-        gameFragment()?.configureAdventureMaze(
-            seed = spec.seed,
-            difficulty = spec.difficulty.name,
-            playerPolicy = spec.playerPolicy,
-            npcCount = spec.npcCount,
-            npcPolicies = spec.npcPolicies,
-            startingPowerUp = spec.startingPowerUp
-        )
-        persistAdventureStateAsync()
+        startCurrentMazeOrPrompt()
         // transitionPending stays `true` until pollEngineStatus observes
         // a non-terminal status (i.e. the GL thread has applied the
         // restart command). This prevents the engine's still-WIN status

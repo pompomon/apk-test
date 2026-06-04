@@ -11,18 +11,30 @@ import org.junit.Test
 class AdventureRunControllerTest {
 
     private fun easyController(runSeed: Long = 42L) =
+        unselectedEasyController(runSeed).apply { setCurrentPlayerPolicy(PlayerPolicyType.MANUAL) }
+
+    private fun unselectedEasyController(runSeed: Long = 42L) =
         AdventureRunController(AdventureConfig.forDifficulty(DifficultyPresets.EASY), runSeed = runSeed)
 
     private fun hardController(runSeed: Long = 42L) =
         AdventureRunController(AdventureConfig.forDifficulty(DifficultyPresets.HARD), runSeed = runSeed)
+            .apply { setCurrentPlayerPolicy(PlayerPolicyType.MANUAL) }
 
     @Test
-    fun startsWithCorrectLivesAndOnlyManualUnlocked() {
-        val c = easyController()
+    fun startsWithCorrectLivesAndOnlyManualUnlockedWithNoSelectedPolicy() {
+        val c = unselectedEasyController()
         assertEquals(5, c.state.livesRemaining)
         assertEquals(listOf(PlayerPolicyType.MANUAL), c.state.unlockedPlayerPolicies.toList())
-        assertEquals(PlayerPolicyType.MANUAL, c.state.currentPlayerPolicy)
+        assertNull(c.state.currentPlayerPolicy)
         assertEquals(AdventureStatus.IN_PROGRESS, c.state.status)
+    }
+
+    @Test
+    fun prepareCurrentMaze_returnsNullUntilUnlockedPolicySelected() {
+        val c = unselectedEasyController()
+        assertNull(c.prepareCurrentMaze())
+        assertTrue(c.setCurrentPlayerPolicy(PlayerPolicyType.MANUAL))
+        assertEquals(PlayerPolicyType.MANUAL, c.prepareCurrentMaze()!!.playerPolicy)
     }
 
     @Test
@@ -154,12 +166,50 @@ class AdventureRunControllerTest {
 
     @Test
     fun setCurrentPlayerPolicy_onlyAllowedIfUnlocked() {
-        val c = easyController()
+        val c = unselectedEasyController()
         assertFalse(c.setCurrentPlayerPolicy(PlayerPolicyType.BFS_EXIT))
-        assertEquals(PlayerPolicyType.MANUAL, c.state.currentPlayerPolicy)
+        assertNull(c.state.currentPlayerPolicy)
         c.applyPolicyUnlock(PlayerPolicyType.BFS_EXIT)
         assertTrue(c.setCurrentPlayerPolicy(PlayerPolicyType.BFS_EXIT))
         assertEquals(PlayerPolicyType.BFS_EXIT, c.state.currentPlayerPolicy)
+    }
+
+    @Test
+    fun unlockedPlayerPolicies_exposesOnlySelectablePolicies() {
+        val c = easyController()
+        c.applyPolicyUnlock(PlayerPolicyType.BFS_EXIT)
+        val selectable = c.unlockedPlayerPolicies()
+        assertEquals(listOf(PlayerPolicyType.MANUAL, PlayerPolicyType.BFS_EXIT), selectable)
+        assertFalse(PlayerPolicyType.ASTAR_EXIT in selectable)
+    }
+
+    @Test
+    fun prepareCurrentMaze_reusesLatestSelectedUnlockedPolicyAcrossMazes() {
+        val c = easyController()
+        c.applyPolicyUnlock(PlayerPolicyType.BFS_EXIT)
+        assertTrue(c.setCurrentPlayerPolicy(PlayerPolicyType.BFS_EXIT))
+        assertEquals(PlayerPolicyType.BFS_EXIT, c.prepareCurrentMaze()!!.playerPolicy)
+        c.onMazeWon()
+        assertEquals(PlayerPolicyType.BFS_EXIT, c.prepareCurrentMaze()!!.playerPolicy)
+    }
+
+    @Test
+    fun prepareCurrentMaze_requiresSelectionAgainWhenLatestSelectionIsLocked() {
+        val state = AdventureRunState(
+            difficultyName = DifficultyPresets.EASY.name,
+            livesRemaining = 5,
+            unlockedPlayerPolicies = mutableListOf(PlayerPolicyType.MANUAL),
+            currentPlayerPolicy = PlayerPolicyType.BFS_EXIT
+        )
+        val c = AdventureRunController(
+            AdventureConfig.forDifficulty(DifficultyPresets.EASY),
+            initialState = state,
+            runSeed = 42L
+        )
+        assertNull(c.currentPlayerPolicyOrNull())
+        assertNull(c.prepareCurrentMaze())
+        assertTrue(c.setCurrentPlayerPolicy(PlayerPolicyType.MANUAL))
+        assertEquals(PlayerPolicyType.MANUAL, c.prepareCurrentMaze()!!.playerPolicy)
     }
 
     @Test

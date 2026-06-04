@@ -47,7 +47,7 @@ data class AdventureRunState(
     var livesRemaining: Int = 1,
     var winStreakSinceLastBonus: Int = 0,
     var unlockedPlayerPolicies: MutableList<PlayerPolicyType> = mutableListOf(PlayerPolicyType.MANUAL),
-    var currentPlayerPolicy: PlayerPolicyType = PlayerPolicyType.MANUAL,
+    var currentPlayerPolicy: PlayerPolicyType? = null,
     var currentMazeSeed: Long? = null,
     var currentMazeNpcPolicies: List<NpcPolicyType> = emptyList(),
     var currentMazeSnapshot: GameEngineSnapshot? = null,
@@ -154,7 +154,7 @@ class AdventureRunController(
      * calls before the next [onMazeWon] / [onPlayerDied] are idempotent.
      *
      * If the run is already terminal ([AdventureStatus.WON] / [AdventureStatus.LOST])
-     * returns `null` — the host should show the terminal screen instead.
+     * or no unlocked player policy is currently selected, returns `null`.
      */
     fun prepareCurrentMaze(): MazeStartupSpec? {
         if (state.status != AdventureStatus.IN_PROGRESS) return null
@@ -182,12 +182,13 @@ class AdventureRunController(
             val pool = NpcPolicyType.entries
             state.currentMazeNpcPolicies = List(npcCount) { pool[rng.nextInt(pool.size)] }
         }
+        val playerPolicy = currentPlayerPolicyOrNull() ?: return null
         return MazeStartupSpec(
             seed = state.currentMazeSeed!!,
             difficulty = config.difficulty,
             npcCount = npcCount,
             npcPolicies = state.currentMazeNpcPolicies,
-            playerPolicy = state.currentPlayerPolicy,
+            playerPolicy = playerPolicy,
             midMazeSnapshot = state.currentMazeSnapshot,
             startingPowerUp = state.pendingStartingPowerUp
         )
@@ -275,7 +276,15 @@ class AdventureRunController(
 
     /** PlayerPolicyTypes not yet unlocked, in declaration order. */
     fun lockedPlayerPolicies(): List<PlayerPolicyType> =
-        PlayerPolicyType.entries.filter { it !in state.unlockedPlayerPolicies }
+        PlayerPolicyType.entries.filter { it !in unlockedPlayerPolicies() }
+
+    /** PlayerPolicyTypes available for selection, in unlock order without duplicates. */
+    fun unlockedPlayerPolicies(): List<PlayerPolicyType> =
+        state.unlockedPlayerPolicies.distinct()
+
+    /** Latest selected player policy, only when it is still unlocked and usable. */
+    fun currentPlayerPolicyOrNull(): PlayerPolicyType? =
+        state.currentPlayerPolicy?.takeIf { it in unlockedPlayerPolicies() }
 
     /**
      * Add [choice] to the unlocked policy set. No-op if [choice] is

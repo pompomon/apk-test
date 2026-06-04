@@ -85,8 +85,8 @@ class AdventureRunStateSnapshotTest {
         assertNotNull(restored)
         // Unknown enum silently dropped; MANUAL invariant preserved.
         assertEquals(listOf(PlayerPolicyType.MANUAL), restored!!.unlockedPlayerPolicies)
-        // currentPolicy was BFS_EXIT (now unknown) → resets to MANUAL.
-        assertEquals(PlayerPolicyType.MANUAL, restored.currentPlayerPolicy)
+        // currentPolicy was BFS_EXIT (now unknown) → requires a fresh user selection.
+        assertNull(restored.currentPlayerPolicy)
     }
 
     @Test
@@ -111,7 +111,7 @@ class AdventureRunStateSnapshotTest {
     }
 
     @Test
-    fun fromJson_resetsCurrentPolicyToManualWhenNotInUnlocked() {
+    fun fromJson_clearsCurrentPolicyWhenNotInUnlocked() {
         val invalid = AdventureRunStateSnapshot(
             runSeed = 1L,
             difficultyName = DifficultyPresets.MEDIUM.name,
@@ -127,7 +127,18 @@ class AdventureRunStateSnapshotTest {
         )
         val restored = AdventureRunStateSnapshot.fromJson(invalid.toJson())
         assertNotNull(restored)
-        assertEquals(PlayerPolicyType.MANUAL, restored!!.currentPlayerPolicy)
+        assertNull(restored!!.currentPlayerPolicy)
+    }
+
+    @Test
+    fun fromJson_treatsMissingCurrentPolicyAsNoSelection() {
+        val snap = AdventureRunStateSnapshot.fromState(sampleState(), runSeed = 1L)
+        val tampered = org.json.JSONObject(snap.toJson()).apply {
+            remove("currentPolicy")
+        }.toString()
+        val restored = AdventureRunStateSnapshot.fromJson(tampered)
+        assertNotNull(restored)
+        assertNull(restored!!.currentPlayerPolicy)
     }
 
     @Test
