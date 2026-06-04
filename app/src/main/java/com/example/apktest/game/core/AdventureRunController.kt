@@ -262,7 +262,8 @@ class AdventureRunController(
     /**
      * Deterministically samples up to [count] [PowerUpType]s (excluding
      * [PowerUpType.GHOST_MODE]) using an RNG derived from [runSeed] and
-     * [mazeIndex1Based].
+     * [mazeIndex1Based]. SHIELD, SLOW_TIME, and MAGNET are valid starting
+     * rewards.
      */
     internal fun sampleStartingPowerUps(count: Int, mazeIndex1Based: Int): List<PowerUpType> {
         val pool = PowerUpType.entries.filter { it != PowerUpType.GHOST_MODE }

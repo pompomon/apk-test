@@ -64,6 +64,36 @@ enum class PowerUpType(
             stackPolicy = PowerUpStackPolicy.REFRESH_DURATION
         )
     ),
+    SHIELD(
+        label = "Shield",
+        description = "Prevents capture while active; NPCs still move, see, and chase the player.",
+        metadata = PowerUpMetadata(
+            kind = PowerUpEffectKind.TIMED,
+            defaultDurationSeconds = 5f,
+            iconId = "shield",
+            stackPolicy = PowerUpStackPolicy.REFRESH_DURATION
+        )
+    ),
+    SLOW_TIME(
+        label = "Slow Time",
+        description = "Temporarily slows NPC movement without fully freezing them.",
+        metadata = PowerUpMetadata(
+            kind = PowerUpEffectKind.TIMED,
+            defaultDurationSeconds = 6f,
+            iconId = "slow_time",
+            stackPolicy = PowerUpStackPolicy.REFRESH_DURATION
+        )
+    ),
+    MAGNET(
+        label = "Magnet",
+        description = "Automatically collects nearby power-up pickups for a short time.",
+        metadata = PowerUpMetadata(
+            kind = PowerUpEffectKind.TIMED,
+            defaultDurationSeconds = 8f,
+            iconId = "magnet",
+            stackPolicy = PowerUpStackPolicy.REFRESH_DURATION
+        )
+    ),
     BLAST(
         label = "Blast",
         description = "Instantly removes the walls around the player's current cell.",

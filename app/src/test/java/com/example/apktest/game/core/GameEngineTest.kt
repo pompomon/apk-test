@@ -328,6 +328,118 @@ class GameEngineTest {
     }
 
     @Test
+    fun shield_preventsLossOnNpcCollisionWhileActiveAndExpires() {
+        val engine = GameEngine(testPreset(npcCount = 1, npcMovesPerSecond = 0.01f), seed)
+        engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        engine.applyStartingPowerUp(PowerUpType.SHIELD)
+        val origin = findCellWithAnyWall(engine.maze)
+        val blockedDirection = findBlockedDirection(engine.maze, origin)
+        engine.player.position = origin
+        engine.npcs.first().position = origin
+
+        engine.queueManualMove(blockedDirection)
+        engine.update(1f)
+
+        assertNotEquals(GameStatus.LOSE, engine.status)
+        assertTrue(engine.activePowerUps.any { it.type == PowerUpType.SHIELD })
+
+        engine.queueManualMove(blockedDirection)
+        engine.update(PowerUpType.SHIELD.metadata.defaultDurationSeconds + 0.1f)
+
+        assertTrue(engine.activePowerUps.none { it.type == PowerUpType.SHIELD })
+        assertEquals(GameStatus.LOSE, engine.status)
+    }
+
+    @Test
+    fun slowTime_reducesNpcMovementFrequency() {
+        val baseline = GameEngine(testPreset(npcCount = 1, initialPowerUpTypes = emptyList()), seed)
+        baseline.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        val baselineStart = baseline.npcs.first().position
+
+        baseline.update(1.1f)
+
+        assertNotEquals(baselineStart, baseline.npcs.first().position)
+
+        val slowed = GameEngine(testPreset(npcCount = 1, initialPowerUpTypes = emptyList()), seed)
+        slowed.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        slowed.applyStartingPowerUp(PowerUpType.SLOW_TIME)
+        val slowedStart = slowed.npcs.first().position
+
+        slowed.update(1.1f)
+
+        assertEquals(slowedStart, slowed.npcs.first().position)
+        assertEquals(
+            slowed.difficulty.npcMovesPerSecond * 0.5f,
+            slowed.hudState().npcSpeed,
+            0.0001f
+        )
+    }
+
+    @Test
+    fun magnet_collectsNearbyPickupsAndActivatesEffects() {
+        val engine = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed)
+        val nearby = cellsNear(engine, engine.player.position, maxDistance = 2).take(2)
+        assertEquals(2, nearby.size)
+        val far = cellsFarFrom(engine, engine.player.position, minDistance = 3).first()
+        val snapshot = engine.snapshot().copy(
+            spawnedPowerUps = listOf(
+                GameEngineSnapshot.SpawnedPowerUpSnapshot(
+                    type = PowerUpType.SPEED_UP,
+                    x = nearby[0].x,
+                    y = nearby[0].y,
+                    remainingSeconds = null
+                ),
+                GameEngineSnapshot.SpawnedPowerUpSnapshot(
+                    type = PowerUpType.SHIELD,
+                    x = nearby[1].x,
+                    y = nearby[1].y,
+                    remainingSeconds = null
+                ),
+                GameEngineSnapshot.SpawnedPowerUpSnapshot(
+                    type = PowerUpType.FREEZE,
+                    x = far.x,
+                    y = far.y,
+                    remainingSeconds = null
+                )
+            ),
+            activeEffects = listOf(
+                GameEngineSnapshot.ActiveEffectSnapshot(
+                    type = PowerUpType.MAGNET,
+                    remainingSeconds = PowerUpType.MAGNET.metadata.defaultDurationSeconds
+                )
+            )
+        )
+        engine.restore(snapshot)
+
+        engine.update(0.001f)
+
+        assertTrue(engine.spawnedPowerUps.none { it.position in nearby })
+        assertTrue(engine.spawnedPowerUps.any { it.position == far && it.type == PowerUpType.FREEZE })
+        assertTrue(engine.activePowerUps.any { it.type == PowerUpType.MAGNET })
+        assertTrue(engine.activePowerUps.any { it.type == PowerUpType.SPEED_UP })
+        assertTrue(engine.activePowerUps.any { it.type == PowerUpType.SHIELD })
+    }
+
+    @Test
+    fun newTimedPowerUps_surviveSnapshotRoundTrip() {
+        val preset = testPreset(initialPowerUpTypes = emptyList())
+            .copy(name = DifficultyPresets.MEDIUM.name)
+        val source = GameEngine(preset, seed)
+        listOf(PowerUpType.SHIELD, PowerUpType.SLOW_TIME, PowerUpType.MAGNET).forEach {
+            source.applyStartingPowerUp(it)
+        }
+        val parsed = requireNotNull(GameEngineSnapshot.fromJson(source.snapshot().toJson()))
+        val restored = GameEngine(preset, seed)
+
+        restored.restore(parsed)
+
+        val activeTypes = restored.activePowerUps.map { it.type }.toSet()
+        assertTrue(PowerUpType.SHIELD in activeTypes)
+        assertTrue(PowerUpType.SLOW_TIME in activeTypes)
+        assertTrue(PowerUpType.MAGNET in activeTypes)
+    }
+
+    @Test
     fun automaticPlayerPolicy_doesNotImmediatelyWalkIntoAdjacentNpc() {
         // Smoke test for AvoidanceWrapperPolicy: with BFS_EXIT and an NPC
         // sitting on the player's BFS-preferred next cell, the engine must
@@ -427,7 +539,7 @@ class GameEngineTest {
 
     @Test
     fun ghostMode_activatesTimedEffectForThreeSeconds() {
-        val engine = GameEngine(testPreset(), seed)
+        val engine = GameEngine(testPreset(initialPowerUpTypes = listOf(PowerUpType.GHOST_MODE)), seed)
         collectPowerUp(engine, PowerUpType.GHOST_MODE)
 
         val active = engine.activePowerUps.first { it.type == PowerUpType.GHOST_MODE }
@@ -441,7 +553,7 @@ class GameEngineTest {
 
     @Test
     fun ghostMode_letsPlayerWalkThroughWalls() {
-        val engine = GameEngine(testPreset(), seed)
+        val engine = GameEngine(testPreset(initialPowerUpTypes = listOf(PowerUpType.GHOST_MODE)), seed)
         // Find a wall adjacent to a known cell and try to move through it.
         val origin = findCellWithAnyWall(engine.maze)
         engine.player.position = origin
@@ -468,7 +580,7 @@ class GameEngineTest {
 
     @Test
     fun ghostMode_expiresAfterDurationAndWallsBlockAgain() {
-        val engine = GameEngine(testPreset(), seed)
+        val engine = GameEngine(testPreset(initialPowerUpTypes = listOf(PowerUpType.GHOST_MODE)), seed)
         val origin = findCellWithAnyWall(engine.maze)
         val blockedDirection = findBlockedDirection(engine.maze, origin)
 
@@ -488,7 +600,10 @@ class GameEngineTest {
 
     @Test
     fun ghostMode_doesNotPreventLossOnNpcCollision() {
-        val engine = GameEngine(testPreset(npcCount = 1), seed)
+        val engine = GameEngine(
+            testPreset(npcCount = 1, initialPowerUpTypes = listOf(PowerUpType.GHOST_MODE)),
+            seed
+        )
         collectPowerUp(engine, PowerUpType.GHOST_MODE)
         engine.player.position = engine.npcs.first().position
 
@@ -672,6 +787,31 @@ class GameEngineTest {
         }
     }
 
+    private fun cellsNear(engine: GameEngine, origin: GridPos, maxDistance: Int): List<GridPos> {
+        return allCells(engine)
+            .filter { it != origin && it != engine.maze.exit && chebyshevDistance(origin, it) <= maxDistance }
+            .sortedWith(compareBy({ chebyshevDistance(origin, it) }, { it.x }, { it.y }))
+    }
+
+    private fun cellsFarFrom(engine: GameEngine, origin: GridPos, minDistance: Int): List<GridPos> {
+        return allCells(engine)
+            .filter { it != origin && it != engine.maze.exit && chebyshevDistance(origin, it) >= minDistance }
+            .sortedWith(compareBy({ chebyshevDistance(origin, it) }, { it.x }, { it.y }))
+    }
+
+    private fun allCells(engine: GameEngine): List<GridPos> {
+        val cells = mutableListOf<GridPos>()
+        for (y in 0 until engine.maze.height) {
+            for (x in 0 until engine.maze.width) {
+                cells += GridPos(x, y)
+            }
+        }
+        return cells
+    }
+
+    private fun chebyshevDistance(a: GridPos, b: GridPos): Int =
+        maxOf(kotlin.math.abs(a.x - b.x), kotlin.math.abs(a.y - b.y))
+
     private fun collectPowerUp(engine: GameEngine, type: PowerUpType) {
         val pickup = engine.spawnedPowerUps.first { it.type == type }
         movePlayerTo(engine, pickup.position)
@@ -739,6 +879,7 @@ class GameEngineTest {
         mazeWidth: Int = 14,
         mazeHeight: Int = 20,
         npcCount: Int = 0,
+        npcMovesPerSecond: Float = 1f,
         powerUpPickupLifetimeSeconds: Float = 600f,
         powerUpRespawnIntervalSeconds: Float? = null,
         initialPowerUpTypes: List<PowerUpType> = PowerUpType.entries,
@@ -750,7 +891,7 @@ class GameEngineTest {
             mazeHeight = mazeHeight,
             npcCount = npcCount,
             playerMovesPerSecond = 6f,
-            npcMovesPerSecond = 1f,
+            npcMovesPerSecond = npcMovesPerSecond,
             npcVisionRange = 4,
             powerUpPickupLifetimeSeconds = powerUpPickupLifetimeSeconds,
             powerUpExpirationStaggerSeconds = powerUpExpirationStaggerSeconds,
