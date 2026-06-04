@@ -413,25 +413,30 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         var picked = controller.currentPlayerPolicyOrNull()
             ?.let { unlocked.indexOf(it) }
             ?: -1
+        var continueButton: android.widget.Button? = null
         val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.adventure_pick_player_strategy)
             .setMessage(R.string.adventure_player_strategy_required)
             .setCancelable(false)
             .setSingleChoiceItems(items, picked) { _, which ->
                 picked = which
+                continueButton?.isEnabled = true
             }
             .setPositiveButton(R.string.adventure_continue, null)
             .create()
         dialog.setOnShowListener {
-            val continueButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
-            continueButton.isEnabled = picked in unlocked.indices
-            dialog.listView.setOnItemClickListener { _, _, which, _ ->
-                picked = which
-                continueButton.isEnabled = true
+            continueButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            continueButton?.isEnabled = picked in unlocked.indices
+            runCatching {
+                dialog.listView.setOnItemClickListener { _, _, which, _ ->
+                    picked = which
+                    continueButton?.isEnabled = true
+                }
             }
-            continueButton.setOnClickListener {
+            continueButton?.setOnClickListener {
                 val chosen = unlocked.getOrNull(picked) ?: return@setOnClickListener
-                if (controller.setCurrentPlayerPolicy(chosen)) {
+                if (controller.setCurrentPlayerPolicy(chosen) &&
+                    controller.currentPlayerPolicyOrNull() == chosen) {
                     persistAdventureStateAsync()
                     dialog.dismiss()
                     onSelected()
