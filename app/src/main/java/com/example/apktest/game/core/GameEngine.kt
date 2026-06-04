@@ -973,16 +973,20 @@ class GameEngine(
     private fun collectMagnetPowerUps() {
         if (!isEffectActive(PowerUpType.MAGNET)) return
         val playerPos = player.position
-        val nearby = powerUpsByCell.values
-            .filter { chebyshevDistance(playerPos, it.position) <= MAGNET_PICKUP_RADIUS }
-            .sortedWith(
-                compareBy<SpawnedPowerUp>(
-                    { chebyshevDistance(playerPos, it.position) },
-                    { it.type.ordinal },
-                    { it.position.x },
-                    { it.position.y }
-                )
+        val nearby = ArrayList<SpawnedPowerUp>()
+        for (powerUp in powerUpsByCell.values) {
+            if (chebyshevDistance(playerPos, powerUp.position) <= MAGNET_PICKUP_RADIUS) {
+                nearby.add(powerUp)
+            }
+        }
+        nearby.sortWith(
+            compareBy<SpawnedPowerUp>(
+                { chebyshevDistance(playerPos, it.position) },
+                { it.type.ordinal },
+                { it.position.x },
+                { it.position.y }
             )
+        )
         nearby.forEach { powerUp ->
             if (powerUpsByCell.remove(powerUp.position) != null) {
                 activatePlayerPowerUp(powerUp.type)
