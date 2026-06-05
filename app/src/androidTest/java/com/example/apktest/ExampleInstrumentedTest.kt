@@ -1,7 +1,7 @@
 package com.example.apktest
 
-import android.os.SystemClock
 import android.content.Intent
+import android.os.SystemClock
 import android.view.MotionEvent
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4

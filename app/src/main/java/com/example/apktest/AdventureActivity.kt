@@ -190,12 +190,14 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 ?.takeIf { it != PlayerPolicyType.MANUAL }
             automatedPolicyPromptShown = savedInstanceState.getBoolean(KEY_AUTO_PROMPT_SHOWN, false)
         } else {
-            autoMovementEnabled = controller.state.currentPlayerPolicy != PlayerPolicyType.MANUAL
-            selectedAutomatedPlayerPolicy = controller.state.currentPlayerPolicy
+            val currentPolicy = controller.state.currentPlayerPolicy
+            val currentPolicyIsAutomated = currentPolicy != PlayerPolicyType.MANUAL
+            autoMovementEnabled = currentPolicyIsAutomated
+            selectedAutomatedPlayerPolicy = currentPolicy
                 .takeIf { it != PlayerPolicyType.MANUAL }
                 ?: controller.state.lastAutomatedPlayerPolicy
             automatedPolicyPromptShown = controller.state.automatedPolicyPromptShown ||
-                controller.state.currentPlayerPolicy != PlayerPolicyType.MANUAL
+                currentPolicyIsAutomated
         }
         validateAndUpdateSelectedAutomatedPolicy()
         controller.setAutomatedPolicyPromptShown(automatedPolicyPromptShown)
