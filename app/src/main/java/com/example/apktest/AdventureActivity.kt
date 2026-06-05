@@ -196,6 +196,9 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             selectedAutomatedPlayerPolicy = currentPolicy
                 .takeIf { it != PlayerPolicyType.MANUAL }
                 ?: controller.state.lastAutomatedPlayerPolicy
+            // Backward-compat: older persisted runs won't have the prompt flag,
+            // so if current policy is already automated we treat the prompt as
+            // implicitly shown to avoid surprise prompts after upgrade.
             automatedPolicyPromptShown = controller.state.automatedPolicyPromptShown ||
                 currentPolicyIsAutomated
         }
