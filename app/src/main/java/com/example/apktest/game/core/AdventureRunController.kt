@@ -310,10 +310,15 @@ class AdventureRunController(
      * Record the most-recently used automated policy, or `null` to clear it
      * when the previously-remembered policy is no longer available. Kept on
      * the controller so the host UI never mutates [AdventureRunState]
-     * directly.
+     * directly. Any value that violates the persistence invariant enforced by
+     * [AdventureRunStateSnapshot.fromJson] (must be non-MANUAL and unlocked)
+     * is treated as a clear, so the stored value never gets silently dropped
+     * on reload.
      */
     fun setLastAutomatedPlayerPolicy(type: PlayerPolicyType?) {
-        state.lastAutomatedPlayerPolicy = type
+        state.lastAutomatedPlayerPolicy = type?.takeIf {
+            it != PlayerPolicyType.MANUAL && it in state.unlockedPlayerPolicies
+        }
     }
 
     /**

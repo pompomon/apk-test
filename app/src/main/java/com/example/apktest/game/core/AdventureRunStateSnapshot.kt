@@ -64,6 +64,14 @@ data class AdventureRunStateSnapshot(
     }.toString()
 
     companion object {
+        // Intentionally kept at v1. The Adventure automation fields
+        // (lastAutomatedPlayerPolicy, automatedPolicyPromptShown,
+        // pendingStartingPowerUp) are additive and backward-compatible:
+        // older payloads simply omit them and fromJson falls back to the
+        // defaults, while older builds ignore the unknown keys. Bumping this
+        // version would invalidate every existing in-progress run via the
+        // exact-match check in fromJson, so only bump it for a breaking
+        // change that genuinely cannot be read by the previous schema.
         const val SCHEMA_VERSION = 1
 
         private const val KEY_VERSION = "v"
