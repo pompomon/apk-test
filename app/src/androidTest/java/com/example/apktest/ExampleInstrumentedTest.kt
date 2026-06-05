@@ -27,7 +27,7 @@ class ExampleInstrumentedTest {
 
     @Test
     fun mainActivity_displaysGameHostAndControls() {
-        launchMainActivityWithAutomatedPolicy().use { scenario ->
+        launchMainActivityWithBfsExitPolicy().use { scenario ->
             scenario.onActivity { activity ->
                 val viewIds = intArrayOf(
                     R.id.fragmentGameHost,
@@ -53,7 +53,7 @@ class ExampleInstrumentedTest {
 
     @Test
     fun mainActivity_fragmentHostAcceptsSwipeAndControlsRemainVisible() {
-        launchMainActivityWithAutomatedPolicy().use { scenario ->
+        launchMainActivityWithBfsExitPolicy().use { scenario ->
             val initialSwipes = AtomicInteger(0)
             // Wait for the game host to be laid out before dispatching swipes; on slower devices
             // the host can be attached but not yet measured immediately after pending transactions.
@@ -157,7 +157,7 @@ class ExampleInstrumentedTest {
 
     @Test
     fun mainActivity_swipeOnOverlayDoesNotTriggerMovement() {
-        launchMainActivityWithAutomatedPolicy().use { scenario ->
+        launchMainActivityWithBfsExitPolicy().use { scenario ->
             waitForGameHostLaidOut(scenario)
             val baseline = AtomicInteger(0)
             scenario.onActivity { activity ->
@@ -185,7 +185,7 @@ class ExampleInstrumentedTest {
 
     @Test
     fun mainActivityMenuButtonShowsPopoverActionsAndHud() {
-        launchMainActivityWithAutomatedPolicy().use { scenario ->
+        launchMainActivityWithBfsExitPolicy().use { scenario ->
             waitForGameHostLaidOut(scenario)
             scenario.onActivity { activity ->
                 val gameFragment = attachedGameFragment(activity)
@@ -247,7 +247,7 @@ class ExampleInstrumentedTest {
 
     @Test
     fun classicAutoToggleStartsCheckedForAutomatedPolicy() {
-        launchMainActivityWithAutomatedPolicy().use { scenario ->
+        launchMainActivityWithBfsExitPolicy().use { scenario ->
             scenario.onActivity { activity ->
                 val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonAuto)
                 assertNotNull("Auto toggle should be inflated", toggle)
@@ -301,7 +301,7 @@ class ExampleInstrumentedTest {
     }
 
 
-    private fun launchMainActivityWithAutomatedPolicy(): ActivityScenario<MainActivity> {
+    private fun launchMainActivityWithBfsExitPolicy(): ActivityScenario<MainActivity> {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val intent = Intent(context, MainActivity::class.java).apply {
             putExtra(SetupActivity.EXTRA_PLAYER_POLICY, PlayerPolicyType.BFS_EXIT.name)
