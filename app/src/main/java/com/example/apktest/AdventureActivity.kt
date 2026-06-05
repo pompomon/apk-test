@@ -168,7 +168,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         setupSwipeControls()
         refreshStatusBar()
         refreshAutoToggle()
-        root.post { promptForAutomatedPolicyIfNeeded() }
+        // The Adventure GameFragment is attached synchronously via commitNow()
+        // above, so the prompt can run inline; no need to defer to the event
+        // queue (which could race the transaction).
+        promptForAutomatedPolicyIfNeeded()
 
         if (isFreshStart) {
             // Eagerly persist the freshly-built run state with commit() so a

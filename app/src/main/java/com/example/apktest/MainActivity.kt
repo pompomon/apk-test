@@ -116,7 +116,10 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         setupControls()
         setupSwipeControls()
         refreshAutoToggle()
-        root.post { promptForAutomatedPolicyIfNeeded() }
+        // The Classic GameFragment is attached synchronously via commitNow()
+        // above, so the prompt can run inline; no need to defer to the event
+        // queue (which could race the transaction).
+        promptForAutomatedPolicyIfNeeded()
     }
 
     private fun restoreAutomationUiState(savedInstanceState: Bundle?, intent: Intent) {
