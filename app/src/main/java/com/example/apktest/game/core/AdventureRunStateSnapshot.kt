@@ -64,9 +64,10 @@ data class AdventureRunStateSnapshot(
     }.toString()
 
     companion object {
-        // Intentionally kept at v1. The Adventure automation fields
-        // (lastAutomatedPlayerPolicy, automatedPolicyPromptShown,
-        // pendingStartingPowerUp) are additive and backward-compatible:
+        // Intentionally kept at v1. The newer fields — the automation
+        // fields (lastAutomatedPlayerPolicy, automatedPolicyPromptShown)
+        // and the per-maze starting power-up state (pendingStartingPowerUp)
+        // — are additive and backward-compatible:
         // older payloads simply omit them and fromJson falls back to the
         // defaults, while older builds ignore the unknown keys. Bumping this
         // version would invalidate every existing in-progress run via the
