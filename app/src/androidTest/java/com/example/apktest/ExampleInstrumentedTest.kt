@@ -379,8 +379,9 @@ class ExampleInstrumentedTest {
         // swipe still has enough displacement to exceed minDistance.
         val endX = if (rootWidth > 0f) rawEndX.coerceIn(0f, rootWidth - 1f) else rawEndX
         val endY = if (rootHeight > 0f) rawEndY.coerceIn(0f, rootHeight - 1f) else rawEndY
-        // One overlay-origin swipe per target is sufficient for this regression
-        // assertion and avoids emulator instability from higher synthetic volume.
+        // One inward overlay-origin swipe to the clamped endpoint is sufficient
+        // for this regression assertion and avoids emulator instability from
+        // higher synthetic volume.
         dispatchSwipeViaTouchEvent(activity, startX, startY, endX, endY)
     }
 
