@@ -102,6 +102,19 @@
                 android:text="@string/move_right"
                 android:textColor="@color/maze_dpad_button_text"
                 android:textSize="@dimen/maze_dpad_button_text_size" />
+
+            <ToggleButton
+                android:id="@+id/buttonAuto"
+                android:layout_width="@dimen/maze_dpad_button_width"
+                android:layout_height="@dimen/maze_dpad_button_height"
+                android:layout_marginStart="@dimen/maze_dpad_button_gap"
+                android:backgroundTint="@color/maze_dpad_button_background"
+                android:contentDescription="@string/auto_move_description"
+                android:text="@string/auto_move"
+                android:textColor="@color/maze_dpad_button_text"
+                android:textOff="@string/auto_move"
+                android:textOn="@string/auto_move"
+                android:textSize="@dimen/maze_dpad_button_text_size" />
         </LinearLayout>
     </LinearLayout>
 
