@@ -126,6 +126,7 @@ data class AdventureRunStateSnapshot(
                     ?: PlayerPolicyType.MANUAL
                 val lastAutoPolicy = if (obj.has(KEY_LAST_AUTO_POLICY) && !obj.isNull(KEY_LAST_AUTO_POLICY)) {
                     runCatching { PlayerPolicyType.valueOf(obj.getString(KEY_LAST_AUTO_POLICY)) }.getOrNull()
+                        // The remembered auto policy is only valid if it is still automated and unlocked.
                         ?.takeIf { it != PlayerPolicyType.MANUAL && it in distinctUnlocked }
                 } else null
                 val mazePolicies = if (obj.has(KEY_MAZE_NPC_POLICIES)) {
