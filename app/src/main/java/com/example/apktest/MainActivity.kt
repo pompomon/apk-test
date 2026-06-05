@@ -20,6 +20,7 @@ import com.badlogic.gdx.backends.android.AndroidFragmentApplication
 import com.example.apktest.game.GameFragment
 import com.example.apktest.game.core.DifficultyPresets
 import com.example.apktest.game.core.Direction
+import com.example.apktest.game.core.GameEngineSnapshot
 import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
@@ -102,11 +103,19 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         menuButton = findViewById(R.id.buttonMenu)
         autoToggle = findViewById(R.id.buttonAuto)
 
-        restoreAutomationUiState(savedInstanceState, intent)
+        // Load the saved snapshot at most once here and share it between the
+        // auto-toggle initialization and buildGameFragmentArgs() so a cold
+        // resume doesn't re-parse the JSON (and repeat the stale-blob clearing
+        // side effect) twice.
+        val resume = savedInstanceState == null &&
+            intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false)
+        val resumeSnapshot = if (resume) stateStore.load() else null
+
+        restoreAutomationUiState(savedInstanceState, intent, resumeSnapshot)
 
         if (savedInstanceState == null) {
             val fragment = GameFragment().apply {
-                arguments = buildGameFragmentArgs(intent)
+                arguments = buildGameFragmentArgs(intent, resumeSnapshot)
             }
             supportFragmentManager.beginTransaction()
                 .replace(R.id.fragmentGameHost, fragment)
@@ -122,7 +131,11 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         promptForAutomatedPolicyIfNeeded()
     }
 
-    private fun restoreAutomationUiState(savedInstanceState: Bundle?, intent: Intent) {
+    private fun restoreAutomationUiState(
+        savedInstanceState: Bundle?,
+        intent: Intent,
+        resumeSnapshot: GameEngineSnapshot?
+    ) {
         if (savedInstanceState != null) {
             autoMovementEnabled = savedInstanceState.getBoolean(KEY_AUTO_MOVEMENT_ENABLED, false)
             selectedAutomatedPlayerPolicy = savedInstanceState.getString(KEY_SELECTED_AUTO_POLICY)
@@ -131,16 +144,19 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             automatedPolicyPromptShown = savedInstanceState.getBoolean(KEY_AUTO_PROMPT_SHOWN, false)
             return
         }
-        val initialPolicy = getInitialPlayerPolicyFromIntentOrStore(intent)
+        val initialPolicy = getInitialPlayerPolicyFromIntentOrStore(intent, resumeSnapshot)
         autoMovementEnabled = initialPolicy != PlayerPolicyType.MANUAL
         selectedAutomatedPlayerPolicy = initialPolicy.takeIf { it != PlayerPolicyType.MANUAL }
         automatedPolicyPromptShown = false
     }
 
-    private fun getInitialPlayerPolicyFromIntentOrStore(intent: Intent): PlayerPolicyType {
+    private fun getInitialPlayerPolicyFromIntentOrStore(
+        intent: Intent,
+        resumeSnapshot: GameEngineSnapshot?
+    ): PlayerPolicyType {
         val resume = intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false)
         if (resume) {
-            return stateStore.load()?.playerPolicy ?: PlayerPolicyType.MANUAL
+            return resumeSnapshot?.playerPolicy ?: PlayerPolicyType.MANUAL
         }
         return enumOrDefault(
             intent.getStringExtra(SetupActivity.EXTRA_PLAYER_POLICY),
@@ -148,10 +164,11 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         )
     }
 
-    private fun buildGameFragmentArgs(intent: Intent): Bundle {
-        // If the launcher asked us to resume, load+validate the saved
-        // snapshot once here and hand the parsed object directly to the
-        // fragment (avoiding a redundant JSON parse on the GL thread).
+    private fun buildGameFragmentArgs(intent: Intent, resumeSnapshot: GameEngineSnapshot?): Bundle {
+        // If the launcher asked us to resume, the saved snapshot has already
+        // been loaded+validated once in onCreate and is passed in here, so we
+        // hand the parsed object directly to the fragment (avoiding a redundant
+        // JSON parse on the GL thread).
         // We still embed the JSON in args so a process-death recreation
         // — where the static handoff is wiped but the fragment Bundle
         // survives — can restore from the bundle. The user's selected
@@ -161,9 +178,6 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         // starts a fresh game with the user's selections rather than
         // its hard-coded defaults. Falls back to a fresh game using
         // those same selections when no valid snapshot exists.
-        val resume = intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false)
-        val resumeSnapshot = if (resume) stateStore.load() else null
-
         val player = enumOrDefault(
             intent.getStringExtra(SetupActivity.EXTRA_PLAYER_POLICY),
             PlayerPolicyType.MANUAL
