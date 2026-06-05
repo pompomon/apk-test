@@ -11,6 +11,7 @@ import com.example.apktest.game.GameFragment
 import com.example.apktest.game.core.PlayerPolicyType
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -280,8 +281,8 @@ class ExampleInstrumentedTest {
                     "Adventure prompt should not show before an automated unlock",
                     !activity.isAutomatedPolicyDialogShowingForTesting()
                 )
-                assertTrue("Auto toggle should start disabled with only MANUAL unlocked", !toggle.isEnabled)
-                assertTrue("Auto toggle should start unchecked", !toggle.isChecked)
+                assertFalse("Auto toggle should start disabled with only MANUAL unlocked", toggle.isEnabled)
+                assertFalse("Auto toggle should start unchecked", toggle.isChecked)
             }
         }
     }
@@ -294,7 +295,7 @@ class ExampleInstrumentedTest {
                 activity.refreshAutoToggleForTesting()
                 val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonAuto)
                 assertTrue("Auto toggle should enable after an automated policy unlock", toggle.isEnabled)
-                assertTrue("Auto toggle should remain unchecked until selected", !toggle.isChecked)
+                assertFalse("Auto toggle should remain unchecked until selected", toggle.isChecked)
             }
         }
     }

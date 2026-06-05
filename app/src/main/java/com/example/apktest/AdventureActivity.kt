@@ -193,9 +193,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 ?: controller.state.lastAutomatedPlayerPolicy
             automatedPolicyPromptShown = controller.state.automatedPolicyPromptShown
         }
-        selectedAutomatedPlayerPolicy = selectedAutomatedPlayerPolicy
+        val availableSelectedPolicy = selectedAutomatedPlayerPolicy
             ?.takeIf { it in automatedPlayerPolicies(controller.state.unlockedPlayerPolicies) }
-        controller.state.lastAutomatedPlayerPolicy = selectedAutomatedPlayerPolicy
+        selectedAutomatedPlayerPolicy = availableSelectedPolicy
+        controller.state.lastAutomatedPlayerPolicy = availableSelectedPolicy
         controller.state.automatedPolicyPromptShown = automatedPolicyPromptShown
     }
 
