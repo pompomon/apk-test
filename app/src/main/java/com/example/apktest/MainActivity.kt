@@ -147,11 +147,13 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         val initialPolicy = getInitialPlayerPolicyFromIntentOrStore(intent, resumeSnapshot)
         autoMovementEnabled = initialPolicy != PlayerPolicyType.MANUAL
         selectedAutomatedPlayerPolicy = initialPolicy.takeIf { it != PlayerPolicyType.MANUAL }
-        // Only the one-time picker prompt is for fresh starts. When resuming a
-        // mid-run game, treat the prompt as already shown so resuming a MANUAL
-        // run doesn't immediately interrupt gameplay with the picker.
+        // Only fresh runs that start in MANUAL should show the one-time picker.
+        // Resumed runs and starts that already chose an automated policy should
+        // treat the prompt as shown to avoid unexpected interruptions on
+        // recreation/toggle flows.
         automatedPolicyPromptShown =
-            intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false)
+            intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false) ||
+            initialPolicy != PlayerPolicyType.MANUAL
     }
 
     private fun getInitialPlayerPolicyFromIntentOrStore(

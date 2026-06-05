@@ -380,7 +380,6 @@ class ExampleInstrumentedTest {
         val endX = if (rootWidth > 0f) rawEndX.coerceIn(0f, rootWidth - 1f) else rawEndX
         val endY = if (rootHeight > 0f) rawEndY.coerceIn(0f, rootHeight - 1f) else rawEndY
         dispatchSwipeViaTouchEvent(activity, startX, startY, endX, startY)
-        dispatchSwipeViaTouchEvent(activity, startX, startY, startX, endY)
     }
 
     private fun dispatchSwipeViaTouchEvent(

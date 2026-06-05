@@ -194,7 +194,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             selectedAutomatedPlayerPolicy = controller.state.currentPlayerPolicy
                 .takeIf { it != PlayerPolicyType.MANUAL }
                 ?: controller.state.lastAutomatedPlayerPolicy
-            automatedPolicyPromptShown = controller.state.automatedPolicyPromptShown
+            automatedPolicyPromptShown = controller.state.automatedPolicyPromptShown ||
+                controller.state.currentPlayerPolicy != PlayerPolicyType.MANUAL
         }
         validateAndUpdateSelectedAutomatedPolicy()
         controller.setAutomatedPolicyPromptShown(automatedPolicyPromptShown)
