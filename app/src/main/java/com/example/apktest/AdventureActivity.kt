@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.widget.ImageButton
 import android.widget.TextView
+import android.widget.ToggleButton
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -27,6 +28,7 @@ import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.game.core.PowerUpType
+import com.example.apktest.game.core.automatedPlayerPolicies
 import com.example.apktest.ui.DPadRepeatController
 import com.example.apktest.ui.LegendDialog
 import java.util.concurrent.ExecutorService
@@ -52,6 +54,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     private var runSeed: Long = 0L
 
     private lateinit var menuButton: ImageButton
+    private lateinit var autoToggle: ToggleButton
     private lateinit var statusBar: TextView
     private val dPadRepeatController = DPadRepeatController(move = { direction: Direction -> move(direction) })
 
@@ -59,6 +62,9 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     // transitions exactly once and run the corresponding overlay flow.
     private var lastObservedStatus: GameStatus = GameStatus.RUNNING
     private var transitionPending: Boolean = false
+    private var autoMovementEnabled: Boolean = false
+    private var selectedAutomatedPlayerPolicy: PlayerPolicyType? = null
+    private var automatedPolicyPromptShown: Boolean = false
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun adventureStatusBarTextForTesting(): CharSequence = statusBar.text
@@ -96,10 +102,12 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
         statusBar = findViewById(R.id.adventureStatusBar)
         menuButton = findViewById(R.id.buttonMenu)
+        autoToggle = findViewById(R.id.buttonAuto)
 
         val (initialController, initialSeed, isFreshStart) = loadOrBuildController(intent, savedInstanceState)
         controller = initialController
         runSeed = initialSeed
+        restoreAutomationUiState(savedInstanceState)
 
         // Always (re)create the GameFragment from the current controller
         // spec, including on activity recreation (savedInstanceState != null,
@@ -151,6 +159,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         setupControls()
         setupSwipeControls()
         refreshStatusBar()
+        refreshAutoToggle()
+        root.post { promptForAutomatedPolicyIfNeeded() }
 
         if (isFreshStart) {
             // Eagerly persist the freshly-built run state with commit() so a
@@ -159,6 +169,25 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             // apply(), which is not flushed yet at this point).
             persistAdventureStateBlocking()
         }
+    }
+
+    private fun restoreAutomationUiState(savedInstanceState: Bundle?) {
+        if (savedInstanceState != null) {
+            autoMovementEnabled = savedInstanceState.getBoolean(KEY_AUTO_MOVEMENT_ENABLED, false)
+            selectedAutomatedPlayerPolicy = savedInstanceState.getString(KEY_SELECTED_AUTO_POLICY)
+                ?.let { name -> PlayerPolicyType.entries.firstOrNull { it.name == name } }
+                ?.takeIf { it != PlayerPolicyType.MANUAL }
+            automatedPolicyPromptShown = savedInstanceState.getBoolean(KEY_AUTO_PROMPT_SHOWN, false)
+        } else {
+            autoMovementEnabled = controller.state.currentPlayerPolicy != PlayerPolicyType.MANUAL
+            selectedAutomatedPlayerPolicy = controller.state.currentPlayerPolicy
+                .takeIf { it != PlayerPolicyType.MANUAL }
+                ?: controller.state.lastAutomatedPlayerPolicy
+            automatedPolicyPromptShown = false
+        }
+        selectedAutomatedPlayerPolicy = selectedAutomatedPlayerPolicy
+            ?.takeIf { it in automatedPlayerPolicies(controller.state.unlockedPlayerPolicies) }
+        controller.state.lastAutomatedPlayerPolicy = selectedAutomatedPlayerPolicy
     }
 
     private fun loadOrBuildController(
@@ -271,6 +300,13 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         super.onDestroy()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(KEY_AUTO_MOVEMENT_ENABLED, autoMovementEnabled)
+        selectedAutomatedPlayerPolicy?.let { outState.putString(KEY_SELECTED_AUTO_POLICY, it.name) }
+        outState.putBoolean(KEY_AUTO_PROMPT_SHOWN, automatedPolicyPromptShown)
+        super.onSaveInstanceState(outState)
+    }
+
     private fun persistAdventureStateAsync() {
         val snapshot = AdventureRunStateSnapshot.fromState(controller.state, runSeed)
         try {
@@ -325,10 +361,94 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     private fun setupControls() {
         menuButton.setOnClickListener { showMenu() }
+        autoToggle.setOnClickListener {
+            if (autoToggle.isChecked) {
+                enableAutomatedMovementOrSelect()
+            } else {
+                disableAutomatedMovement()
+            }
+        }
         dPadRepeatController.bind(findViewById(R.id.buttonUp), Direction.NORTH)
         dPadRepeatController.bind(findViewById(R.id.buttonDown), Direction.SOUTH)
         dPadRepeatController.bind(findViewById(R.id.buttonLeft), Direction.WEST)
         dPadRepeatController.bind(findViewById(R.id.buttonRight), Direction.EAST)
+    }
+
+    private fun enableAutomatedMovementOrSelect() {
+        val available = automatedPlayerPolicies(controller.state.unlockedPlayerPolicies)
+        val selected = selectedAutomatedPlayerPolicy?.takeIf { it in available }
+        if (selected != null) {
+            applyAutomatedPlayerPolicy(selected)
+        } else {
+            showAutomatedPolicySelector(revertToManualOnCancel = true)
+        }
+    }
+
+    private fun disableAutomatedMovement() {
+        autoMovementEnabled = false
+        controller.setCurrentPlayerPolicy(PlayerPolicyType.MANUAL)
+        gameFragment()?.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        persistAdventureStateAsync()
+        refreshStatusBar()
+        refreshAutoToggle()
+    }
+
+    private fun applyAutomatedPlayerPolicy(policy: PlayerPolicyType) {
+        if (!controller.setCurrentPlayerPolicy(policy)) {
+            autoMovementEnabled = false
+            refreshAutoToggle()
+            return
+        }
+        selectedAutomatedPlayerPolicy = policy
+        controller.state.lastAutomatedPlayerPolicy = policy
+        autoMovementEnabled = true
+        gameFragment()?.setPlayerPolicy(policy)
+        persistAdventureStateAsync()
+        refreshStatusBar()
+        refreshAutoToggle()
+    }
+
+    private fun showAutomatedPolicySelector(revertToManualOnCancel: Boolean) {
+        val policies = automatedPlayerPolicies(controller.state.unlockedPlayerPolicies)
+        if (policies.isEmpty()) {
+            autoMovementEnabled = false
+            refreshAutoToggle()
+            return
+        }
+        val items = policies.map { it.label }.toTypedArray()
+        val checked = selectedAutomatedPlayerPolicy
+            ?.let { policies.indexOf(it) }
+            ?.takeIf { it >= 0 }
+            ?: -1
+        AlertDialog.Builder(this)
+            .setTitle(R.string.pick_automated_player_strategy)
+            .setSingleChoiceItems(items, checked) { dialog, which ->
+                applyAutomatedPlayerPolicy(policies[which])
+                dialog.dismiss()
+            }
+            .setOnCancelListener {
+                if (revertToManualOnCancel) disableAutomatedMovement()
+                refreshAutoToggle()
+            }
+            .show()
+    }
+
+    private fun promptForAutomatedPolicyIfNeeded() {
+        val policies = automatedPlayerPolicies(controller.state.unlockedPlayerPolicies)
+        if (automatedPolicyPromptShown || autoMovementEnabled || policies.isEmpty()) return
+        if (gameFragment() == null) return
+        automatedPolicyPromptShown = true
+        showAutomatedPolicySelector(revertToManualOnCancel = false)
+    }
+
+    private fun refreshAutoToggle() {
+        val available = automatedPlayerPolicies(controller.state.unlockedPlayerPolicies)
+        selectedAutomatedPlayerPolicy = selectedAutomatedPlayerPolicy?.takeIf { it in available }
+        if (autoMovementEnabled && selectedAutomatedPlayerPolicy == null) {
+            autoMovementEnabled = false
+        }
+        autoToggle.isEnabled = available.isNotEmpty()
+        autoToggle.isChecked = autoMovementEnabled && autoToggle.isEnabled
     }
 
     private fun showMenu() {
@@ -367,8 +487,16 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             .setSingleChoiceItems(items, current) { dialog, which ->
                 val chosen = unlocked[which]
                 if (controller.setCurrentPlayerPolicy(chosen)) {
+                    if (chosen == PlayerPolicyType.MANUAL) {
+                        autoMovementEnabled = false
+                    } else {
+                        selectedAutomatedPlayerPolicy = chosen
+                        controller.state.lastAutomatedPlayerPolicy = chosen
+                        autoMovementEnabled = true
+                    }
                     gameFragment()?.setPlayerPolicy(chosen)
                     refreshStatusBar()
+                    refreshAutoToggle()
                 }
                 dialog.dismiss()
             }
@@ -517,6 +645,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 val listView = (dialog as AlertDialog).listView
                 val picked = listView.checkedItemPosition.coerceAtLeast(0)
                 controller.applyPolicyUnlock(candidates[picked])
+                refreshAutoToggle()
                 persistAdventureStateAsync()
                 advanceToNextMaze()
             }
@@ -561,6 +690,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         // restart command). This prevents the engine's still-WIN status
         // from re-triggering the win handler on the next poll.
         refreshStatusBar()
+        refreshAutoToggle()
+        promptForAutomatedPolicyIfNeeded()
     }
 
     private fun handleMazeLost() {
@@ -622,6 +753,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             state.winStreakSinceLastBonus,
             AdventureConfig.STREAK_BONUS_THRESHOLD
         )
+        refreshAutoToggle()
     }
 
     private fun gameFragment(): GameFragment? {
@@ -706,5 +838,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         private const val TICK_INTERVAL_MS = 200L
         private const val SWIPE_DISTANCE_TOUCH_SLOP_MULTIPLIER = 4
         private const val SAVE_TIMEOUT_MS = 750L
+        private const val KEY_AUTO_MOVEMENT_ENABLED = "autoMovementEnabled"
+        private const val KEY_SELECTED_AUTO_POLICY = "selectedAutomatedPlayerPolicy"
+        private const val KEY_AUTO_PROMPT_SHOWN = "automatedPolicyPromptShown"
     }
 }

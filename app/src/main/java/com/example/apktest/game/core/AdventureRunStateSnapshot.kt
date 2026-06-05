@@ -25,6 +25,7 @@ data class AdventureRunStateSnapshot(
     val winStreakSinceLastBonus: Int,
     val unlockedPlayerPolicies: List<PlayerPolicyType>,
     val currentPlayerPolicy: PlayerPolicyType,
+    val lastAutomatedPlayerPolicy: PlayerPolicyType? = null,
     val currentMazeSeed: Long?,
     val currentMazeNpcPolicies: List<NpcPolicyType>,
     val currentMazeSnapshot: GameEngineSnapshot?,
@@ -40,6 +41,9 @@ data class AdventureRunStateSnapshot(
         put(KEY_STREAK, winStreakSinceLastBonus)
         put(KEY_UNLOCKED, JSONArray().apply { unlockedPlayerPolicies.forEach { put(it.name) } })
         put(KEY_CURRENT_POLICY, currentPlayerPolicy.name)
+        if (lastAutomatedPlayerPolicy != null) {
+            put(KEY_LAST_AUTO_POLICY, lastAutomatedPlayerPolicy.name)
+        }
         if (currentMazeSeed != null) put(KEY_MAZE_SEED, currentMazeSeed)
         put(KEY_MAZE_NPC_POLICIES, JSONArray().apply {
             currentMazeNpcPolicies.forEach { put(it.name) }
@@ -68,6 +72,7 @@ data class AdventureRunStateSnapshot(
         private const val KEY_STREAK = "streak"
         private const val KEY_UNLOCKED = "unlocked"
         private const val KEY_CURRENT_POLICY = "currentPolicy"
+        private const val KEY_LAST_AUTO_POLICY = "lastAutoPolicy"
         private const val KEY_MAZE_SEED = "mazeSeed"
         private const val KEY_MAZE_NPC_POLICIES = "mazeNpcPolicies"
         private const val KEY_MAZE_SNAPSHOT = "mazeSnapshot"
@@ -83,6 +88,7 @@ data class AdventureRunStateSnapshot(
                 winStreakSinceLastBonus = state.winStreakSinceLastBonus,
                 unlockedPlayerPolicies = state.unlockedPlayerPolicies.toList(),
                 currentPlayerPolicy = state.currentPlayerPolicy,
+                lastAutomatedPlayerPolicy = state.lastAutomatedPlayerPolicy,
                 currentMazeSeed = state.currentMazeSeed,
                 currentMazeNpcPolicies = state.currentMazeNpcPolicies,
                 currentMazeSnapshot = state.currentMazeSnapshot,
@@ -114,6 +120,10 @@ data class AdventureRunStateSnapshot(
                 }.getOrNull()
                     ?.takeIf { it in distinctUnlocked }
                     ?: PlayerPolicyType.MANUAL
+                val lastAutoPolicy = if (obj.has(KEY_LAST_AUTO_POLICY) && !obj.isNull(KEY_LAST_AUTO_POLICY)) {
+                    runCatching { PlayerPolicyType.valueOf(obj.getString(KEY_LAST_AUTO_POLICY)) }.getOrNull()
+                        ?.takeIf { it != PlayerPolicyType.MANUAL && it in distinctUnlocked }
+                } else null
                 val mazePolicies = if (obj.has(KEY_MAZE_NPC_POLICIES)) {
                     obj.getJSONArray(KEY_MAZE_NPC_POLICIES).let { arr ->
                         List(arr.length()) { i -> NpcPolicyType.valueOf(arr.getString(i)) }
@@ -145,6 +155,7 @@ data class AdventureRunStateSnapshot(
                     winStreakSinceLastBonus = obj.getInt(KEY_STREAK),
                     unlockedPlayerPolicies = distinctUnlocked,
                     currentPlayerPolicy = currentPolicy,
+                    lastAutomatedPlayerPolicy = lastAutoPolicy,
                     currentMazeSeed = mazeSeed,
                     currentMazeNpcPolicies = mazePolicies,
                     currentMazeSnapshot = mazeSnapshot,
@@ -185,6 +196,7 @@ data class AdventureRunStateSnapshot(
         winStreakSinceLastBonus = winStreakSinceLastBonus,
         unlockedPlayerPolicies = unlockedPlayerPolicies.toMutableList(),
         currentPlayerPolicy = currentPlayerPolicy,
+        lastAutomatedPlayerPolicy = lastAutomatedPlayerPolicy,
         currentMazeSeed = currentMazeSeed,
         currentMazeNpcPolicies = currentMazeNpcPolicies,
         currentMazeSnapshot = currentMazeSnapshot,
