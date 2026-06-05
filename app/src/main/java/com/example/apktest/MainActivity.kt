@@ -41,6 +41,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private var autoMovementEnabled: Boolean = false
     private var selectedAutomatedPlayerPolicy: PlayerPolicyType? = null
     private var automatedPolicyPromptShown: Boolean = false
+    private var automatedPolicyDialog: AlertDialog? = null
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal var resolvedSwipeCount: Int = 0
@@ -52,6 +53,13 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun menuPopoverTextSnapshotForTesting(): List<String> =
         menuPopover?.textSnapshotForTesting().orEmpty()
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun isAutomatedPolicyDialogShowingForTesting(): Boolean =
+        automatedPolicyDialog?.isShowing == true
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun isAutoToggleCheckedForTesting(): Boolean = autoToggle.isChecked
 
     /**
      * Feeds a MotionEvent directly into the swipe gesture detector, bypassing
@@ -331,7 +339,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             ?.let { policies.indexOf(it) }
             ?.takeIf { it >= 0 }
             ?: -1
-        AlertDialog.Builder(this)
+        automatedPolicyDialog = AlertDialog.Builder(this)
             .setTitle(R.string.pick_automated_player_strategy)
             .setSingleChoiceItems(items, checked) { dialog, which ->
                 applyAutomatedPlayerPolicy(policies[which])

@@ -18,6 +18,7 @@ class AdventureRunStateSnapshotTest {
             PlayerPolicyType.BFS_EXIT
         ),
         currentPlayerPolicy = PlayerPolicyType.BFS_EXIT,
+        lastAutomatedPlayerPolicy = PlayerPolicyType.BFS_EXIT,
         currentMazeSeed = 0xDEADBEEFL,
         currentMazeNpcPolicies = listOf(
             NpcPolicyType.DIRECT_CHASE,
@@ -128,6 +129,41 @@ class AdventureRunStateSnapshotTest {
         val restored = AdventureRunStateSnapshot.fromJson(invalid.toJson())
         assertNotNull(restored)
         assertEquals(PlayerPolicyType.MANUAL, restored!!.currentPlayerPolicy)
+    }
+
+    @Test
+    fun toJsonFromJson_roundTripsLastAutomatedPolicy() {
+        val state = sampleState().apply {
+            currentPlayerPolicy = PlayerPolicyType.MANUAL
+            lastAutomatedPlayerPolicy = PlayerPolicyType.BFS_EXIT
+        }
+        val snap = AdventureRunStateSnapshot.fromState(state, runSeed = 2L)
+        val restored = AdventureRunStateSnapshot.fromJson(snap.toJson())
+        assertNotNull(restored)
+        assertEquals(PlayerPolicyType.MANUAL, restored!!.currentPlayerPolicy)
+        assertEquals(PlayerPolicyType.BFS_EXIT, restored.lastAutomatedPlayerPolicy)
+        assertEquals(PlayerPolicyType.BFS_EXIT, restored.toState().lastAutomatedPlayerPolicy)
+    }
+
+    @Test
+    fun fromJson_dropsLastAutomatedPolicyWhenNotUnlocked() {
+        val invalid = AdventureRunStateSnapshot(
+            runSeed = 1L,
+            difficultyName = DifficultyPresets.MEDIUM.name,
+            currentMazeIndex = 0,
+            livesRemaining = 1,
+            winStreakSinceLastBonus = 0,
+            unlockedPlayerPolicies = listOf(PlayerPolicyType.MANUAL),
+            currentPlayerPolicy = PlayerPolicyType.MANUAL,
+            lastAutomatedPlayerPolicy = PlayerPolicyType.BFS_EXIT,
+            currentMazeSeed = null,
+            currentMazeNpcPolicies = emptyList(),
+            currentMazeSnapshot = null,
+            status = AdventureStatus.IN_PROGRESS
+        )
+        val restored = AdventureRunStateSnapshot.fromJson(invalid.toJson())
+        assertNotNull(restored)
+        assertNull(restored!!.lastAutomatedPlayerPolicy)
     }
 
     @Test

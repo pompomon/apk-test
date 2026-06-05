@@ -65,12 +65,20 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     private var autoMovementEnabled: Boolean = false
     private var selectedAutomatedPlayerPolicy: PlayerPolicyType? = null
     private var automatedPolicyPromptShown: Boolean = false
+    private var automatedPolicyDialog: AlertDialog? = null
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun adventureStatusBarTextForTesting(): CharSequence = statusBar.text
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun controllerForTesting(): AdventureRunController = controller
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun refreshAutoToggleForTesting() = refreshAutoToggle()
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun isAutomatedPolicyDialogShowingForTesting(): Boolean =
+        automatedPolicyDialog?.isShowing == true
 
     private var swipeGestureDetector: GestureDetector? = null
     private var swipeGestureActive: Boolean = false
@@ -420,7 +428,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             ?.let { policies.indexOf(it) }
             ?.takeIf { it >= 0 }
             ?: -1
-        AlertDialog.Builder(this)
+        automatedPolicyDialog = AlertDialog.Builder(this)
             .setTitle(R.string.pick_automated_player_strategy)
             .setSingleChoiceItems(items, checked) { dialog, which ->
                 applyAutomatedPlayerPolicy(policies[which])
