@@ -303,6 +303,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     override fun onDestroy() {
         dPadRepeatController.stop()
+        automatedPolicyDialog?.dismiss()
+        automatedPolicyDialog = null
         autosaveExecutor.shutdown()
         super.onDestroy()
     }

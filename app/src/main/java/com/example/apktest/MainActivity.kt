@@ -110,7 +110,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             }
             supportFragmentManager.beginTransaction()
                 .replace(R.id.fragmentGameHost, fragment)
-                .commit()
+                .commitNow()
         }
 
         setupControls()
@@ -278,6 +278,8 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     override fun onDestroy() {
         dPadRepeatController.stop()
+        automatedPolicyDialog?.dismiss()
+        automatedPolicyDialog = null
         autosaveExecutor.shutdown()
         super.onDestroy()
     }
