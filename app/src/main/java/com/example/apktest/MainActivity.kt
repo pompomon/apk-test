@@ -137,7 +137,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private fun loadOrResolveInitialPlayerPolicy(intent: Intent): PlayerPolicyType {
         val resume = intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false)
         if (resume) {
-            stateStore.load()?.playerPolicy?.let { return it }
+            return stateStore.load()?.playerPolicy ?: PlayerPolicyType.MANUAL
         }
         return enumOrDefault(
             intent.getStringExtra(SetupActivity.EXTRA_PLAYER_POLICY),

@@ -193,7 +193,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 ?: controller.state.lastAutomatedPlayerPolicy
             automatedPolicyPromptShown = controller.state.automatedPolicyPromptShown
         }
-        ensureSelectedAutomatedPolicyIsValid()
+        validateAndUpdateSelectedAutomatedPolicy()
         controller.state.automatedPolicyPromptShown = automatedPolicyPromptShown
     }
 
@@ -382,7 +382,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun enableAutomatedMovementOrSelect() {
-        val selected = ensureSelectedAutomatedPolicyIsValid()
+        val selected = validateAndUpdateSelectedAutomatedPolicy()
         if (selected != null) {
             applyAutomatedPlayerPolicy(selected)
         } else {
@@ -451,14 +451,14 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     private fun refreshAutoToggle() {
         val available = availableAutomatedPlayerPolicies()
-        if (autoMovementEnabled && ensureSelectedAutomatedPolicyIsValid() == null) {
+        if (autoMovementEnabled && validateAndUpdateSelectedAutomatedPolicy() == null) {
             autoMovementEnabled = false
         }
         autoToggle.isEnabled = available.isNotEmpty()
         autoToggle.isChecked = autoMovementEnabled && autoToggle.isEnabled
     }
 
-    private fun ensureSelectedAutomatedPolicyIsValid(): PlayerPolicyType? {
+    private fun validateAndUpdateSelectedAutomatedPolicy(): PlayerPolicyType? {
         val availableSelectedPolicy = selectedAutomatedPlayerPolicy
             ?.takeIf { it in availableAutomatedPlayerPolicies() }
         selectedAutomatedPlayerPolicy = availableSelectedPolicy

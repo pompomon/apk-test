@@ -277,9 +277,9 @@ class ExampleInstrumentedTest {
             scenario.onActivity { activity ->
                 val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonAuto)
                 assertNotNull("Auto toggle should be inflated", toggle)
-                assertTrue(
+                assertFalse(
                     "Adventure prompt should not show before an automated unlock",
-                    !activity.isAutomatedPolicyDialogShowingForTesting()
+                    activity.isAutomatedPolicyDialogShowingForTesting()
                 )
                 assertFalse("Auto toggle should start disabled with only MANUAL unlocked", toggle.isEnabled)
                 assertFalse("Auto toggle should start unchecked", toggle.isChecked)
