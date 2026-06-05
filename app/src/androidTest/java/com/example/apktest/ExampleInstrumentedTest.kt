@@ -19,6 +19,14 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ExampleInstrumentedTest {
+    private fun launchMainActivityWithBfsExitPolicy(): ActivityScenario<MainActivity> {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val intent = Intent(context, MainActivity::class.java).apply {
+            putExtra(SetupActivity.EXTRA_PLAYER_POLICY, PlayerPolicyType.BFS_EXIT.name)
+        }
+        return ActivityScenario.launch(intent)
+    }
+
     @Test
     fun useAppContext() {
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
@@ -300,14 +308,6 @@ class ExampleInstrumentedTest {
         }
     }
 
-
-    private fun launchMainActivityWithBfsExitPolicy(): ActivityScenario<MainActivity> {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val intent = Intent(context, MainActivity::class.java).apply {
-            putExtra(SetupActivity.EXTRA_PLAYER_POLICY, PlayerPolicyType.BFS_EXIT.name)
-        }
-        return ActivityScenario.launch(intent)
-    }
 
     private fun localizedPrefix(textRes: Int): String {
         return InstrumentationRegistry.getInstrumentation()

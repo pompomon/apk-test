@@ -128,13 +128,13 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             automatedPolicyPromptShown = savedInstanceState.getBoolean(KEY_AUTO_PROMPT_SHOWN, false)
             return
         }
-        val initialPolicy = loadOrResolveInitialPlayerPolicy(intent)
+        val initialPolicy = getInitialPlayerPolicyFromIntentOrStore(intent)
         autoMovementEnabled = initialPolicy != PlayerPolicyType.MANUAL
         selectedAutomatedPlayerPolicy = initialPolicy.takeIf { it != PlayerPolicyType.MANUAL }
         automatedPolicyPromptShown = false
     }
 
-    private fun loadOrResolveInitialPlayerPolicy(intent: Intent): PlayerPolicyType {
+    private fun getInitialPlayerPolicyFromIntentOrStore(intent: Intent): PlayerPolicyType {
         val resume = intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false)
         if (resume) {
             return stateStore.load()?.playerPolicy ?: PlayerPolicyType.MANUAL
