@@ -381,7 +381,7 @@ class ExampleInstrumentedTest {
         val endY = if (rootHeight > 0f) rawEndY.coerceIn(0f, rootHeight - 1f) else rawEndY
         // One overlay-origin swipe per target is sufficient for this regression
         // assertion and avoids emulator instability from higher synthetic volume.
-        dispatchSwipeViaTouchEvent(activity, startX, startY, endX, startY)
+        dispatchSwipeViaTouchEvent(activity, startX, startY, endX, endY)
     }
 
     private fun dispatchSwipeViaTouchEvent(
