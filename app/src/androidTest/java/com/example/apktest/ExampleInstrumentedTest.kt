@@ -300,6 +300,15 @@ class ExampleInstrumentedTest {
         }
     }
 
+
+    private fun launchMainActivityWithAutomatedPolicy(): ActivityScenario<MainActivity> {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val intent = Intent(context, MainActivity::class.java).apply {
+            putExtra(SetupActivity.EXTRA_PLAYER_POLICY, PlayerPolicyType.BFS_EXIT.name)
+        }
+        return ActivityScenario.launch(intent)
+    }
+
     private fun localizedPrefix(textRes: Int): String {
         return InstrumentationRegistry.getInstrumentation()
             .targetContext
@@ -351,13 +360,6 @@ class ExampleInstrumentedTest {
             maxOf(view.width, view.height) * OVERLAY_SWIPE_FALLBACK_MULTIPLIER
         }
 
-        private fun launchMainActivityWithAutomatedPolicy(): ActivityScenario<MainActivity> {
-            val context = InstrumentationRegistry.getInstrumentation().targetContext
-            val intent = Intent(context, MainActivity::class.java).apply {
-                putExtra(SetupActivity.EXTRA_PLAYER_POLICY, PlayerPolicyType.BFS_EXIT.name)
-            }
-            return ActivityScenario.launch(intent)
-        }
         // Direct each swipe *inward* (toward the screen interior) so synthetic
         // ACTION_MOVE/UP coordinates stay on-screen. Overlay views sit at the
         // window edges (menu button at top-right, D-pad strip at the bottom),
