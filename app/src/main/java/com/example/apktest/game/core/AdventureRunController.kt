@@ -49,6 +49,7 @@ data class AdventureRunState(
     var unlockedPlayerPolicies: MutableList<PlayerPolicyType> = mutableListOf(PlayerPolicyType.MANUAL),
     var currentPlayerPolicy: PlayerPolicyType = PlayerPolicyType.MANUAL,
     var lastAutomatedPlayerPolicy: PlayerPolicyType? = null,
+    var automatedPolicyPromptShown: Boolean = false,
     var currentMazeSeed: Long? = null,
     var currentMazeNpcPolicies: List<NpcPolicyType> = emptyList(),
     var currentMazeSnapshot: GameEngineSnapshot? = null,

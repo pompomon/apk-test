@@ -19,6 +19,7 @@ class AdventureRunStateSnapshotTest {
         ),
         currentPlayerPolicy = PlayerPolicyType.BFS_EXIT,
         lastAutomatedPlayerPolicy = PlayerPolicyType.BFS_EXIT,
+        automatedPolicyPromptShown = true,
         currentMazeSeed = 0xDEADBEEFL,
         currentMazeNpcPolicies = listOf(
             NpcPolicyType.DIRECT_CHASE,
@@ -143,6 +144,16 @@ class AdventureRunStateSnapshotTest {
         assertEquals(PlayerPolicyType.MANUAL, restored!!.currentPlayerPolicy)
         assertEquals(PlayerPolicyType.BFS_EXIT, restored.lastAutomatedPlayerPolicy)
         assertEquals(PlayerPolicyType.BFS_EXIT, restored.toState().lastAutomatedPlayerPolicy)
+    }
+
+    @Test
+    fun toJsonFromJson_roundTripsAutomatedPromptShown() {
+        val state = sampleState().apply { automatedPolicyPromptShown = true }
+        val snap = AdventureRunStateSnapshot.fromState(state, runSeed = 3L)
+        val restored = AdventureRunStateSnapshot.fromJson(snap.toJson())
+        assertNotNull(restored)
+        assertTrue(restored!!.automatedPolicyPromptShown)
+        assertTrue(restored.toState().automatedPolicyPromptShown)
     }
 
     @Test

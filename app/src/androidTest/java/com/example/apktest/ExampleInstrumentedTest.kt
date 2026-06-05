@@ -191,57 +191,6 @@ class ExampleInstrumentedTest {
                 assertTrue("Game fragment should be added before opening menu", gameFragment.isAdded)
             }
 
-            @Test
-            fun classicAutoToggleStartsCheckedForAutomatedPolicy() {
-                launchMainActivityWithoutPolicyPrompt().use { scenario ->
-                    scenario.onActivity { activity ->
-                        val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonAuto)
-                        assertNotNull("Auto toggle should be inflated", toggle)
-                        assertTrue("Auto toggle should be enabled when automated policies exist", toggle.isEnabled)
-                        assertTrue("Auto toggle should reflect automated launch policy", toggle.isChecked)
-                        assertTrue(activity.isAutoToggleCheckedForTesting())
-                    }
-                }
-            }
-
-            @Test
-            fun classicManualStartShowsAutomatedPolicyPicker() {
-                ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                    waitForAutomatedPolicyDialog(scenario)
-                    scenario.onActivity { activity ->
-                        assertTrue(
-                            "Manual Classic starts should prompt for an automated policy",
-                            activity.isAutomatedPolicyDialogShowingForTesting()
-                        )
-                    }
-                }
-            }
-
-            @Test
-            fun adventureAutoToggleDisabledBeforeAutomatedUnlock() {
-                ActivityScenario.launch(AdventureActivity::class.java).use { scenario ->
-                    scenario.onActivity { activity ->
-                        val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonAuto)
-                        assertNotNull("Auto toggle should be inflated", toggle)
-                        assertTrue("Adventure prompt should not show before an automated unlock", !activity.isAutomatedPolicyDialogShowingForTesting())
-                        assertTrue("Auto toggle should start disabled with only MANUAL unlocked", !toggle.isEnabled)
-                        assertTrue("Auto toggle should start unchecked", !toggle.isChecked)
-                    }
-                }
-            }
-
-            @Test
-            fun adventureAutoToggleEnabledAfterAutomatedUnlock() {
-                ActivityScenario.launch(AdventureActivity::class.java).use { scenario ->
-                    scenario.onActivity { activity ->
-                        activity.controllerForTesting().applyPolicyUnlock(PlayerPolicyType.BFS_EXIT)
-                        activity.refreshAutoToggleForTesting()
-                        val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonAuto)
-                        assertTrue("Auto toggle should enable after an automated policy unlock", toggle.isEnabled)
-                        assertTrue("Auto toggle should remain unchecked until selected", !toggle.isChecked)
-                    }
-                }
-            }
             scenario.onActivity { activity ->
                 activity.findViewById<android.view.View>(R.id.buttonMenu).performClick()
             }
@@ -291,6 +240,61 @@ class ExampleInstrumentedTest {
                             text.contains(localizedTokenAfterPipes(R.string.powerups_detail_template, 1))
                     }
                 )
+            }
+        }
+    }
+
+    @Test
+    fun classicAutoToggleStartsCheckedForAutomatedPolicy() {
+        launchMainActivityWithoutPolicyPrompt().use { scenario ->
+            scenario.onActivity { activity ->
+                val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonAuto)
+                assertNotNull("Auto toggle should be inflated", toggle)
+                assertTrue("Auto toggle should be enabled when automated policies exist", toggle.isEnabled)
+                assertTrue("Auto toggle should reflect automated launch policy", toggle.isChecked)
+                assertTrue(activity.isAutoToggleCheckedForTesting())
+            }
+        }
+    }
+
+    @Test
+    fun classicManualStartShowsAutomatedPolicyPicker() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            waitForAutomatedPolicyDialog(scenario)
+            scenario.onActivity { activity ->
+                assertTrue(
+                    "Manual Classic starts should prompt for an automated policy",
+                    activity.isAutomatedPolicyDialogShowingForTesting()
+                )
+            }
+        }
+    }
+
+    @Test
+    fun adventureAutoToggleDisabledBeforeAutomatedUnlock() {
+        ActivityScenario.launch(AdventureActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonAuto)
+                assertNotNull("Auto toggle should be inflated", toggle)
+                assertTrue(
+                    "Adventure prompt should not show before an automated unlock",
+                    !activity.isAutomatedPolicyDialogShowingForTesting()
+                )
+                assertTrue("Auto toggle should start disabled with only MANUAL unlocked", !toggle.isEnabled)
+                assertTrue("Auto toggle should start unchecked", !toggle.isChecked)
+            }
+        }
+    }
+
+    @Test
+    fun adventureAutoToggleEnabledAfterAutomatedUnlock() {
+        ActivityScenario.launch(AdventureActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.controllerForTesting().applyPolicyUnlock(PlayerPolicyType.BFS_EXIT)
+                activity.refreshAutoToggleForTesting()
+                val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonAuto)
+                assertTrue("Auto toggle should enable after an automated policy unlock", toggle.isEnabled)
+                assertTrue("Auto toggle should remain unchecked until selected", !toggle.isChecked)
             }
         }
     }

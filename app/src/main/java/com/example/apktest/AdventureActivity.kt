@@ -191,11 +191,12 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             selectedAutomatedPlayerPolicy = controller.state.currentPlayerPolicy
                 .takeIf { it != PlayerPolicyType.MANUAL }
                 ?: controller.state.lastAutomatedPlayerPolicy
-            automatedPolicyPromptShown = false
+            automatedPolicyPromptShown = controller.state.automatedPolicyPromptShown
         }
         selectedAutomatedPlayerPolicy = selectedAutomatedPlayerPolicy
             ?.takeIf { it in automatedPlayerPolicies(controller.state.unlockedPlayerPolicies) }
         controller.state.lastAutomatedPlayerPolicy = selectedAutomatedPlayerPolicy
+        controller.state.automatedPolicyPromptShown = automatedPolicyPromptShown
     }
 
     private fun loadOrBuildController(
@@ -446,6 +447,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         if (automatedPolicyPromptShown || autoMovementEnabled || policies.isEmpty()) return
         if (gameFragment() == null) return
         automatedPolicyPromptShown = true
+        controller.state.automatedPolicyPromptShown = true
+        persistAdventureStateAsync()
         showAutomatedPolicySelector(revertToManualOnCancel = false)
     }
 

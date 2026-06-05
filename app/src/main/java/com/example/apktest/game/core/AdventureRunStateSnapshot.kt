@@ -25,11 +25,12 @@ data class AdventureRunStateSnapshot(
     val winStreakSinceLastBonus: Int,
     val unlockedPlayerPolicies: List<PlayerPolicyType>,
     val currentPlayerPolicy: PlayerPolicyType,
-    val lastAutomatedPlayerPolicy: PlayerPolicyType? = null,
     val currentMazeSeed: Long?,
     val currentMazeNpcPolicies: List<NpcPolicyType>,
     val currentMazeSnapshot: GameEngineSnapshot?,
     val status: AdventureStatus,
+    val lastAutomatedPlayerPolicy: PlayerPolicyType? = null,
+    val automatedPolicyPromptShown: Boolean = false,
     val pendingStartingPowerUp: PowerUpType? = null
 ) {
     fun toJson(): String = JSONObject().apply {
@@ -44,6 +45,7 @@ data class AdventureRunStateSnapshot(
         if (lastAutomatedPlayerPolicy != null) {
             put(KEY_LAST_AUTO_POLICY, lastAutomatedPlayerPolicy.name)
         }
+        put(KEY_AUTO_PROMPT_SHOWN, automatedPolicyPromptShown)
         if (currentMazeSeed != null) put(KEY_MAZE_SEED, currentMazeSeed)
         put(KEY_MAZE_NPC_POLICIES, JSONArray().apply {
             currentMazeNpcPolicies.forEach { put(it.name) }
@@ -73,6 +75,7 @@ data class AdventureRunStateSnapshot(
         private const val KEY_UNLOCKED = "unlocked"
         private const val KEY_CURRENT_POLICY = "currentPolicy"
         private const val KEY_LAST_AUTO_POLICY = "lastAutoPolicy"
+        private const val KEY_AUTO_PROMPT_SHOWN = "autoPromptShown"
         private const val KEY_MAZE_SEED = "mazeSeed"
         private const val KEY_MAZE_NPC_POLICIES = "mazeNpcPolicies"
         private const val KEY_MAZE_SNAPSHOT = "mazeSnapshot"
@@ -89,6 +92,7 @@ data class AdventureRunStateSnapshot(
                 unlockedPlayerPolicies = state.unlockedPlayerPolicies.toList(),
                 currentPlayerPolicy = state.currentPlayerPolicy,
                 lastAutomatedPlayerPolicy = state.lastAutomatedPlayerPolicy,
+                automatedPolicyPromptShown = state.automatedPolicyPromptShown,
                 currentMazeSeed = state.currentMazeSeed,
                 currentMazeNpcPolicies = state.currentMazeNpcPolicies,
                 currentMazeSnapshot = state.currentMazeSnapshot,
@@ -156,6 +160,7 @@ data class AdventureRunStateSnapshot(
                     unlockedPlayerPolicies = distinctUnlocked,
                     currentPlayerPolicy = currentPolicy,
                     lastAutomatedPlayerPolicy = lastAutoPolicy,
+                    automatedPolicyPromptShown = obj.optBoolean(KEY_AUTO_PROMPT_SHOWN, false),
                     currentMazeSeed = mazeSeed,
                     currentMazeNpcPolicies = mazePolicies,
                     currentMazeSnapshot = mazeSnapshot,
@@ -197,6 +202,7 @@ data class AdventureRunStateSnapshot(
         unlockedPlayerPolicies = unlockedPlayerPolicies.toMutableList(),
         currentPlayerPolicy = currentPlayerPolicy,
         lastAutomatedPlayerPolicy = lastAutomatedPlayerPolicy,
+        automatedPolicyPromptShown = automatedPolicyPromptShown,
         currentMazeSeed = currentMazeSeed,
         currentMazeNpcPolicies = currentMazeNpcPolicies,
         currentMazeSnapshot = currentMazeSnapshot,
