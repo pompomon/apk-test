@@ -197,7 +197,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             automatedPolicyPromptShown = controller.state.automatedPolicyPromptShown
         }
         validateAndUpdateSelectedAutomatedPolicy()
-        controller.state.automatedPolicyPromptShown = automatedPolicyPromptShown
+        controller.setAutomatedPolicyPromptShown(automatedPolicyPromptShown)
     }
 
     private fun loadOrBuildController(
@@ -411,7 +411,6 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             return
         }
         selectedAutomatedPlayerPolicy = policy
-        controller.state.lastAutomatedPlayerPolicy = policy
         autoMovementEnabled = true
         gameFragment()?.setPlayerPolicy(policy)
         persistAdventureStateAsync()
@@ -449,7 +448,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         if (automatedPolicyPromptShown || autoMovementEnabled || policies.isEmpty()) return
         if (gameFragment() == null) return
         automatedPolicyPromptShown = true
-        controller.state.automatedPolicyPromptShown = true
+        controller.setAutomatedPolicyPromptShown(true)
         persistAdventureStateAsync()
         showAutomatedPolicySelector(revertToManualOnCancel = false)
     }
@@ -467,7 +466,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         val availableSelectedPolicy = selectedAutomatedPlayerPolicy
             ?.takeIf { it in availableAutomatedPlayerPolicies() }
         selectedAutomatedPlayerPolicy = availableSelectedPolicy
-        controller.state.lastAutomatedPlayerPolicy = availableSelectedPolicy
+        controller.setLastAutomatedPlayerPolicy(availableSelectedPolicy)
         return availableSelectedPolicy
     }
 
@@ -514,7 +513,6 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                         autoMovementEnabled = false
                     } else {
                         selectedAutomatedPlayerPolicy = chosen
-                        controller.state.lastAutomatedPlayerPolicy = chosen
                         autoMovementEnabled = true
                     }
                     gameFragment()?.setPlayerPolicy(chosen)

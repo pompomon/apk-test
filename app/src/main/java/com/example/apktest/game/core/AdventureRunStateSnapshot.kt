@@ -64,7 +64,7 @@ data class AdventureRunStateSnapshot(
     }.toString()
 
     companion object {
-        const val SCHEMA_VERSION = 2
+        const val SCHEMA_VERSION = 1
 
         private const val KEY_VERSION = "v"
         private const val KEY_RUN_SEED = "runSeed"

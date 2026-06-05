@@ -292,12 +292,36 @@ class AdventureRunController(
 
     /**
      * Switch the currently-selected player policy. Allowed only if
-     * [type] has been unlocked. Returns `true` on success.
+     * [type] has been unlocked. Returns `true` on success. When [type] is
+     * an automated (non-MANUAL) policy, it is also recorded as the
+     * run's [AdventureRunState.lastAutomatedPlayerPolicy] so a later toggle
+     * back to Auto can restore it.
      */
     fun setCurrentPlayerPolicy(type: PlayerPolicyType): Boolean {
         if (type !in state.unlockedPlayerPolicies) return false
         state.currentPlayerPolicy = type
+        if (type != PlayerPolicyType.MANUAL) {
+            state.lastAutomatedPlayerPolicy = type
+        }
         return true
+    }
+
+    /**
+     * Record the most-recently used automated policy, or `null` to clear it
+     * when the previously-remembered policy is no longer available. Kept on
+     * the controller so the host UI never mutates [AdventureRunState]
+     * directly.
+     */
+    fun setLastAutomatedPlayerPolicy(type: PlayerPolicyType?) {
+        state.lastAutomatedPlayerPolicy = type
+    }
+
+    /**
+     * Update whether the one-time automated-policy picker has already been
+     * shown for this run.
+     */
+    fun setAutomatedPolicyPromptShown(shown: Boolean) {
+        state.automatedPolicyPromptShown = shown
     }
 
     /**
