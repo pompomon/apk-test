@@ -106,7 +106,7 @@ Primary sort order:
 4. Lower median successful step count.
 5. Stable tie-break by `PlayerPolicyType.ordinal`.
 
-This is a complete tie-breaking cascade: compare each metric in order and only fall through to the next metric when the previous values tie. Use `PlayerPolicyType.ordinal` only after all numeric metrics tie. Policies with zero successful runs have undefined successful-time statistics; keep their median, mean, p90, and median-step values as `null` in the aggregate model and place them in a failed tier below every policy with at least one success, ordered by loss/timeout counts and then ordinal. This sort keeps "fast but frequently loses" policies below consistently successful policies. If the product goal is pure speed regardless of loss rate, make the sort configurable but keep this survival-first ordering as the default.
+This is a complete tie-breaking cascade: compare each metric in order and only fall through to the next metric when the previous values tie. Use `PlayerPolicyType.ordinal` only after all numeric metrics tie. Policies with zero successful runs have undefined successful-time statistics; keep their median, mean, p90, and median-step values as `null` in the aggregate model and place them in a failed tier below every policy with at least one success. Inside that failed tier, sort by fewer losses, then fewer timeouts, then `PlayerPolicyType.ordinal`. This sort keeps "fast but frequently loses" policies below consistently successful policies. If the product goal is pure speed regardless of loss rate, make the sort configurable but keep this survival-first ordering as the default.
 
 ## Benchmark scenario matrix
 
@@ -116,7 +116,7 @@ Start with a small deterministic matrix that is cheap enough for JVM tests:
 - Player policies: all policies from `automatedPlayerPolicies()` in `AutomatedPlayerPolicies.kt`.
 - NPC policies: Direct Chase, Predictive, Patrol/Guard.
 - Seeds: a fixed curated list, for example 50-100 seeds that exercise different maze layouts.
-- Starting power-up: none by default. Add a second benchmark mode for each `PowerUpType` only if ranking must account for Adventure starting boosts.
+- Starting power-up: none by default. If ranking must account for Adventure starting boosts, add one separate full benchmark matrix per `PowerUpType` so each starting boost is measured independently.
 
 Keep every policy evaluation on a given scenario identical except for the player policy:
 
