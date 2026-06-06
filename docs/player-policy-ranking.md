@@ -7,7 +7,7 @@ This document describes the automated player policies currently available in the
 - Rank only automated player policies returned by `automatedPlayerPolicies()`, which excludes `MANUAL`.
 - Use `elapsedSeconds` from `GameEngine` as the primary "time to exit" metric because it already reflects movement speed, power-up effects, freeze effects, and NPC timing.
 - Treat a run as successful only when `GameEngine.status == WIN`.
-- Treat `LOSE` and timeout runs as incomplete attempts and rank them after successful policies unless the product goal is explicitly "survival first."
+- Treat `LOSE` and timeout runs as incomplete attempts. The default ranking is survival-first, so policies with more successful exits rank above faster policies that lose or time out more often.
 - Keep the benchmark deterministic: every policy must be evaluated against the same difficulty, seed set, NPC policy set, and starting power-up rules.
 - Do not use live Android UI timing for ranking. The ranking harness should live in pure game-core/JVM code so it can run in unit tests and CI.
 
@@ -55,7 +55,7 @@ Expected ranking profile: should usually tie BFS on path length and elapsed time
 
 The inner Pledge policy chooses a reference direction that best aligns the player-to-exit vector, preferring the dominant axis and using north/south on ties. It walks straight in that reference direction when possible. When blocked, it switches to left-hand wall following and tracks net rotation. Once the net rotation unwinds to zero and the reference direction is walkable again, it resumes straight movement.
 
-The policy is stateful. Its `reset()` clears the reference direction, rotation count, following mode, and cached follow-facing, so ranking runs must use fresh policy instances or restart/reset the engine per run.
+The policy is stateful. Its `reset()` clears the reference direction, rotation count, following mode, and cached follow-facing. For benchmark consistency, prefer constructing a fresh `GameEngine` and policy instance per scenario instead of relying on reset calls between scenarios.
 
 Expected ranking profile: often faster than plain wall following when the exit lies broadly in the reference direction, but slower than BFS/A* because it does not compute a global shortest path.
 
@@ -145,7 +145,7 @@ Keep every policy evaluation on a given scenario identical except for the player
    - Ensure countdown is not armed.
    - Step `update(dt)` until `WIN`, `LOSE`, or timeout.
    - Record status, elapsed seconds, and steps.
-4. Use a timestep that cannot skip over movement cadence unexpectedly. A safe default is a small fraction of the fastest movement interval, such as `1f / (max(playerMovesPerSecond, npcMovesPerSecond) * 4f)`.
+4. Use a timestep that cannot skip over movement cadence unexpectedly. `playerMovesPerSecond` and `npcMovesPerSecond` are frequencies, so convert the fastest frequency into a small substep period; a safe default is `1f / (max(playerMovesPerSecond, npcMovesPerSecond) * 4f)`.
 5. Aggregate all run results by policy.
 6. Sort policies using the ranking metric above.
 7. Expose the result as a pure Kotlin value object that tests, debug UI, or future tooling can render.
@@ -155,6 +155,7 @@ Keep every policy evaluation on a given scenario identical except for the player
 Add focused JVM unit tests rather than statistical/flaky assertions:
 
 - `automatedPlayerPolicies_excludesManual` if not already covered.
+- Every policy returned by `automatedPlayerPolicies()` is included in the benchmark exactly once per scenario.
 - Ranking uses the same scenario count for every automated policy.
 - A simple open-grid/no-NPC fixture ranks BFS and A* as successful and tied on elapsed time or steps.
 - Losses and timeouts sort after successful policies when success rates differ.
