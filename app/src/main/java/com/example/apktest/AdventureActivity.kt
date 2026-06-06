@@ -397,6 +397,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         if (selected != null) {
             applyAutomatedPlayerPolicy(selected)
         } else {
+            autoMovementEnabled = false
+            refreshAutoToggle()
             showAutomatedPolicySelector(revertToManualOnCancel = true)
         }
     }

@@ -335,6 +335,8 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         if (selected != null && selected in automatedPlayerPolicies()) {
             applyAutomatedPlayerPolicy(selected)
         } else {
+            autoMovementEnabled = false
+            refreshAutoToggle()
             showAutomatedPolicySelector(revertToManualOnCancel = true)
         }
     }
