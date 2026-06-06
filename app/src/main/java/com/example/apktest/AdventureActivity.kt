@@ -524,6 +524,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                         autoMovementEnabled = true
                     }
                     gameFragment()?.setPlayerPolicy(chosen)
+                    persistAdventureStateAsync()
                     refreshStatusBar()
                     refreshAutoToggle()
                 }

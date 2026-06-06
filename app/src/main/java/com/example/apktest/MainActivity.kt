@@ -160,14 +160,15 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         intent: Intent,
         resumeSnapshot: GameEngineSnapshot?
     ): PlayerPolicyType {
-        val resume = intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false)
-        if (resume) {
-            return resumeSnapshot?.playerPolicy ?: PlayerPolicyType.MANUAL
-        }
-        return enumOrDefault(
+        val intentPolicy = enumOrDefault(
             intent.getStringExtra(SetupActivity.EXTRA_PLAYER_POLICY),
             PlayerPolicyType.MANUAL
         )
+        val resume = intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false)
+        if (resume) {
+            return resumeSnapshot?.playerPolicy ?: intentPolicy
+        }
+        return intentPolicy
     }
 
     private fun buildGameFragmentArgs(intent: Intent, resumeSnapshot: GameEngineSnapshot?): Bundle {
