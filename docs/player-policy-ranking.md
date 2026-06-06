@@ -106,7 +106,7 @@ Primary sort order:
 4. Lower median successful step count.
 5. Stable tie-break by `PlayerPolicyType.ordinal`.
 
-This sort keeps "fast but frequently loses" policies below consistently successful policies. If the product goal is pure speed regardless of loss rate, make the sort configurable but keep this survival-first ordering as the default.
+This is a complete tie-breaking cascade: compare each metric in order and only fall through to the next metric when the previous values tie. Use `PlayerPolicyType.ordinal` only after all numeric metrics tie. Policies with zero successful runs have undefined successful-time statistics; keep their median, mean, p90, and median-step values as `null` in the aggregate model and place them in a failed tier below every policy with at least one success, ordered by loss/timeout counts and then ordinal. This sort keeps "fast but frequently loses" policies below consistently successful policies. If the product goal is pure speed regardless of loss rate, make the sort configurable but keep this survival-first ordering as the default.
 
 ## Benchmark scenario matrix
 
@@ -147,7 +147,7 @@ Keep every policy evaluation on a given scenario identical except for the player
    - Record status, elapsed seconds, and steps.
 4. Use a timestep that cannot skip over movement cadence unexpectedly. `playerMovesPerSecond` and `npcMovesPerSecond` are frequencies, so convert the fastest frequency into a small substep period. A safe default is `1f / (max(playerMovesPerSecond, npcMovesPerSecond) * 4f)`. The 4x oversampling keeps each simulation update at no more than one quarter of the fastest actor's movement interval, reducing coarse-grained timeout and power-up lifecycle artifacts while still letting `GameEngine.update()` process its normal movement accumulators.
 5. Aggregate all run results by policy.
-6. Sort policies using the ranking metric above.
+6. Sort policies using the complete ranking metric cascade above, including the failed tier for policies with zero successful exits.
 7. Expose the result as a pure Kotlin value object that tests, debug UI, or future tooling can render.
 
 ## Validation plan
