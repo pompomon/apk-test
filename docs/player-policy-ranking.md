@@ -116,7 +116,7 @@ Start with a small deterministic matrix that is cheap enough for JVM tests:
 - Player policies: all policies from `automatedPlayerPolicies()` in `AutomatedPlayerPolicies.kt`.
 - NPC policies: Direct Chase, Predictive, Patrol/Guard.
 - Seeds: a fixed curated list, for example 50-100 seeds that exercise different maze layouts.
-- Starting power-up: none by default. If ranking must account for Adventure starting boosts, add one separate full benchmark matrix per `PowerUpType` so each starting boost is measured independently.
+- Starting power-up: none by default. If ranking must account for optional run-start power-up effects, add one separate full benchmark matrix per `PowerUpType` so each starting boost is measured independently.
 
 Keep every policy evaluation on a given scenario identical except for the player policy:
 
@@ -145,7 +145,10 @@ Keep every policy evaluation on a given scenario identical except for the player
    - Ensure countdown is not armed.
    - Step `update(dt)` until `WIN`, `LOSE`, or timeout.
    - Record status, elapsed seconds, and steps.
-4. Use a timestep that cannot skip over movement cadence unexpectedly. `playerMovesPerSecond` and `npcMovesPerSecond` are frequencies, so convert the fastest frequency into a small substep period. A safe default is `1f / (max(playerMovesPerSecond, npcMovesPerSecond) * 4f)`. The 4x oversampling keeps each simulation update at no more than one quarter of the fastest actor's movement interval, reducing coarse-grained timeout and power-up lifecycle artifacts while still letting `GameEngine.update()` process its normal movement accumulators.
+4. Choose a timestep that cannot skip over movement cadence unexpectedly:
+   - `playerMovesPerSecond` and `npcMovesPerSecond` are frequencies, so convert the fastest frequency into a small substep period.
+   - A safe default is `1f / (max(playerMovesPerSecond, npcMovesPerSecond) * 4f)`.
+   - The 4x oversampling keeps each simulation update at no more than one quarter of the fastest actor's movement interval, reducing coarse-grained timeout and power-up lifecycle artifacts while still letting `GameEngine.update()` process its normal movement accumulators.
 5. Aggregate all run results by policy.
 6. Sort policies using the complete ranking metric cascade above, including the failed tier for policies with zero successful exits.
 7. Expose the result as a pure Kotlin value object that tests, debug UI, or future tooling can render.
