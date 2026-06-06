@@ -360,29 +360,26 @@ class ExampleInstrumentedTest {
             maxOf(view.width, view.height) * OVERLAY_SWIPE_FALLBACK_MULTIPLIER
         }
 
-        // Direct each swipe *inward* (toward the screen interior) so synthetic
-        // ACTION_MOVE/UP coordinates stay on-screen. Overlay views sit at the
-        // window edges (menu button at top-right, D-pad strip at the bottom),
-        // so pushing end coordinates further outward generates far-off-screen
-        // touches that some emulator input stacks have crashed on. Span is
-        // unchanged so the fling threshold remains comfortably exceeded.
+        // Direct each swipe horizontally *inward* so synthetic ACTION_MOVE/UP
+        // coordinates stay on-screen. Pushing end coordinates further outward
+        // generates far-off-screen touches that some emulator input stacks have
+        // crashed on. Span is unchanged so the fling threshold remains
+        // comfortably exceeded.
         val rootView = activity.window.decorView
         val rootWidth = rootView.width.toFloat()
-        val rootHeight = rootView.height.toFloat()
         val signX = if (rootWidth > 0f && startX > rootWidth / 2f) -1f else 1f
-        val signY = if (rootHeight > 0f && startY > rootHeight / 2f) -1f else 1f
         val rawEndX = startX + signX * swipeSpan
-        val rawEndY = startY + signY * swipeSpan
-        // Clamp end coordinates into window bounds so synthetic ACTION_MOVE/UP
-        // events never travel off-screen. If decorView reports zero size (some
+        // Keep the swipe horizontal so it remains unambiguous to SwipeDirectionResolver
+        // if an overlay-origin event is incorrectly forwarded to the gesture detector.
+        // Clamp the end coordinate into window bounds so synthetic ACTION_MOVE/UP
+        // events never travel off-screen. If decorView reports zero width (some
         // emulator quirks), fall back to leaving the value unclamped so the
         // swipe still has enough displacement to exceed minDistance.
         val endX = if (rootWidth > 0f) rawEndX.coerceIn(0f, rootWidth - 1f) else rawEndX
-        val endY = if (rootHeight > 0f) rawEndY.coerceIn(0f, rootHeight - 1f) else rawEndY
         // One inward overlay-origin swipe to the clamped endpoint is sufficient
         // for this regression assertion and avoids emulator instability from
         // higher synthetic volume.
-        dispatchSwipeViaTouchEvent(activity, startX, startY, endX, endY)
+        dispatchSwipeViaTouchEvent(activity, startX, startY, endX, startY)
     }
 
     private fun dispatchSwipeViaTouchEvent(
