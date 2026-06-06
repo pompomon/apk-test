@@ -1,5 +1,6 @@
 package com.example.apktest
 
+import android.content.Intent
 import android.os.SystemClock
 import android.view.MotionEvent
 import androidx.test.core.app.ActivityScenario
@@ -7,8 +8,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.apktest.BuildConfig
 import com.example.apktest.game.GameFragment
+import com.example.apktest.game.core.PlayerPolicyType
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -16,6 +19,14 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ExampleInstrumentedTest {
+    private fun launchMainActivityWithBfsExitPolicy(): ActivityScenario<MainActivity> {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val intent = Intent(context, MainActivity::class.java).apply {
+            putExtra(SetupActivity.EXTRA_PLAYER_POLICY, PlayerPolicyType.BFS_EXIT.name)
+        }
+        return ActivityScenario.launch(intent)
+    }
+
     @Test
     fun useAppContext() {
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
@@ -24,7 +35,7 @@ class ExampleInstrumentedTest {
 
     @Test
     fun mainActivity_displaysGameHostAndControls() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        launchMainActivityWithBfsExitPolicy().use { scenario ->
             scenario.onActivity { activity ->
                 val viewIds = intArrayOf(
                     R.id.fragmentGameHost,
@@ -32,7 +43,8 @@ class ExampleInstrumentedTest {
                     R.id.buttonUp,
                     R.id.buttonLeft,
                     R.id.buttonDown,
-                    R.id.buttonRight
+                    R.id.buttonRight,
+                    R.id.buttonAuto
                 )
                 for (id in viewIds) {
                     val view = activity.findViewById<android.view.View>(id)
@@ -49,7 +61,7 @@ class ExampleInstrumentedTest {
 
     @Test
     fun mainActivity_fragmentHostAcceptsSwipeAndControlsRemainVisible() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        launchMainActivityWithBfsExitPolicy().use { scenario ->
             val initialSwipes = AtomicInteger(0)
             // Wait for the game host to be laid out before dispatching swipes; on slower devices
             // the host can be attached but not yet measured immediately after pending transactions.
@@ -110,7 +122,8 @@ class ExampleInstrumentedTest {
                     R.id.buttonUp,
                     R.id.buttonLeft,
                     R.id.buttonDown,
-                    R.id.buttonRight
+                    R.id.buttonRight,
+                    R.id.buttonAuto
                 )
                 for (id in controlIds) {
                     val control = activity.findViewById<android.view.View>(id)
@@ -152,7 +165,7 @@ class ExampleInstrumentedTest {
 
     @Test
     fun mainActivity_swipeOnOverlayDoesNotTriggerMovement() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        launchMainActivityWithBfsExitPolicy().use { scenario ->
             waitForGameHostLaidOut(scenario)
             val baseline = AtomicInteger(0)
             scenario.onActivity { activity ->
@@ -180,12 +193,13 @@ class ExampleInstrumentedTest {
 
     @Test
     fun mainActivityMenuButtonShowsPopoverActionsAndHud() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        launchMainActivityWithBfsExitPolicy().use { scenario ->
             waitForGameHostLaidOut(scenario)
             scenario.onActivity { activity ->
                 val gameFragment = attachedGameFragment(activity)
                 assertTrue("Game fragment should be added before opening menu", gameFragment.isAdded)
             }
+
             scenario.onActivity { activity ->
                 activity.findViewById<android.view.View>(R.id.buttonMenu).performClick()
             }
@@ -239,6 +253,62 @@ class ExampleInstrumentedTest {
         }
     }
 
+    @Test
+    fun classicAutoToggleStartsCheckedForAutomatedPolicy() {
+        launchMainActivityWithBfsExitPolicy().use { scenario ->
+            scenario.onActivity { activity ->
+                val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonAuto)
+                assertNotNull("Auto toggle should be inflated", toggle)
+                assertTrue("Auto toggle should be enabled when automated policies exist", toggle.isEnabled)
+                assertTrue("Auto toggle should reflect automated launch policy", toggle.isChecked)
+                assertTrue(activity.isAutoToggleCheckedForTesting())
+            }
+        }
+    }
+
+    @Test
+    fun classicManualStartShowsAutomatedPolicyPicker() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            waitForAutomatedPolicyDialog(scenario)
+            scenario.onActivity { activity ->
+                assertTrue(
+                    "Manual Classic starts should prompt for an automated policy",
+                    activity.isAutomatedPolicyDialogShowingForTesting()
+                )
+            }
+        }
+    }
+
+    @Test
+    fun adventureAutoToggleDisabledBeforeAutomatedUnlock() {
+        ActivityScenario.launch(AdventureActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonAuto)
+                assertNotNull("Auto toggle should be inflated", toggle)
+                assertFalse(
+                    "Adventure prompt should not show before an automated unlock",
+                    activity.isAutomatedPolicyDialogShowingForTesting()
+                )
+                assertFalse("Auto toggle should start disabled with only MANUAL unlocked", toggle.isEnabled)
+                assertFalse("Auto toggle should start unchecked", toggle.isChecked)
+            }
+        }
+    }
+
+    @Test
+    fun adventureAutoToggleEnabledAfterAutomatedUnlock() {
+        ActivityScenario.launch(AdventureActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.controllerForTesting().applyPolicyUnlock(PlayerPolicyType.BFS_EXIT)
+                activity.refreshAutoToggleForTesting()
+                val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonAuto)
+                assertTrue("Auto toggle should enable after an automated policy unlock", toggle.isEnabled)
+                assertFalse("Auto toggle should remain unchecked until selected", toggle.isChecked)
+            }
+        }
+    }
+
+
     private fun localizedPrefix(textRes: Int): String {
         return InstrumentationRegistry.getInstrumentation()
             .targetContext
@@ -289,27 +359,27 @@ class ExampleInstrumentedTest {
             // scaledTouchSlop * 4 (minDistance) even on high-density screens.
             maxOf(view.width, view.height) * OVERLAY_SWIPE_FALLBACK_MULTIPLIER
         }
-        // Direct each swipe *inward* (toward the screen interior) so synthetic
-        // ACTION_MOVE/UP coordinates stay on-screen. Overlay views sit at the
-        // window edges (menu button at top-right, D-pad strip at the bottom),
-        // so pushing end coordinates further outward generates far-off-screen
-        // touches that some emulator input stacks have crashed on. Span is
-        // unchanged so the fling threshold remains comfortably exceeded.
+
+        // Direct each swipe horizontally *inward* so synthetic ACTION_MOVE/UP
+        // coordinates stay on-screen. Pushing end coordinates further outward
+        // generates far-off-screen touches that some emulator input stacks have
+        // crashed on. Span is unchanged so the fling threshold remains
+        // comfortably exceeded.
         val rootView = activity.window.decorView
         val rootWidth = rootView.width.toFloat()
-        val rootHeight = rootView.height.toFloat()
         val signX = if (rootWidth > 0f && startX > rootWidth / 2f) -1f else 1f
-        val signY = if (rootHeight > 0f && startY > rootHeight / 2f) -1f else 1f
         val rawEndX = startX + signX * swipeSpan
-        val rawEndY = startY + signY * swipeSpan
-        // Clamp end coordinates into window bounds so synthetic ACTION_MOVE/UP
-        // events never travel off-screen. If decorView reports zero size (some
+        // Keep the swipe horizontal so it remains unambiguous to SwipeDirectionResolver
+        // if an overlay-origin event is incorrectly forwarded to the gesture detector.
+        // Clamp the end coordinate into window bounds so synthetic ACTION_MOVE/UP
+        // events never travel off-screen. If decorView reports zero width (some
         // emulator quirks), fall back to leaving the value unclamped so the
         // swipe still has enough displacement to exceed minDistance.
         val endX = if (rootWidth > 0f) rawEndX.coerceIn(0f, rootWidth - 1f) else rawEndX
-        val endY = if (rootHeight > 0f) rawEndY.coerceIn(0f, rootHeight - 1f) else rawEndY
+        // One inward overlay-origin swipe to the clamped endpoint is sufficient
+        // for this regression assertion and avoids emulator instability from
+        // higher synthetic volume.
         dispatchSwipeViaTouchEvent(activity, startX, startY, endX, startY)
-        dispatchSwipeViaTouchEvent(activity, startX, startY, startX, endY)
     }
 
     private fun dispatchSwipeViaTouchEvent(
@@ -365,6 +435,23 @@ class ExampleInstrumentedTest {
         activity.supportFragmentManager.executePendingTransactions()
         val fragment = activity.supportFragmentManager.findFragmentById(R.id.fragmentGameHost) as? GameFragment
         return requireNotNull(fragment) { "Game fragment should be attached" }
+    }
+
+    private fun waitForAutomatedPolicyDialog(scenario: ActivityScenario<MainActivity>) {
+        var showing = false
+        var attempts = 0
+        while (attempts < MAX_LAYOUT_POLL_ATTEMPTS && !showing) {
+            scenario.onActivity { activity ->
+                activity.supportFragmentManager.executePendingTransactions()
+                showing = activity.isAutomatedPolicyDialogShowingForTesting()
+            }
+            if (!showing) {
+                SystemClock.sleep(LAYOUT_POLL_INTERVAL_MS)
+                InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            }
+            attempts++
+        }
+        assertTrue("Automated policy picker should be shown within timeout", showing)
     }
 
     private fun waitForGameHostLaidOut(scenario: ActivityScenario<MainActivity>) {

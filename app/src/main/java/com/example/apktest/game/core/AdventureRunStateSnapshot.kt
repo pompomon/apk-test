@@ -29,6 +29,8 @@ data class AdventureRunStateSnapshot(
     val currentMazeNpcPolicies: List<NpcPolicyType>,
     val currentMazeSnapshot: GameEngineSnapshot?,
     val status: AdventureStatus,
+    val lastAutomatedPlayerPolicy: PlayerPolicyType? = null,
+    val automatedPolicyPromptShown: Boolean = false,
     val pendingStartingPowerUp: PowerUpType? = null
 ) {
     fun toJson(): String = JSONObject().apply {
@@ -40,6 +42,10 @@ data class AdventureRunStateSnapshot(
         put(KEY_STREAK, winStreakSinceLastBonus)
         put(KEY_UNLOCKED, JSONArray().apply { unlockedPlayerPolicies.forEach { put(it.name) } })
         put(KEY_CURRENT_POLICY, currentPlayerPolicy.name)
+        if (lastAutomatedPlayerPolicy != null) {
+            put(KEY_LAST_AUTO_POLICY, lastAutomatedPlayerPolicy.name)
+        }
+        put(KEY_AUTO_PROMPT_SHOWN, automatedPolicyPromptShown)
         if (currentMazeSeed != null) put(KEY_MAZE_SEED, currentMazeSeed)
         put(KEY_MAZE_NPC_POLICIES, JSONArray().apply {
             currentMazeNpcPolicies.forEach { put(it.name) }
@@ -58,6 +64,15 @@ data class AdventureRunStateSnapshot(
     }.toString()
 
     companion object {
+        // Intentionally kept at v1. The newer fields — the automation
+        // fields (lastAutomatedPlayerPolicy, automatedPolicyPromptShown)
+        // and the per-maze starting power-up state (pendingStartingPowerUp)
+        // — are additive and backward-compatible:
+        // older payloads simply omit them and fromJson falls back to the
+        // defaults, while older builds ignore the unknown keys. Bumping this
+        // version would invalidate every existing in-progress run via the
+        // exact-match check in fromJson, so only bump it for a breaking
+        // change that genuinely cannot be read by the previous schema.
         const val SCHEMA_VERSION = 1
 
         private const val KEY_VERSION = "v"
@@ -68,6 +83,8 @@ data class AdventureRunStateSnapshot(
         private const val KEY_STREAK = "streak"
         private const val KEY_UNLOCKED = "unlocked"
         private const val KEY_CURRENT_POLICY = "currentPolicy"
+        private const val KEY_LAST_AUTO_POLICY = "lastAutoPolicy"
+        private const val KEY_AUTO_PROMPT_SHOWN = "autoPromptShown"
         private const val KEY_MAZE_SEED = "mazeSeed"
         private const val KEY_MAZE_NPC_POLICIES = "mazeNpcPolicies"
         private const val KEY_MAZE_SNAPSHOT = "mazeSnapshot"
@@ -83,6 +100,8 @@ data class AdventureRunStateSnapshot(
                 winStreakSinceLastBonus = state.winStreakSinceLastBonus,
                 unlockedPlayerPolicies = state.unlockedPlayerPolicies.toList(),
                 currentPlayerPolicy = state.currentPlayerPolicy,
+                lastAutomatedPlayerPolicy = state.lastAutomatedPlayerPolicy,
+                automatedPolicyPromptShown = state.automatedPolicyPromptShown,
                 currentMazeSeed = state.currentMazeSeed,
                 currentMazeNpcPolicies = state.currentMazeNpcPolicies,
                 currentMazeSnapshot = state.currentMazeSnapshot,
@@ -114,6 +133,11 @@ data class AdventureRunStateSnapshot(
                 }.getOrNull()
                     ?.takeIf { it in distinctUnlocked }
                     ?: PlayerPolicyType.MANUAL
+                val lastAutoPolicy = if (obj.has(KEY_LAST_AUTO_POLICY) && !obj.isNull(KEY_LAST_AUTO_POLICY)) {
+                    runCatching { PlayerPolicyType.valueOf(obj.getString(KEY_LAST_AUTO_POLICY)) }.getOrNull()
+                        // The remembered auto policy is only valid when it is non-MANUAL and still unlocked.
+                        ?.takeIf { it != PlayerPolicyType.MANUAL && it in distinctUnlocked }
+                } else null
                 val mazePolicies = if (obj.has(KEY_MAZE_NPC_POLICIES)) {
                     obj.getJSONArray(KEY_MAZE_NPC_POLICIES).let { arr ->
                         List(arr.length()) { i -> NpcPolicyType.valueOf(arr.getString(i)) }
@@ -145,6 +169,8 @@ data class AdventureRunStateSnapshot(
                     winStreakSinceLastBonus = obj.getInt(KEY_STREAK),
                     unlockedPlayerPolicies = distinctUnlocked,
                     currentPlayerPolicy = currentPolicy,
+                    lastAutomatedPlayerPolicy = lastAutoPolicy,
+                    automatedPolicyPromptShown = obj.optBoolean(KEY_AUTO_PROMPT_SHOWN, false),
                     currentMazeSeed = mazeSeed,
                     currentMazeNpcPolicies = mazePolicies,
                     currentMazeSnapshot = mazeSnapshot,
@@ -185,6 +211,8 @@ data class AdventureRunStateSnapshot(
         winStreakSinceLastBonus = winStreakSinceLastBonus,
         unlockedPlayerPolicies = unlockedPlayerPolicies.toMutableList(),
         currentPlayerPolicy = currentPlayerPolicy,
+        lastAutomatedPlayerPolicy = lastAutomatedPlayerPolicy,
+        automatedPolicyPromptShown = automatedPolicyPromptShown,
         currentMazeSeed = currentMazeSeed,
         currentMazeNpcPolicies = currentMazeNpcPolicies,
         currentMazeSnapshot = currentMazeSnapshot,

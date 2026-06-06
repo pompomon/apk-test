@@ -9,7 +9,9 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.widget.ImageButton
+import android.widget.ToggleButton
 import androidx.annotation.VisibleForTesting
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -18,9 +20,11 @@ import com.badlogic.gdx.backends.android.AndroidFragmentApplication
 import com.example.apktest.game.GameFragment
 import com.example.apktest.game.core.DifficultyPresets
 import com.example.apktest.game.core.Direction
+import com.example.apktest.game.core.GameEngineSnapshot
 import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
+import com.example.apktest.game.core.automatedPlayerPolicies
 import com.example.apktest.ui.DPadRepeatController
 import com.example.apktest.ui.GameMenuPopover
 import com.example.apktest.ui.LegendDialog
@@ -31,9 +35,14 @@ import java.util.concurrent.RejectedExecutionException
 class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private var menuPopover: GameMenuPopover? = null
     private lateinit var menuButton: ImageButton
+    private lateinit var autoToggle: ToggleButton
     private lateinit var stateStore: GameStateStore
     private val autosaveExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val dPadRepeatController = DPadRepeatController(move = { direction: Direction -> move(direction) })
+    private var autoMovementEnabled: Boolean = false
+    private var selectedAutomatedPlayerPolicy: PlayerPolicyType? = null
+    private var automatedPolicyPromptShown: Boolean = false
+    private var automatedPolicyDialog: AlertDialog? = null
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal var resolvedSwipeCount: Int = 0
@@ -45,6 +54,13 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun menuPopoverTextSnapshotForTesting(): List<String> =
         menuPopover?.textSnapshotForTesting().orEmpty()
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun isAutomatedPolicyDialogShowingForTesting(): Boolean =
+        automatedPolicyDialog?.isShowing == true
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun isAutoToggleCheckedForTesting(): Boolean = autoToggle.isChecked
 
     /**
      * Feeds a MotionEvent directly into the swipe gesture detector, bypassing
@@ -85,24 +101,81 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         }
 
         menuButton = findViewById(R.id.buttonMenu)
+        autoToggle = findViewById(R.id.buttonAuto)
+
+        // Load the saved snapshot at most once here and share it between the
+        // auto-toggle initialization and buildGameFragmentArgs() so a cold
+        // resume doesn't re-parse the JSON (and repeat the stale-blob clearing
+        // side effect) twice.
+        val resume = savedInstanceState == null &&
+            intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false)
+        val resumeSnapshot = if (resume) stateStore.load() else null
+
+        restoreAutomationUiState(savedInstanceState, intent, resumeSnapshot)
 
         if (savedInstanceState == null) {
             val fragment = GameFragment().apply {
-                arguments = buildGameFragmentArgs(intent)
+                arguments = buildGameFragmentArgs(intent, resumeSnapshot)
             }
             supportFragmentManager.beginTransaction()
                 .replace(R.id.fragmentGameHost, fragment)
-                .commit()
+                .commitNow()
         }
 
         setupControls()
         setupSwipeControls()
+        refreshAutoToggle()
+        // The Classic GameFragment is attached synchronously via commitNow()
+        // above, so the prompt can run inline; no need to defer to the event
+        // queue (which could race the transaction).
+        promptForAutomatedPolicyIfNeeded()
     }
 
-    private fun buildGameFragmentArgs(intent: Intent): Bundle {
-        // If the launcher asked us to resume, load+validate the saved
-        // snapshot once here and hand the parsed object directly to the
-        // fragment (avoiding a redundant JSON parse on the GL thread).
+    private fun restoreAutomationUiState(
+        savedInstanceState: Bundle?,
+        intent: Intent,
+        resumeSnapshot: GameEngineSnapshot?
+    ) {
+        if (savedInstanceState != null) {
+            autoMovementEnabled = savedInstanceState.getBoolean(KEY_AUTO_MOVEMENT_ENABLED, false)
+            selectedAutomatedPlayerPolicy = savedInstanceState.getString(KEY_SELECTED_AUTO_POLICY)
+                ?.let { name -> PlayerPolicyType.entries.firstOrNull { it.name == name } }
+                ?.takeIf { it != PlayerPolicyType.MANUAL }
+            automatedPolicyPromptShown = savedInstanceState.getBoolean(KEY_AUTO_PROMPT_SHOWN, false)
+            return
+        }
+        val initialPolicy = getInitialPlayerPolicyFromIntentOrStore(intent, resumeSnapshot)
+        autoMovementEnabled = initialPolicy != PlayerPolicyType.MANUAL
+        selectedAutomatedPlayerPolicy = initialPolicy.takeIf { it != PlayerPolicyType.MANUAL }
+        // Only fresh runs that start in MANUAL should show the one-time picker.
+        // Resumed runs and starts that already chose an automated policy should
+        // treat the prompt as shown to avoid unexpected interruptions on
+        // recreation/toggle flows.
+        automatedPolicyPromptShown =
+            intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false) ||
+            initialPolicy != PlayerPolicyType.MANUAL
+    }
+
+    private fun getInitialPlayerPolicyFromIntentOrStore(
+        intent: Intent,
+        resumeSnapshot: GameEngineSnapshot?
+    ): PlayerPolicyType {
+        val intentPolicy = enumOrDefault(
+            intent.getStringExtra(SetupActivity.EXTRA_PLAYER_POLICY),
+            PlayerPolicyType.MANUAL
+        )
+        val resume = intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false)
+        if (resume) {
+            return resumeSnapshot?.playerPolicy ?: intentPolicy
+        }
+        return intentPolicy
+    }
+
+    private fun buildGameFragmentArgs(intent: Intent, resumeSnapshot: GameEngineSnapshot?): Bundle {
+        // If the launcher asked us to resume, the saved snapshot has already
+        // been loaded+validated once in onCreate and is passed in here, so we
+        // hand the parsed object directly to the fragment (avoiding a redundant
+        // JSON parse on the GL thread).
         // We still embed the JSON in args so a process-death recreation
         // — where the static handoff is wiped but the fragment Bundle
         // survives — can restore from the bundle. The user's selected
@@ -112,9 +185,6 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         // starts a fresh game with the user's selections rather than
         // its hard-coded defaults. Falls back to a fresh game using
         // those same selections when no valid snapshot exists.
-        val resume = intent.getBooleanExtra(SetupActivity.EXTRA_RESUME, false)
-        val resumeSnapshot = if (resume) stateStore.load() else null
-
         val player = enumOrDefault(
             intent.getStringExtra(SetupActivity.EXTRA_PLAYER_POLICY),
             PlayerPolicyType.MANUAL
@@ -232,17 +302,94 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     override fun onDestroy() {
         dPadRepeatController.stop()
+        automatedPolicyDialog?.dismiss()
+        automatedPolicyDialog = null
         autosaveExecutor.shutdown()
         super.onDestroy()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(KEY_AUTO_MOVEMENT_ENABLED, autoMovementEnabled)
+        selectedAutomatedPlayerPolicy?.let { outState.putString(KEY_SELECTED_AUTO_POLICY, it.name) }
+        outState.putBoolean(KEY_AUTO_PROMPT_SHOWN, automatedPolicyPromptShown)
+        super.onSaveInstanceState(outState)
+    }
+
     private fun setupControls() {
         menuButton.setOnClickListener { showMenuPopover() }
+        autoToggle.setOnClickListener {
+            if (autoToggle.isChecked) {
+                enableAutomatedMovementOrSelect()
+            } else {
+                disableAutomatedMovement()
+            }
+        }
 
         dPadRepeatController.bind(findViewById(R.id.buttonUp), Direction.NORTH)
         dPadRepeatController.bind(findViewById(R.id.buttonDown), Direction.SOUTH)
         dPadRepeatController.bind(findViewById(R.id.buttonLeft), Direction.WEST)
         dPadRepeatController.bind(findViewById(R.id.buttonRight), Direction.EAST)
+    }
+
+    private fun enableAutomatedMovementOrSelect() {
+        val selected = selectedAutomatedPlayerPolicy
+        if (selected != null && selected in automatedPlayerPolicies()) {
+            applyAutomatedPlayerPolicy(selected)
+        } else {
+            autoMovementEnabled = false
+            refreshAutoToggle()
+            showAutomatedPolicySelector(revertToManualOnCancel = true)
+        }
+    }
+
+    private fun disableAutomatedMovement() {
+        autoMovementEnabled = false
+        gameFragment()?.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        refreshAutoToggle()
+    }
+
+    private fun applyAutomatedPlayerPolicy(policy: PlayerPolicyType) {
+        selectedAutomatedPlayerPolicy = policy
+        autoMovementEnabled = true
+        gameFragment()?.setPlayerPolicy(policy)
+        refreshAutoToggle()
+    }
+
+    private fun showAutomatedPolicySelector(revertToManualOnCancel: Boolean) {
+        val policies = automatedPlayerPolicies()
+        if (policies.isEmpty()) {
+            autoMovementEnabled = false
+            refreshAutoToggle()
+            return
+        }
+        val items = policies.map { it.label }.toTypedArray()
+        val checked = selectedAutomatedPlayerPolicy
+            ?.let { policies.indexOf(it) }
+            ?.takeIf { it >= 0 }
+            ?: -1
+        automatedPolicyDialog = AlertDialog.Builder(this)
+            .setTitle(R.string.pick_automated_player_strategy)
+            .setSingleChoiceItems(items, checked) { dialog, which ->
+                applyAutomatedPlayerPolicy(policies[which])
+                dialog.dismiss()
+            }
+            .setOnCancelListener {
+                if (revertToManualOnCancel) disableAutomatedMovement()
+                refreshAutoToggle()
+            }
+            .show()
+    }
+
+    private fun promptForAutomatedPolicyIfNeeded() {
+        if (automatedPolicyPromptShown || autoMovementEnabled || automatedPlayerPolicies().isEmpty()) return
+        if (gameFragment() == null) return
+        automatedPolicyPromptShown = true
+        showAutomatedPolicySelector(revertToManualOnCancel = false)
+    }
+
+    private fun refreshAutoToggle() {
+        autoToggle.isEnabled = automatedPlayerPolicies().isNotEmpty()
+        autoToggle.isChecked = autoMovementEnabled && autoToggle.isEnabled
     }
 
     private fun showMenuPopover() {
@@ -506,5 +653,8 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         // Upper bound on how long Pause & Exit will wait for the snapshot
         // commit() to flush before giving up to avoid an ANR.
         private const val PAUSE_EXIT_SAVE_TIMEOUT_MS = 750L
+        private const val KEY_AUTO_MOVEMENT_ENABLED = "autoMovementEnabled"
+        private const val KEY_SELECTED_AUTO_POLICY = "selectedAutomatedPlayerPolicy"
+        private const val KEY_AUTO_PROMPT_SHOWN = "automatedPolicyPromptShown"
     }
 }
