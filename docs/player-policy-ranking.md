@@ -22,7 +22,7 @@ The inner wall follower is a local maze-solving strategy. On each move it checks
 The avoidance wrapper adds shared automated-player behavior around the wall follower:
 
 - Prefer a one-step winning move onto the exit.
-- Divert toward nearby power-ups within the difficulty's `automaticPickupRadius`, preferring non-risky detours but allowing a risky detour when no non-risky regular move exists.
+- Divert toward nearby power-ups within the difficulty's `automaticPickupRadius`, preferring non-risky detours but allowing a risky detour only when no non-risky, non-deadly regular move exists.
 - Avoid cells currently occupied by NPCs.
 - Prefer non-risky cells over cells adjacent to NPC movement options.
 - Return `null` rather than stepping into a guaranteed NPC collision.
@@ -35,7 +35,7 @@ Expected ranking profile: usually robust in simple connected mazes but often slo
 
 The inner BFS policy asks `context.navigator.bfsPath(context.player.position, context.exit)` for a shortest path in number of maze steps and moves one cell along that path. In an unweighted maze, BFS is optimal by step count.
 
-The wrapper preserves the BFS result when no NPC or pickup special handling is needed. When NPCs create danger, the wrapper can request an avoidance-aware BFS path that blocks currently occupied NPC cells, then falls back to ranked safe moves if needed.
+The wrapper preserves the BFS result when no NPC or pickup special handling is needed. When NPCs create danger, the wrapper can request an avoidance-aware BFS path that blocks currently occupied NPC cells, then falls back to ranked moves if needed.
 
 Expected ranking profile: should be one of the fastest policies by time to exit on static mazes because it follows a shortest step-count route. With NPCs and power-ups enabled, detours can make it differ from raw shortest path time.
 
@@ -45,7 +45,7 @@ Expected ranking profile: should be one of the fastest policies by time to exit 
 
 The inner A* policy asks `context.navigator.aStarPath(context.player.position, context.exit)` and moves one cell along the returned path. The A* implementation uses Manhattan distance as its heuristic and unit edge costs, so it should find shortest paths like BFS while usually exploring fewer nodes.
 
-The wrapper behavior is shared with BFS: winning moves take precedence, pickup detours can pre-empt the path, and NPC danger can trigger an avoidance-aware A* path or safe fallback move.
+The wrapper behavior is shared with BFS: winning moves take precedence, pickup detours can pre-empt the path, and NPC danger can trigger an avoidance-aware A* path or ranked fallback move.
 
 Expected ranking profile: should usually tie BFS on path length and elapsed time because both return shortest paths in the same unit-cost maze. Differences, if any, should come from deterministic tie-breaking in path search order or NPC/power-up interactions after the first move.
 
