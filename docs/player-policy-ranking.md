@@ -6,8 +6,8 @@ This document describes the automated player policies currently available in the
 
 - Rank only automated player policies returned by `automatedPlayerPolicies()`, which excludes `MANUAL`.
 - Use `elapsedSeconds` from `GameEngine` as the primary "time to exit" metric because it already reflects movement speed, power-up effects, freeze effects, and NPC timing.
-- Treat a run as successful only when `GameEngine.status == WIN`.
-- Treat `LOSE` and timeout runs as incomplete attempts. The default ranking is survival-first, so policies with more successful exits rank above faster policies that lose or time out more often.
+- Treat a run as successful only when `engine.status == GameStatus.WIN`.
+- Treat `GameStatus.LOSE` and timeout runs as incomplete attempts. The default ranking is survival-first, so policies with more successful exits rank above faster policies that lose or time out more often.
 - Keep the benchmark deterministic: every policy must be evaluated against the same difficulty, seed set, NPC policy set, and starting power-up rules.
 - Do not use live Android UI timing for ranking. The ranking harness should live in pure game-core/JVM code so it can run in unit tests and CI.
 
@@ -33,7 +33,7 @@ Expected ranking profile: usually robust in simple connected mazes but often slo
 
 `BFS_EXIT` wraps `BfsExitPolicy` in `AvoidanceWrapperPolicy`.
 
-The inner BFS policy asks `MazeNavigator.bfsPath(player.position, exit)` for a shortest path in number of maze steps and moves one cell along that path. In an unweighted maze, BFS is optimal by step count.
+The inner BFS policy asks `context.navigator.bfsPath(player.position, exit)` for a shortest path in number of maze steps and moves one cell along that path. In an unweighted maze, BFS is optimal by step count.
 
 The wrapper preserves the BFS result when no NPC or pickup special handling is needed. When NPCs create danger, the wrapper can request an avoidance-aware BFS path that blocks currently occupied NPC cells, then falls back to ranked safe moves if needed.
 
@@ -43,7 +43,7 @@ Expected ranking profile: should be one of the fastest policies by time to exit 
 
 `ASTAR_EXIT` wraps `AStarExitPolicy` in `AvoidanceWrapperPolicy`.
 
-The inner A* policy asks `MazeNavigator.aStarPath(player.position, exit)` and moves one cell along the returned path. The A* implementation uses Manhattan distance as its heuristic and unit edge costs, so it should find shortest paths like BFS while usually exploring fewer nodes.
+The inner A* policy asks `context.navigator.aStarPath(player.position, exit)` and moves one cell along the returned path. The A* implementation uses Manhattan distance as its heuristic and unit edge costs, so it should find shortest paths like BFS while usually exploring fewer nodes.
 
 The wrapper behavior is shared with BFS: winning moves take precedence, safe pickup detours can pre-empt the path, and NPC danger can trigger an avoidance-aware A* path or safe fallback move.
 
@@ -143,7 +143,7 @@ Keep every policy evaluation on a given scenario identical except for the player
    - Set the player policy.
    - Apply the optional starting power-up.
    - Ensure countdown is not armed.
-   - Step `update(dt)` until `WIN`, `LOSE`, or timeout.
+   - Step `update(dt)` until `GameStatus.WIN`, `GameStatus.LOSE`, or timeout.
    - Record status, elapsed seconds, and steps.
 4. Choose a timestep that cannot skip over movement cadence unexpectedly:
    - `playerMovesPerSecond` and `npcMovesPerSecond` are frequencies, so convert the fastest frequency into a small substep period.
