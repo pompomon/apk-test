@@ -23,7 +23,7 @@ The avoidance wrapper adds shared automated-player behavior around the wall foll
 
 - Prefer a one-step winning move onto the exit.
 - Divert toward nearby power-ups within the difficulty's `automaticPickupRadius`, preferring non-risky detours but allowing a risky detour only when no non-risky, non-deadly regular move exists.
-- Avoid cells currently occupied by NPCs.
+- Avoid cells currently occupied by NPCs unless the move reaches the exit and wins immediately.
 - Prefer non-risky cells over cells adjacent to NPC movement options.
 - Return `null` rather than stepping into a guaranteed NPC collision.
 
