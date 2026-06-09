@@ -19,11 +19,11 @@ This document describes the automated player policies currently available in the
 
 The inner wall follower is a local maze-solving strategy. On each move it checks directions relative to the player's current facing in this order: left, straight, right, then back. It chooses the first walkable direction. This makes it simple and cheap, but it can take long detours in mazes where hugging the left wall is not close to the shortest path.
 
-The avoidance wrapper adds shared automated-player behavior around the wall follower:
+The avoidance wrapper adds shared automated-player behavior around the wall follower, in priority order:
 
 - Prefer a one-step winning move onto the exit.
 - Divert toward nearby power-ups within the difficulty's `automaticPickupRadius`, preferring non-risky detours but allowing a risky detour only when no non-risky, non-deadly regular move exists.
-- After checking for an immediate winning exit move, avoid cells currently occupied by NPCs.
+- If no immediate winning exit move is available, avoid cells currently occupied by NPCs.
 - Prefer non-risky cells over cells adjacent to NPC movement options.
 - Return `null` rather than stepping into a guaranteed NPC collision.
 
