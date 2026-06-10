@@ -23,8 +23,10 @@ The avoidance wrapper adds shared automated-player behavior around the wall foll
 
 - Prefer a one-step winning move onto the exit.
 - Divert toward nearby power-ups within the difficulty's `automaticPickupRadius`, preferring non-risky detours but allowing a risky detour only when no non-risky, non-deadly regular move exists.
-- If no immediate winning exit move is available, reject cells currently occupied by NPCs as deadly.
-- Among the remaining moves, prefer non-risky cells over cells adjacent to NPC movement options.
+- When INVISIBILITY is active, NPC danger classification is skipped entirely and the wrapper reduces to pickup-seeking followed by a pass-through to the inner policy (NPCs cannot harm the player so no deadly or risky filtering applies).
+- If no immediate winning exit move is available and INVISIBILITY is not active, reject cells currently occupied by NPCs as deadly.
+- When FREEZE is active, only currently NPC-occupied cells are treated as deadly; risky-neighbor filtering is disabled because frozen NPCs cannot move into adjacent cells.
+- Among the remaining moves (when neither INVISIBILITY nor FREEZE applies), prefer non-risky cells over cells adjacent to NPC movement options.
 - Return `null` rather than stepping into a guaranteed NPC collision.
 
 Expected ranking profile: usually robust in simple connected mazes but often slower than shortest-path policies because it does not plan globally.
@@ -47,7 +49,7 @@ The inner A* policy asks `context.navigator.aStarPath(context.player.position, c
 
 The wrapper behavior is shared with BFS: winning moves take precedence, pickup detours can pre-empt the path, and NPC danger can trigger an avoidance-aware A* path or ranked fallback move.
 
-Expected ranking profile: should usually tie BFS on path length and elapsed time because both return shortest paths in the same unit-cost maze. Differences, if any, should come from deterministic tie-breaking in path search order or NPC/power-up interactions after the first move.
+Expected ranking profile: should usually tie BFS on path length and elapsed time because both return shortest paths in the same unit-cost maze. Differences, if any, are likely from NPC or power-up interactions after the first move rather than path search order; `aStarPath` uses a `PriorityQueue` keyed by total cost with no explicit secondary tie-breaker, so equal-priority expansion order is an implementation detail and should not be relied upon for deterministic ranking differences.
 
 ### Pledge (`PlayerPolicyType.PLEDGE`)
 
@@ -142,7 +144,7 @@ Keep every policy evaluation on a given scenario identical except for the player
    - Set the NPC policy.
    - Set the player policy.
    - Apply the optional starting power-up.
-   - Ensure countdown is not armed.
+   - Do not call `GameEngine.startCountdown()` — fresh construction, restart, and restore all leave `countdownRemainingSeconds` at `0f` automatically.
    - Step `update(dt)` until `GameStatus.WIN`, `GameStatus.LOSE`, or timeout.
    - Record status, elapsed seconds, and steps.
 4. Choose a timestep that cannot skip over movement cadence unexpectedly:
