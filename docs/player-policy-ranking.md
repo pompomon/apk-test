@@ -149,8 +149,8 @@ Keep every policy evaluation on a given scenario identical except for the player
    - Record status, elapsed seconds, and steps.
 4. Choose a timestep that cannot skip over movement cadence unexpectedly:
    - `playerMovesPerSecond` and `npcMovesPerSecond` are base frequencies; the effective rates can be higher when a starting power-up is active (e.g., `SPEED_UP` multiplies player speed by `2f`).
-   - Compute the effective player speed for this scenario: `effectivePlayerSpeed = playerMovesPerSecond * (if startingPowerUp == SPEED_UP then 2f else 1f)`.
-   - A safe default is `dt = 1f / (max(effectivePlayerSpeed, npcMovesPerSecond) * 4f)`.
+   - Compute the effective player speed for this scenario: `val effectivePlayerSpeed = playerMovesPerSecond * (if (startingPowerUp == PowerUpType.SPEED_UP) 2f else 1f)`.
+   - A safe default is `val dt = 1f / (maxOf(effectivePlayerSpeed, npcMovesPerSecond) * 4f)`.
    - The 4x oversampling keeps each simulation update at no more than one quarter of the fastest actor's effective movement interval, preventing coarse-grained power-up expiry or timing artifacts from skewing `elapsedSeconds` comparisons.
 5. Aggregate all run results by policy.
 6. Sort policies using the complete ranking metric cascade above, including the failed tier for policies with zero successful exits.
