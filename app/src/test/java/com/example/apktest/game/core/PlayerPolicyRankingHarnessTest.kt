@@ -21,7 +21,10 @@ class PlayerPolicyRankingHarnessTest {
         assertEquals(automatedPlayerPolicies().toSet(), results.map { it.policyType }.toSet())
     }
 
-    @Ignore("Development harness: run manually to refresh the checked-in Adventure award order.")
+    @Ignore(
+        "Development harness: run manually after policy changes, then copy the printed order " +
+            "to adventureAwardPlayerPolicyRanking() in AutomatedPlayerPolicies.kt."
+    )
     @Test
     fun printAdventureAwardPolicyRanking() {
         val ranking = PlayerPolicyRankingHarness.rank()

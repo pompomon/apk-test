@@ -269,7 +269,7 @@ class AdventureRunController(
     internal fun sampleStartingPowerUps(count: Int, mazeIndex1Based: Int): List<PowerUpType> {
         val pool = PowerUpType.entries.filter { it != PowerUpType.GHOST_MODE }
         if (pool.isEmpty() || count <= 0) return emptyList()
-        val rng = Random(deriveRewardSeed(mazeIndex1Based, REWARD_KIND_POWERUP))
+        val rng = Random(derivePowerUpRewardSeed(mazeIndex1Based))
         if (pool.size <= count) return pool.shuffled(rng)
         return pool.shuffled(rng).take(count)
     }
@@ -386,8 +386,8 @@ class AdventureRunController(
     private fun deriveNpcPolicySeed(mazeIndex1Based: Int): Long =
         runSeed xor (mazeIndex1Based.toLong() * NPC_POLICY_SEED_STRIDE) xor NPC_POLICY_SEED_MIX
 
-    private fun deriveRewardSeed(mazeIndex1Based: Int, kind: Long): Long =
-        runSeed xor (mazeIndex1Based.toLong() * REWARD_SEED_STRIDE) xor REWARD_SEED_MIX xor kind
+    private fun derivePowerUpRewardSeed(mazeIndex1Based: Int): Long =
+        runSeed xor (mazeIndex1Based.toLong() * POWERUP_REWARD_SEED_STRIDE) xor POWERUP_REWARD_SEED_MIX
 
     companion object {
         // Arbitrary mix constants — chosen as signed-Long literals so they
@@ -397,9 +397,8 @@ class AdventureRunController(
         private const val MAZE_SEED_MIX: Long = -0x4F2C5D6E7A8B9C0DL
         private const val NPC_POLICY_SEED_STRIDE: Long = 0x6A09E667F3BCC908L
         private const val NPC_POLICY_SEED_MIX: Long = -0x123456789ABCDEFL
-        private const val REWARD_SEED_STRIDE: Long = 0x243F6A8885A308D3L
-        private const val REWARD_SEED_MIX: Long = -0x7E1B2C3D4E5F6071L
-        private const val REWARD_KIND_POWERUP: Long = 0x2020202020202020L
+        private const val POWERUP_REWARD_SEED_STRIDE: Long = 0x243F6A8885A308D3L
+        private const val POWERUP_REWARD_SEED_MIX: Long = -0x7E1B2C3D4E5F6071L
 
         /** Maximum number of choices offered to the player on a non-final maze win. */
         const val REWARD_SAMPLE_SIZE = 3
