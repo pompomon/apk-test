@@ -17,13 +17,17 @@ import com.example.apktest.game.core.NpcPolicyType
  * a Y-up coordinate system in this project.
  */
 object PixelSpriteRenderer {
+    private val tintScratch = Color()
+
     fun draw(
         shapes: ShapeRenderer,
         pattern: Array<String>,
         palette: Map<Char, Color>,
         centerX: Float,
         centerY: Float,
-        size: Float
+        size: Float,
+        tintColors: Array<Color>? = null,
+        tintCount: Int = 0
     ) {
         val rows = pattern.size
         if (rows == 0) return
@@ -41,7 +45,19 @@ object PixelSpriteRenderer {
                 val ch = rowPattern[col]
                 if (ch == ' ' || ch == '0') continue
                 val color = palette[ch] ?: continue
-                shapes.color = color
+                if (tintColors != null && tintCount > 0) {
+                    PowerUpTinting.tintedColorForPixel(
+                        base = color,
+                        tintColors = tintColors,
+                        tintCount = tintCount,
+                        column = col,
+                        columns = cols,
+                        out = tintScratch
+                    )
+                    shapes.color = tintScratch
+                } else {
+                    shapes.color = color
+                }
                 shapes.rect(
                     originX + col * pixelWidth,
                     // Patterns are listed top-down but ShapeRenderer is Y-up.
@@ -51,6 +67,7 @@ object PixelSpriteRenderer {
                 )
             }
         }
+
     }
 
     /**
@@ -68,6 +85,64 @@ object PixelSpriteRenderer {
             }
         }
     }
+}
+
+internal object PowerUpTinting {
+    const val PLAYER_TINT_STRENGTH = 0.45f
+    const val MAZE_TINT_ALPHA = 0.22f
+
+    fun tintedColorForPixel(
+        base: Color,
+        tintColors: Array<Color>,
+        tintCount: Int,
+        column: Int,
+        columns: Int,
+        out: Color
+    ): Color {
+        val tint = gradientTintForColumn(
+            tintColors = tintColors,
+            tintCount = tintCount,
+            column = column,
+            columns = columns,
+            out = out
+        )
+        out.set(
+            blend(base.r, tint.r, PLAYER_TINT_STRENGTH),
+            blend(base.g, tint.g, PLAYER_TINT_STRENGTH),
+            blend(base.b, tint.b, PLAYER_TINT_STRENGTH),
+            base.a
+        )
+        return out
+    }
+
+    fun gradientTintForColumn(
+        tintColors: Array<Color>,
+        tintCount: Int,
+        column: Int,
+        columns: Int,
+        out: Color
+    ): Color {
+        require(tintCount > 0) { "tintCount must be positive" }
+        if (tintCount == 1 || columns <= 1) {
+            return out.set(tintColors[0])
+        }
+        val lastSegment = tintCount - 2
+        val scaled = column.coerceIn(0, columns - 1).toFloat() *
+            (tintCount - 1).toFloat() / (columns - 1).toFloat()
+        val left = scaled.toInt().coerceIn(0, lastSegment)
+        val fraction = scaled - left
+        val a = tintColors[left]
+        val b = tintColors[left + 1]
+        return out.set(
+            blend(a.r, b.r, fraction),
+            blend(a.g, b.g, fraction),
+            blend(a.b, b.b, fraction),
+            blend(a.a, b.a, fraction)
+        )
+    }
+
+    private fun blend(from: Float, to: Float, amount: Float): Float =
+        from + (to - from) * amount
 }
 
 /**

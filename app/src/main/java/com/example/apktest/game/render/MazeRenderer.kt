@@ -1,6 +1,7 @@
 package com.example.apktest.game.render
 
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.OrthographicCamera
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
@@ -57,6 +58,7 @@ class MazeRenderer {
     private var floorHighlightY: FloatArray = FloatArray(0)
     private var floorHighlightCount: Int = 0
     private var floorPixelSize: Float = 0f
+    private val activePlayerTintColors: Array<Color> = Array(PowerUpType.entries.size) { Color.WHITE }
 
     fun resize(width: Int, height: Int) {
         viewport.update(width, height, true)
@@ -138,6 +140,7 @@ class MazeRenderer {
                 shapes.rect(ox + hxs[i], oy + hys[i], pixelSize, pixelSize)
             }
         }
+        drawMazeTintOverlay(engine.npcMazeTintType, ox, oy, maze.width.toFloat(), maze.height.toFloat())
 
         // Render the exit as a wooden door sprite centered on the exit cell.
         PixelSpriteRenderer.draw(
@@ -362,6 +365,7 @@ class MazeRenderer {
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
         val player = engine.player
+        val playerTintCount = collectActivePlayerTintColors(engine)
         val playerPattern = pickFrame(
             frames = Sprites.heroFrames,
             elapsedSeconds = engine.elapsedSeconds,
@@ -374,7 +378,9 @@ class MazeRenderer {
             palette = Sprites.heroPalette(),
             centerX = mazeOriginX + player.position.x + 0.5f,
             centerY = mazeOriginY + player.position.y + 0.5f,
-            size = 0.78f
+            size = 0.78f,
+            tintColors = activePlayerTintColors,
+            tintCount = playerTintCount
         )
 
         engine.npcs.forEach { npc ->
@@ -395,6 +401,33 @@ class MazeRenderer {
         }
 
         shapes.end()
+    }
+
+    private fun collectActivePlayerTintColors(engine: GameEngine): Int {
+        var count = 0
+        for (type in PowerUpType.entries) {
+            if (engine.isPlayerPowerUpTintActive(type)) {
+                activePlayerTintColors[count] = POWER_UP_TINT_COLORS[type.ordinal]
+                count++
+            }
+        }
+        return count
+    }
+
+    private fun drawMazeTintOverlay(
+        tintType: PowerUpType?,
+        x: Float,
+        y: Float,
+        width: Float,
+        height: Float
+    ) {
+        if (tintType == null) return
+        val tint = POWER_UP_TINT_COLORS[tintType.ordinal]
+        Gdx.gl.glEnable(GL20.GL_BLEND)
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
+        shapes.setColor(tint.r, tint.g, tint.b, PowerUpTinting.MAZE_TINT_ALPHA)
+        shapes.rect(x, y, width, height)
+        Gdx.gl.glDisable(GL20.GL_BLEND)
     }
 
     /**
@@ -527,6 +560,9 @@ class MazeRenderer {
 
         private val COUNTDOWN_COLOR = Color(1f, 0.95f, 0.5f, 1f)
         private val OVERLAY_BACKDROP_COLOR = Color(0.02f, 0.02f, 0.04f, 1f)
+        private val POWER_UP_TINT_COLORS: Array<Color> = Array(PowerUpType.entries.size) { i ->
+            PowerUpIcons.gdxColorFor(PowerUpType.entries[i])
+        }
 
         // Bright cycle for WIN — vivid yellow / lime / cyan / magenta.
         private val WIN_PALETTE = arrayOf(
