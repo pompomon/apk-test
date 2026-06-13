@@ -10,6 +10,7 @@ import com.badlogic.gdx.utils.viewport.ExtendViewport
 import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameEngine
 import com.example.apktest.game.core.Maze
+import com.example.apktest.game.core.PowerUpEffectKind
 import com.example.apktest.game.core.PowerUpType
 
 class MazeRenderer {
@@ -426,9 +427,9 @@ class MazeRenderer {
         // MazeRenderer owns this ShapeRenderer pass and disables blending
         // immediately after the translucent overlay; the remaining in-game
         // drawing uses opaque filled shapes.
-        Gdx.gl.glEnable(GL20.GL_BLEND)
-        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
         try {
+            Gdx.gl.glEnable(GL20.GL_BLEND)
+            Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
             shapes.setColor(tint.r, tint.g, tint.b, PowerUpTinting.MAZE_TINT_ALPHA)
             shapes.rect(x, y, width, height)
         } finally {
@@ -570,7 +571,7 @@ class MazeRenderer {
             PowerUpIcons.gdxColorFor(PowerUpType.entries[i])
         }
         private val TIMED_POWER_UP_COUNT: Int =
-            PowerUpType.entries.count { it.metadata.kind == com.example.apktest.game.core.PowerUpEffectKind.TIMED }
+            PowerUpType.entries.count { it.metadata.kind == PowerUpEffectKind.TIMED }
 
         // Bright cycle for WIN — vivid yellow / lime / cyan / magenta.
         private val WIN_PALETTE = arrayOf(
