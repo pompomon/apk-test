@@ -398,7 +398,10 @@ class AdventureRunController(
         private const val NPC_POLICY_SEED_STRIDE: Long = 0x6A09E667F3BCC908L
         private const val NPC_POLICY_SEED_MIX: Long = -0x123456789ABCDEFL
         private const val POWERUP_REWARD_SEED_STRIDE: Long = 0x243F6A8885A308D3L
-        private const val POWERUP_REWARD_SEED_MIX: Long = -0x7E1B2C3D4E5F6071L
+        // Folds in REWARD_KIND_POWERUP (0x2020202020202020) from the original
+        // deriveRewardSeed(mazeIndex1Based, REWARD_KIND_POWERUP) formula so that
+        // the power-up candidate sequence is identical to the pre-refactor output.
+        private const val POWERUP_REWARD_SEED_MIX: Long = -0x5E3B0C1D6E7F4051L
 
         /** Maximum number of choices offered to the player on a non-final maze win. */
         const val REWARD_SAMPLE_SIZE = 3
