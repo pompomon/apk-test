@@ -125,10 +125,10 @@ internal object PowerUpTinting {
         if (tintCount == 1 || columns <= 1) {
             return out.set(tintColors[0])
         }
-        val lastSegment = tintCount - 2
+        val maxSegmentIndex = tintCount - 2
         val scaled = column.coerceIn(0, columns - 1).toFloat() *
             (tintCount - 1).toFloat() / (columns - 1).toFloat()
-        val left = scaled.toInt().coerceIn(0, lastSegment)
+        val left = scaled.toInt().coerceIn(0, maxSegmentIndex)
         val fraction = scaled - left
         val a = tintColors[left]
         val b = tintColors[left + 1]

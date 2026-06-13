@@ -758,6 +758,11 @@ class GameEngine(
         collectPowerUpAtNpc(npc)
     }
 
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun clearNpcsForTest() {
+        npcs.clear()
+    }
+
     private fun activateNpcInducedPlayerFreeze() {
         val duration = PowerUpType.FREEZE.metadata.defaultDurationSeconds
         if (duration <= 0f) return

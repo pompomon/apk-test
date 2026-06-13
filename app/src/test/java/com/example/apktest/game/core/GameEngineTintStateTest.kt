@@ -45,7 +45,7 @@ class GameEngineTintStateTest {
 
         assertEquals(PowerUpType.FREEZE, engine.npcMazeTintType)
 
-        engine.npcs.clear()
+        engine.clearNpcsForTest()
         engine.update(PowerUpType.FREEZE.metadata.defaultDurationSeconds + 0.01f)
 
         assertNull(engine.npcMazeTintType)
