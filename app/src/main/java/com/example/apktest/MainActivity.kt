@@ -62,6 +62,9 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun isAutoToggleCheckedForTesting(): Boolean = autoToggle.isChecked
 
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun isSwipeStartAcceptedForTesting(x: Int, y: Int): Boolean = isPointInsideGameHost(x, y)
+
     /**
      * Feeds a MotionEvent directly into the swipe gesture detector, bypassing
      * `dispatchTouchEvent`'s hit-testing. Used by instrumentation tests to verify swipe
@@ -558,7 +561,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         if (detector != null) {
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    swipeGestureActive = isEventInsideGameHost(ev)
+                    swipeGestureActive = isPointInsideGameHost(ev.x.toInt(), ev.y.toInt())
                     if (swipeGestureActive) {
                         detector.onTouchEvent(ev)
                     }
@@ -579,13 +582,11 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         return super.dispatchTouchEvent(ev)
     }
 
-    private fun isEventInsideGameHost(ev: MotionEvent): Boolean {
+    private fun isPointInsideGameHost(x: Int, y: Int): Boolean {
         val gameHost = findViewById<View>(R.id.fragmentGameHost) ?: return false
         if (!fillWindowRect(gameHost, gameHostWindowRect)) return false
         // MotionEvent.x/y in Activity.dispatchTouchEvent are window/decor-relative, so compare
         // against window-relative rects (getLocationInWindow + width/height) for consistent space.
-        val x = ev.x.toInt()
-        val y = ev.y.toInt()
         if (!gameHostWindowRect.contains(x, y)) return false
         // The fragment host now spans the full screen above the D-pad; exclude touches that
         // fall on the hamburger button (top-right overlay) and on the D-pad so taps/flings on

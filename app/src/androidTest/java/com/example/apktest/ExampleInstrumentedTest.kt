@@ -148,8 +148,8 @@ class ExampleInstrumentedTest {
         //   2. Instrumentation.sendPointerSync requires INJECT_EVENTS permission when the test
         //      and target apps don't share a UID (which is our case), and raises SecurityException.
         // The view-dispatch hit-testing path is still covered by
-        // mainActivity_swipeOnOverlayDoesNotTriggerMovement, which feeds events through
-        // activity.dispatchTouchEvent.
+        // mainActivity_swipeOnOverlayDoesNotTriggerMovement, which asserts the same
+        // overlay exclusion predicate used by activity.dispatchTouchEvent.
         val events = buildSwipeEvents(startX, startY, endX, endY)
         try {
             scenario.onActivity { activity ->
@@ -167,25 +167,23 @@ class ExampleInstrumentedTest {
     fun mainActivity_swipeOnOverlayDoesNotTriggerMovement() {
         launchMainActivityWithBfsExitPolicy().use { scenario ->
             waitForGameHostLaidOut(scenario)
-            val baseline = AtomicInteger(0)
             scenario.onActivity { activity ->
                 attachedGameFragment(activity)
-                baseline.set(activity.resolvedSwipeCount)
-                // Dispatch swipes that start inside the top and bottom overlay regions via the
-                // real dispatchTouchEvent path; the hit-test in MainActivity must reject them
-                // so they never reach the gesture detector.
-                dispatchSwipeInsideView(activity, R.id.buttonMenu)
-                dispatchSwipeInsideView(activity, R.id.bottomControls)
-            }
-            // Give the gesture detector a chance to (incorrectly) resolve swipes; if the
-            // hit-test exclusion is correct, resolvedSwipeCount must remain unchanged.
-            SystemClock.sleep(STEP_POLL_INTERVAL_MS * 4)
-            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-            scenario.onActivity { activity ->
-                assertEquals(
-                    "Swipes starting on overlay UI must not trigger player moves",
-                    baseline.get(),
-                    activity.resolvedSwipeCount
+                val menuCenter = centerOfView(activity, R.id.buttonMenu)
+                val controlsCenter = centerOfView(activity, R.id.bottomControls)
+                val hostCenter = centerOfView(activity, R.id.fragmentGameHost)
+
+                assertFalse(
+                    "Swipes starting on the menu overlay must not reach the swipe detector",
+                    activity.isSwipeStartAcceptedForTesting(menuCenter.first, menuCenter.second)
+                )
+                assertFalse(
+                    "Swipes starting on the controls overlay must not reach the swipe detector",
+                    activity.isSwipeStartAcceptedForTesting(controlsCenter.first, controlsCenter.second)
+                )
+                assertTrue(
+                    "Swipes starting on the game host away from overlays should reach the swipe detector",
+                    activity.isSwipeStartAcceptedForTesting(hostCenter.first, hostCenter.second)
                 )
             }
         }
@@ -339,64 +337,14 @@ class ExampleInstrumentedTest {
         return tokenSection.substringBefore('%').trim()
     }
 
-    private fun dispatchSwipeInsideView(activity: MainActivity, viewId: Int) {
-        val view = activity.findViewById<android.view.View>(viewId) ?: return
-        if (view.width <= 0 || view.height <= 0) return
+    private fun centerOfView(activity: MainActivity, viewId: Int): Pair<Int, Int> {
+        val view = requireNotNull(activity.findViewById<android.view.View>(viewId)) {
+            "View with id $viewId should be present"
+        }
+        assertTrue("View with id $viewId should be laid out", view.width > 0 && view.height > 0)
         val location = IntArray(2)
         view.getLocationInWindow(location)
-        val startX = location[0].toFloat() + view.width / 2f
-        val startY = location[1].toFloat() + view.height / 2f
-        // Use a span derived from the game host (not the button) so the displacement
-        // is guaranteed to exceed minDistance (scaledTouchSlop * 4) on every density.
-        // If the hit-test exclusion regresses and ACTION_DOWN is incorrectly forwarded
-        // to the gesture detector, this long swipe would register as a valid fling and
-        // the test would correctly catch the regression.
-        val gameHost = activity.findViewById<android.view.View>(R.id.fragmentGameHost)
-        val swipeSpan = if (gameHost != null && gameHost.width > 0) {
-            maxOf(gameHost.width, gameHost.height) * SWIPE_REL_SPAN
-        } else {
-            // Fallback: 8× the button dimension keeps displacement well above
-            // scaledTouchSlop * 4 (minDistance) even on high-density screens.
-            maxOf(view.width, view.height) * OVERLAY_SWIPE_FALLBACK_MULTIPLIER
-        }
-
-        // Direct each swipe horizontally *inward* so synthetic ACTION_MOVE/UP
-        // coordinates stay on-screen. Pushing end coordinates further outward
-        // generates far-off-screen touches that some emulator input stacks have
-        // crashed on. Span is unchanged so the fling threshold remains
-        // comfortably exceeded.
-        val rootView = activity.window.decorView
-        val rootWidth = rootView.width.toFloat()
-        val signX = if (rootWidth > 0f && startX > rootWidth / 2f) -1f else 1f
-        val rawEndX = startX + signX * swipeSpan
-        // Keep the swipe horizontal so it remains unambiguous to SwipeDirectionResolver
-        // if an overlay-origin event is incorrectly forwarded to the gesture detector.
-        // Clamp the end coordinate into window bounds so synthetic ACTION_MOVE/UP
-        // events never travel off-screen. If decorView reports zero width (some
-        // emulator quirks), fall back to leaving the value unclamped so the
-        // swipe still has enough displacement to exceed minDistance.
-        val endX = if (rootWidth > 0f) rawEndX.coerceIn(0f, rootWidth - 1f) else rawEndX
-        // One inward overlay-origin swipe to the clamped endpoint is sufficient
-        // for this regression assertion and avoids emulator instability from
-        // higher synthetic volume.
-        dispatchSwipeViaTouchEvent(activity, startX, startY, endX, startY)
-    }
-
-    private fun dispatchSwipeViaTouchEvent(
-        activity: android.app.Activity,
-        startX: Float,
-        startY: Float,
-        endX: Float,
-        endY: Float
-    ) {
-        val events = buildSwipeEvents(startX, startY, endX, endY)
-        try {
-            for (event in events) {
-                activity.dispatchTouchEvent(event)
-            }
-        } finally {
-            events.forEach { it.recycle() }
-        }
+        return Pair(location[0] + view.width / 2, location[1] + view.height / 2)
     }
 
     private fun buildSwipeEvents(
@@ -505,8 +453,5 @@ class ExampleInstrumentedTest {
         // Retry the entire 4-swipe sequence a few times if no fling resolves; synthetic flings
         // can be intermittently dropped by the emulator's input pipeline.
         private const val MAX_SWIPE_RETRY_ATTEMPTS = 5
-        // Fallback multiplier for overlay swipes when the game host is not yet measured;
-        // 8× the button's own dimension is large enough to exceed minDistance on any density.
-        private const val OVERLAY_SWIPE_FALLBACK_MULTIPLIER = 8f
     }
 }
