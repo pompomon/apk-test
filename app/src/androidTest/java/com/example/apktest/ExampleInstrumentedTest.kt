@@ -175,15 +175,15 @@ class ExampleInstrumentedTest {
 
                 assertFalse(
                     "Swipes starting on the menu overlay must not reach the swipe detector",
-                    activity.isSwipeStartAcceptedForTesting(menuCenter.first, menuCenter.second)
+                    activity.isSwipeStartPointAcceptedForTesting(menuCenter.first, menuCenter.second)
                 )
                 assertFalse(
                     "Swipes starting on the controls overlay must not reach the swipe detector",
-                    activity.isSwipeStartAcceptedForTesting(controlsCenter.first, controlsCenter.second)
+                    activity.isSwipeStartPointAcceptedForTesting(controlsCenter.first, controlsCenter.second)
                 )
                 assertTrue(
                     "Swipes starting on the game host away from overlays should reach the swipe detector",
-                    activity.isSwipeStartAcceptedForTesting(hostCenter.first, hostCenter.second)
+                    activity.isSwipeStartPointAcceptedForTesting(hostCenter.first, hostCenter.second)
                 )
             }
         }
