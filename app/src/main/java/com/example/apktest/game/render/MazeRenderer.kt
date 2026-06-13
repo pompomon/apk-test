@@ -58,7 +58,7 @@ class MazeRenderer {
     private var floorHighlightY: FloatArray = FloatArray(0)
     private var floorHighlightCount: Int = 0
     private var floorPixelSize: Float = 0f
-    private val activePlayerTintColors: Array<Color> = Array(MAX_ACTIVE_PLAYER_TINT_COLORS) { Color.WHITE }
+    private val activePlayerTintColors: Array<Color> = Array(TIMED_POWER_UP_COUNT) { Color.WHITE }
 
     fun resize(width: Int, height: Int) {
         viewport.update(width, height, true)
@@ -423,6 +423,9 @@ class MazeRenderer {
     ) {
         if (tintType == null) return
         val tint = POWER_UP_TINT_COLORS[tintType.ordinal]
+        // MazeRenderer owns this ShapeRenderer pass and disables blending
+        // immediately after the translucent overlay; the remaining in-game
+        // drawing uses opaque filled shapes.
         Gdx.gl.glEnable(GL20.GL_BLEND)
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
         try {
@@ -566,7 +569,7 @@ class MazeRenderer {
         private val POWER_UP_TINT_COLORS: Array<Color> = Array(PowerUpType.entries.size) { i ->
             PowerUpIcons.gdxColorFor(PowerUpType.entries[i])
         }
-        private val MAX_ACTIVE_PLAYER_TINT_COLORS: Int =
+        private val TIMED_POWER_UP_COUNT: Int =
             PowerUpType.entries.count { it.metadata.kind == com.example.apktest.game.core.PowerUpEffectKind.TIMED }
 
         // Bright cycle for WIN — vivid yellow / lime / cyan / magenta.

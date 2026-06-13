@@ -7,6 +7,12 @@ import org.junit.Test
 
 class PowerUpTintingTest {
     @Test
+    fun tintStrengthAndAlphaConstants_stayInBlendRange() {
+        assertTrue(PowerUpTinting.PLAYER_TINT_STRENGTH in 0f..1f)
+        assertTrue(PowerUpTinting.MAZE_TINT_ALPHA in 0f..1f)
+    }
+
+    @Test
     fun singleTint_usesSameColorAcrossSprite() {
         val tint = arrayOf(Color(1f, 0f, 0f, 1f))
         val out = Color()
