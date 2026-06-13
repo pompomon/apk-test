@@ -63,7 +63,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     internal fun isAutoToggleCheckedForTesting(): Boolean = autoToggle.isChecked
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
-    internal fun isSwipeStartPointAcceptedForTesting(x: Int, y: Int): Boolean =
+    internal fun isSwipeStartInsideGameHostForTesting(x: Int, y: Int): Boolean =
         isPointInsideGameHost(x, y)
 
     /**

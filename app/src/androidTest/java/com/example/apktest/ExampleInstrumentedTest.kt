@@ -147,9 +147,9 @@ class ExampleInstrumentedTest {
         //      synthetic flings on the emulator (deterministic 0-resolved-swipes even with retries).
         //   2. Instrumentation.sendPointerSync requires INJECT_EVENTS permission when the test
         //      and target apps don't share a UID (which is our case), and raises SecurityException.
-        // The view-dispatch hit-testing path is still covered by
-        // mainActivity_swipeOnOverlayDoesNotTriggerMovement, which asserts the same
-        // overlay exclusion predicate used by activity.dispatchTouchEvent.
+        // The overlay exclusion predicate used by activity.dispatchTouchEvent is
+        // validated by mainActivity_swipeOnOverlayDoesNotTriggerMovement without
+        // sending synthetic touches through the emulator input stack.
         val events = buildSwipeEvents(startX, startY, endX, endY)
         try {
             scenario.onActivity { activity ->
@@ -175,15 +175,15 @@ class ExampleInstrumentedTest {
 
                 assertFalse(
                     "Swipes starting on the menu overlay must not reach the swipe detector",
-                    activity.isSwipeStartPointAcceptedForTesting(menuCenter.first, menuCenter.second)
+                    activity.isSwipeStartInsideGameHostForTesting(menuCenter.first, menuCenter.second)
                 )
                 assertFalse(
                     "Swipes starting on the controls overlay must not reach the swipe detector",
-                    activity.isSwipeStartPointAcceptedForTesting(controlsCenter.first, controlsCenter.second)
+                    activity.isSwipeStartInsideGameHostForTesting(controlsCenter.first, controlsCenter.second)
                 )
                 assertTrue(
                     "Swipes starting on the game host away from overlays should reach the swipe detector",
-                    activity.isSwipeStartPointAcceptedForTesting(hostCenter.first, hostCenter.second)
+                    activity.isSwipeStartInsideGameHostForTesting(hostCenter.first, hostCenter.second)
                 )
             }
         }
