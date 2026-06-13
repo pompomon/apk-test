@@ -197,10 +197,26 @@ class AdventureRunControllerTest {
         val w = c.onMazeWon() // maze 1 → odd
         assertTrue(w.unlockAvailable)
         assertTrue(w.startingPowerUpCandidates.isEmpty())
-        assertTrue(w.unlockCandidates.size in 1..AdventureRunController.REWARD_SAMPLE_SIZE)
-        w.unlockCandidates.forEach {
-            assertFalse(it in c.state.unlockedPlayerPolicies)
-        }
+        assertEquals(
+            adventureAwardPlayerPolicyRanking().take(AdventureRunController.REWARD_SAMPLE_SIZE),
+            w.unlockCandidates
+        )
+        w.unlockCandidates.forEach { assertFalse(it in c.state.unlockedPlayerPolicies) }
+    }
+
+    @Test
+    fun oddMazeWinSkipsUnlockedPoliciesAndPreservesRankingOrder() {
+        val c = easyController()
+        val ranking = adventureAwardPlayerPolicyRanking()
+        c.applyPolicyUnlock(ranking.first())
+
+        c.prepareCurrentMaze()
+        val w = c.onMazeWon()
+
+        assertEquals(
+            ranking.drop(1).take(AdventureRunController.REWARD_SAMPLE_SIZE),
+            w.unlockCandidates
+        )
     }
 
     @Test
@@ -253,13 +269,22 @@ class AdventureRunControllerTest {
     }
 
     @Test
-    fun rewardSamplingIsDeterministicForSameRunSeed() {
+    fun policyRewardCandidatesDoNotDependOnRunSeed() {
         val c1 = easyController(runSeed = 1234L)
-        val c2 = easyController(runSeed = 1234L)
+        val c2 = easyController(runSeed = 5678L)
         c1.prepareCurrentMaze(); c2.prepareCurrentMaze()
         val w1 = c1.onMazeWon()
         val w2 = c2.onMazeWon()
         assertEquals(w1.unlockCandidates, w2.unlockCandidates)
+    }
+
+    @Test
+    fun adventureAwardRankingContainsEveryAutomatedPolicyOnceAndExcludesManual() {
+        val ranking = adventureAwardPlayerPolicyRanking()
+
+        assertFalse(PlayerPolicyType.MANUAL in ranking)
+        assertEquals(automatedPlayerPolicies().size, ranking.size)
+        assertEquals(automatedPlayerPolicies().toSet(), ranking.toSet())
     }
 
     @Test
