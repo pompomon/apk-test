@@ -233,7 +233,7 @@ class AdventureRunController(
         // starting power-up for the next maze.
         val isOdd = newIndex % 2 == 1
         val unlockCandidates = if (runComplete || !isOdd) emptyList()
-        else sampleLockedPlayerPolicies(REWARD_SAMPLE_SIZE)
+        else selectTopLockedPlayerPolicies(REWARD_SAMPLE_SIZE)
         val powerUpCandidates = if (runComplete || isOdd) emptyList()
         else sampleStartingPowerUps(REWARD_SAMPLE_SIZE, newIndex)
 
@@ -254,7 +254,7 @@ class AdventureRunController(
      * use [runSeed]: every run offers the fastest successful locked policies
      * first, according to the offline JVM ranking harness.
      */
-    internal fun sampleLockedPlayerPolicies(count: Int): List<PlayerPolicyType> =
+    internal fun selectTopLockedPlayerPolicies(count: Int): List<PlayerPolicyType> =
         if (count <= 0) emptyList()
         else adventureAwardPlayerPolicyRanking()
             .filter { it !in state.unlockedPlayerPolicies }
