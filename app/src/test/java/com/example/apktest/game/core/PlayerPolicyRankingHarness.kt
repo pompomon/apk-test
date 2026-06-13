@@ -158,7 +158,7 @@ object PlayerPolicyRankingHarness {
 
     private fun median(values: List<Float>): Float? {
         if (values.isEmpty()) return null
-        // Keep median local and explicit so the ignored development harness
+        // Keep median local and explicit so this JVM-only harness
         // has no dependency beyond the repository's existing test runtime.
         val sorted = values.sorted()
         val mid = sorted.size / 2

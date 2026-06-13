@@ -399,9 +399,6 @@ class AdventureRunController(
         private const val NPC_POLICY_SEED_MIX: Long = -0x123456789ABCDEFL
         private const val REWARD_SEED_STRIDE: Long = 0x243F6A8885A308D3L
         private const val REWARD_SEED_MIX: Long = -0x7E1B2C3D4E5F6071L
-        // Power-up rewards still use seeded sampling. The old policy reward
-        // kind constant was removed because policy rewards now use the
-        // checked-in Adventure ranking instead of seeded sampling.
         private const val REWARD_KIND_POWERUP: Long = 0x2020202020202020L
 
         /** Maximum number of choices offered to the player on a non-final maze win. */
