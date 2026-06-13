@@ -406,7 +406,7 @@ class MazeRenderer {
 
     private fun collectActivePlayerTintColors(engine: GameEngine): Int {
         var count = 0
-        for (type in PowerUpType.entries) {
+        for (type in PLAYER_TINT_TYPES) {
             if (engine.isPlayerPowerUpTintActive(type)) {
                 activePlayerTintColors[count] = POWER_UP_TINT_COLORS[type.ordinal]
                 count++
@@ -570,8 +570,27 @@ class MazeRenderer {
         private val POWER_UP_TINT_COLORS: Array<Color> = Array(PowerUpType.entries.size) { i ->
             PowerUpIcons.gdxColorFor(PowerUpType.entries[i])
         }
-        private val TIMED_POWER_UP_COUNT: Int =
-            PowerUpType.entries.count { it.metadata.kind == PowerUpEffectKind.TIMED }
+        private val PLAYER_TINT_TYPES: Array<PowerUpType> =
+            PowerUpType.entries.filter { playerTintEligible(it) }.toTypedArray()
+        private val TIMED_POWER_UP_COUNT: Int = PLAYER_TINT_TYPES.size
+
+        private fun playerTintEligible(type: PowerUpType): Boolean = when (type) {
+            PowerUpType.INVISIBILITY -> true
+            PowerUpType.TELEPORT -> false
+            PowerUpType.SPEED_UP -> true
+            PowerUpType.FREEZE -> true
+            PowerUpType.SHIELD -> true
+            PowerUpType.SLOW_TIME -> true
+            PowerUpType.MAGNET -> true
+            PowerUpType.BLAST -> false
+            PowerUpType.GHOST_MODE -> true
+        }.also { eligible ->
+            if (eligible) {
+                check(type.metadata.kind == PowerUpEffectKind.TIMED) {
+                    "Player tint power-up must be timed: $type"
+                }
+            }
+        }
 
         // Bright cycle for WIN — vivid yellow / lime / cyan / magenta.
         private val WIN_PALETTE = arrayOf(
