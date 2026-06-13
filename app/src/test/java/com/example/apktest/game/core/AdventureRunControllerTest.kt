@@ -269,7 +269,7 @@ class AdventureRunControllerTest {
     }
 
     @Test
-    fun policyRewardCandidatesDoNotDependOnRunSeed() {
+    fun policyRewardCandidatesIgnoreRunSeed() {
         val c1 = easyController(runSeed = 1234L)
         val c2 = easyController(runSeed = 5678L)
         c1.prepareCurrentMaze(); c2.prepareCurrentMaze()
