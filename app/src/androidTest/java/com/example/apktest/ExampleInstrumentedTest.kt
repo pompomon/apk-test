@@ -346,14 +346,14 @@ class ExampleInstrumentedTest {
         return tokenSection.substringBefore('%').trim()
     }
 
-    private fun centerOfView(activity: MainActivity, viewId: Int): Pair<Int, Int> {
+    private fun centerOfView(activity: MainActivity, viewId: Int): Pair<Float, Float> {
         val view = requireNotNull(activity.findViewById<android.view.View>(viewId)) {
             "View with id $viewId should be present"
         }
         assertTrue("View with id $viewId should be laid out", view.width > 0 && view.height > 0)
         val location = IntArray(2)
         view.getLocationInWindow(location)
-        return Pair(location[0] + (view.width + 1) / 2, location[1] + (view.height + 1) / 2)
+        return Pair(location[0] + view.width / 2f, location[1] + view.height / 2f)
     }
 
     private fun buildSwipeEvents(

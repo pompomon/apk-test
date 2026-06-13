@@ -64,7 +64,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     internal fun isAutoToggleCheckedForTesting(): Boolean = autoToggle.isChecked
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
-    internal fun isSwipeStartInsideGameHostForTesting(x: Int, y: Int): Boolean =
+    internal fun isSwipeStartInsideGameHostForTesting(x: Float, y: Float): Boolean =
         isPointInsideGameHost(x, y)
 
     /**
@@ -563,7 +563,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         if (detector != null) {
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    swipeGestureActive = isPointInsideGameHost(ev.x.roundToInt(), ev.y.roundToInt())
+                    swipeGestureActive = isPointInsideGameHost(ev.x, ev.y)
                     if (swipeGestureActive) {
                         detector.onTouchEvent(ev)
                     }
@@ -584,17 +584,19 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         return super.dispatchTouchEvent(ev)
     }
 
-    private fun isPointInsideGameHost(x: Int, y: Int): Boolean {
+    private fun isPointInsideGameHost(x: Float, y: Float): Boolean {
         val gameHost = findViewById<View>(R.id.fragmentGameHost) ?: return false
         if (!fillWindowRect(gameHost, gameHostWindowRect)) return false
         // MotionEvent.x/y in Activity.dispatchTouchEvent are window/decor-relative, so compare
         // against window-relative rects (getLocationInWindow + width/height) for consistent space.
-        if (!gameHostWindowRect.contains(x, y)) return false
+        val roundedX = x.roundToInt()
+        val roundedY = y.roundToInt()
+        if (!gameHostWindowRect.contains(roundedX, roundedY)) return false
         // The fragment host now spans the full screen above the D-pad; exclude touches that
         // fall on the hamburger button (top-right overlay) and on the D-pad so taps/flings on
         // controls don't trigger unintended player moves.
-        if (isInsideOverlay(R.id.buttonMenu, x, y)) return false
-        if (isInsideOverlay(R.id.bottomControls, x, y)) return false
+        if (isInsideOverlay(R.id.buttonMenu, roundedX, roundedY)) return false
+        if (isInsideOverlay(R.id.bottomControls, roundedX, roundedY)) return false
         return true
     }
 
