@@ -31,6 +31,7 @@ import com.example.apktest.ui.LegendDialog
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
+import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private var menuPopover: GameMenuPopover? = null
@@ -562,7 +563,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         if (detector != null) {
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    swipeGestureActive = isPointInsideGameHost(ev.x.toInt(), ev.y.toInt())
+                    swipeGestureActive = isPointInsideGameHost(ev.x.roundToInt(), ev.y.roundToInt())
                     if (swipeGestureActive) {
                         detector.onTouchEvent(ev)
                     }

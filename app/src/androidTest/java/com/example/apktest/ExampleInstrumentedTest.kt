@@ -169,21 +169,30 @@ class ExampleInstrumentedTest {
             waitForGameHostLaidOut(scenario)
             scenario.onActivity { activity ->
                 attachedGameFragment(activity)
-                val menuCenter = centerOfView(activity, R.id.buttonMenu)
-                val controlsCenter = centerOfView(activity, R.id.bottomControls)
-                val hostCenter = centerOfView(activity, R.id.fragmentGameHost)
+                val menuOverlayCenter = centerOfView(activity, R.id.buttonMenu)
+                val controlsOverlayCenter = centerOfView(activity, R.id.bottomControls)
+                val gameHostCenter = centerOfView(activity, R.id.fragmentGameHost)
 
                 assertFalse(
                     "Swipes starting on the menu overlay must not reach the swipe detector",
-                    activity.isSwipeStartInsideGameHostForTesting(menuCenter.first, menuCenter.second)
+                    activity.isSwipeStartInsideGameHostForTesting(
+                        menuOverlayCenter.first,
+                        menuOverlayCenter.second
+                    )
                 )
                 assertFalse(
                     "Swipes starting on the controls overlay must not reach the swipe detector",
-                    activity.isSwipeStartInsideGameHostForTesting(controlsCenter.first, controlsCenter.second)
+                    activity.isSwipeStartInsideGameHostForTesting(
+                        controlsOverlayCenter.first,
+                        controlsOverlayCenter.second
+                    )
                 )
                 assertTrue(
                     "Swipes starting on the game host away from overlays should reach the swipe detector",
-                    activity.isSwipeStartInsideGameHostForTesting(hostCenter.first, hostCenter.second)
+                    activity.isSwipeStartInsideGameHostForTesting(
+                        gameHostCenter.first,
+                        gameHostCenter.second
+                    )
                 )
             }
         }
@@ -344,7 +353,7 @@ class ExampleInstrumentedTest {
         assertTrue("View with id $viewId should be laid out", view.width > 0 && view.height > 0)
         val location = IntArray(2)
         view.getLocationInWindow(location)
-        return Pair(location[0] + view.width / 2, location[1] + view.height / 2)
+        return Pair(location[0] + (view.width + 1) / 2, location[1] + (view.height + 1) / 2)
     }
 
     private fun buildSwipeEvents(
