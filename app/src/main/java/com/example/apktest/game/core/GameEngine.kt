@@ -513,7 +513,12 @@ class GameEngine(
             addManualMove(direction)
             cursor = next
         }
-        val queuedRunDurationSeconds = manualQueue.size / effectivePlayerMovesPerSecond()
+        val movesPerSecond = effectivePlayerMovesPerSecond()
+        val queuedRunDurationSeconds = if (movesPerSecond > 0f) {
+            manualQueue.size / movesPerSecond
+        } else {
+            MANUAL_OVERRIDE_DURATION_SECONDS
+        }
         armManualOverrideIfNeeded(queuedRunDurationSeconds)
     }
 
