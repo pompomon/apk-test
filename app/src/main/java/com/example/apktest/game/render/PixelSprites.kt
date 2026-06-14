@@ -105,10 +105,13 @@ internal object PowerUpTinting {
             columns = columns,
             out = out
         )
+        val tintR = tint.r
+        val tintG = tint.g
+        val tintB = tint.b
         out.set(
-            blend(base.r, tint.r, PLAYER_TINT_STRENGTH),
-            blend(base.g, tint.g, PLAYER_TINT_STRENGTH),
-            blend(base.b, tint.b, PLAYER_TINT_STRENGTH),
+            blend(base.r, tintR, PLAYER_TINT_STRENGTH),
+            blend(base.g, tintG, PLAYER_TINT_STRENGTH),
+            blend(base.b, tintB, PLAYER_TINT_STRENGTH),
             base.a
         )
         return out
