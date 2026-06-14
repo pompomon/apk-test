@@ -492,13 +492,35 @@ class GameEngine(
         if (!canAcceptManualInput()) {
             return
         }
-        if (manualQueue.size >= MAX_MANUAL_QUEUE) {
-            manualQueue.removeFirst()
+        addManualMove(direction)
+        armManualOverrideIfNeeded()
+    }
+
+    /**
+     * Queue a directional manual run that continues until the next wall or
+     * bounds edge. A fresh run replaces any pending manual inputs so a new
+     * swipe / D-pad tap can turn the player before the previous run drains.
+     */
+    fun queueManualMoveUntilBlocked(direction: Direction) {
+        if (!canAcceptManualInput()) {
+            return
         }
-        manualQueue.addLast(direction)
-        if (playerPolicyType != PlayerPolicyType.MANUAL) {
-            manualOverrideUntilSeconds = elapsedSeconds + MANUAL_OVERRIDE_DURATION_SECONDS
+        manualQueue.clear()
+        var cursor = player.position
+        while (manualQueue.size < MAX_MANUAL_QUEUE) {
+            val next = cursor.moved(direction)
+            if (!canPlayerTraverse(cursor, direction)) break
+            addManualMove(direction)
+            cursor = next
         }
+        if (manualQueue.isEmpty()) return
+        val movesPerSecond = effectivePlayerMovesPerSecond()
+        val queuedRunDurationSeconds = if (movesPerSecond > 0f) {
+            manualQueue.size / movesPerSecond
+        } else {
+            MANUAL_OVERRIDE_DURATION_SECONDS
+        }
+        armManualOverrideIfNeeded(queuedRunDurationSeconds)
     }
 
     /**
@@ -671,19 +693,30 @@ class GameEngine(
             !isPlayerFrozenByNpc()
     }
 
+    private fun addManualMove(direction: Direction) {
+        if (manualQueue.size >= MAX_MANUAL_QUEUE) {
+            manualQueue.removeFirst()
+        }
+        manualQueue.addLast(direction)
+    }
+
+    private fun armManualOverrideIfNeeded(
+        minDurationSeconds: Float = 0f
+    ) {
+        if (playerPolicyType != PlayerPolicyType.MANUAL && manualQueue.isNotEmpty()) {
+            manualOverrideUntilSeconds = elapsedSeconds +
+                maxOf(MANUAL_OVERRIDE_DURATION_SECONDS, minDurationSeconds)
+        }
+    }
+
     private fun attemptPlayerMove(requestedDirection: Direction): Boolean {
         // GHOST_MODE lets the player walk through walls; NPCs intentionally do
         // not gain this ability (NpcPolicyContext is unchanged) so the power-up
         // gives the player a distinct movement advantage rather than full
         // collision immunity (which is what INVISIBILITY/FREEZE provide).
-        val nextPosition = player.position.moved(requestedDirection)
-        val canTraverse = if (isEffectActive(PowerUpType.GHOST_MODE)) {
-            maze.inBounds(nextPosition)
-        } else {
-            maze.canMove(player.position, requestedDirection)
-        }
-        if (!canTraverse) return false
+        if (!canPlayerTraverse(player.position, requestedDirection)) return false
 
+        val nextPosition = player.position.moved(requestedDirection)
         player.position = nextPosition
         player.facing = requestedDirection
         player.animationFrame = (player.animationFrame + 1) % ANIMATION_FRAMES
@@ -692,6 +725,15 @@ class GameEngine(
         collectPowerUpAtPlayer()
         collectMagnetPowerUps()
         return true
+    }
+
+    private fun canPlayerTraverse(position: GridPos, direction: Direction): Boolean {
+        val nextPosition = position.moved(direction)
+        return if (isEffectActive(PowerUpType.GHOST_MODE)) {
+            maze.inBounds(nextPosition)
+        } else {
+            maze.canMove(position, direction)
+        }
     }
 
     private fun updateNpcs() {

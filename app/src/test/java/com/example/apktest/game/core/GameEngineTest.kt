@@ -121,6 +121,55 @@ class GameEngineTest {
     }
 
     @Test
+    fun manualMoveUntilBlocked_stopsAtWallOrBoundsWithoutExtraSteps() {
+        val engine = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed)
+        engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        val run = findOpenRunUntilBlocked(engine.maze, minDistance = 2)
+        engine.player.position = run.start
+        val playerInterval = 1f / engine.difficulty.playerMovesPerSecond
+
+        engine.queueManualMoveUntilBlocked(run.direction)
+        repeat(run.distance) { index ->
+            engine.update(if (index == 0) 0.001f else playerInterval)
+        }
+        val expectedStop = run.startAfter(run.distance)
+
+        assertEquals(expectedStop, engine.player.position)
+        assertEquals(run.distance, engine.steps)
+
+        engine.update(playerInterval)
+
+        assertEquals(expectedStop, engine.player.position)
+        assertEquals(run.distance, engine.steps)
+    }
+
+    @Test
+    fun manualMoveUntilBlocked_replacesInFlightRunWithNewDirection() {
+        val engine = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed)
+        engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
+        val turn = findInFlightTurn(engine.maze)
+        engine.player.position = turn.start
+        val playerInterval = 1f / engine.difficulty.playerMovesPerSecond
+
+        // Start a run that has at least two steps queued, then advance one step
+        // so the run is genuinely in flight before redirecting it.
+        engine.queueManualMoveUntilBlocked(turn.firstDirection)
+        engine.update(0.001f)
+
+        val afterFirstStep = turn.start.moved(turn.firstDirection)
+        assertEquals(afterFirstStep, engine.player.position)
+        assertEquals(1, engine.steps)
+
+        // Redirect the in-flight run; the next step must follow the new
+        // direction rather than draining the remaining queued steps.
+        engine.queueManualMoveUntilBlocked(turn.secondDirection)
+        engine.update(playerInterval)
+
+        assertEquals(afterFirstStep.moved(turn.secondDirection), engine.player.position)
+        assertEquals(2, engine.steps)
+    }
+
+    @Test
     fun immediateManualMove_collectsPowerUp() {
         val engine = GameEngine(
             testPreset(initialPowerUpTypes = listOf(PowerUpType.SPEED_UP)),
@@ -785,6 +834,92 @@ class GameEngineTest {
                 next != maze.start &&
                 maze.hasWall(origin, direction)
         }
+    }
+
+    private data class OpenRun(
+        val start: GridPos,
+        val direction: Direction,
+        val distance: Int
+    ) {
+        fun startAfter(steps: Int): GridPos {
+            var pos = start
+            repeat(steps) {
+                pos = pos.moved(direction)
+            }
+            return pos
+        }
+    }
+
+    private data class TurnableRun(
+        val start: GridPos,
+        val firstDirection: Direction,
+        val secondDirection: Direction
+    )
+
+    private fun isStartOrExit(maze: Maze, pos: GridPos): Boolean =
+        pos == maze.start || pos == maze.exit
+
+    private fun findOpenRunUntilBlocked(maze: Maze, minDistance: Int): OpenRun {
+        for (y in 0 until maze.height) {
+            for (x in 0 until maze.width) {
+                val start = GridPos(x, y)
+                if (isStartOrExit(maze, start)) continue
+                for (direction in Direction.entries) {
+                    var cursor = start
+                    var distance = 0
+                    var touchesSpecialCell = false
+                    while (maze.canMove(cursor, direction)) {
+                        cursor = cursor.moved(direction)
+                        distance += 1
+                        if (isStartOrExit(maze, cursor)) {
+                            touchesSpecialCell = true
+                        }
+                    }
+                    if (!touchesSpecialCell && distance >= minDistance) {
+                        return OpenRun(start, direction, distance)
+                    }
+                }
+            }
+        }
+        throw IllegalStateException(
+            "No open run of length $minDistance found that avoids start/exit cells " +
+                "in maze ${maze.width}x${maze.height}"
+        )
+    }
+
+    /**
+     * Find a [start] cell from which a run of at least two cells exists in
+     * [TurnableRun.firstDirection], and where the cell reached after the first
+     * step can still be left in a different [TurnableRun.secondDirection]. This
+     * lets a test advance one step into a queued run before redirecting it,
+     * exercising in-flight replacement.
+     */
+    private fun findInFlightTurn(maze: Maze): TurnableRun {
+        for (y in 0 until maze.height) {
+            for (x in 0 until maze.width) {
+                val start = GridPos(x, y)
+                if (isStartOrExit(maze, start)) continue
+                for (firstDirection in Direction.entries) {
+                    if (!maze.canMove(start, firstDirection)) continue
+                    val intermediate = start.moved(firstDirection)
+                    if (isStartOrExit(maze, intermediate)) continue
+                    // Need a run of at least two cells in firstDirection so the
+                    // queued run is genuinely in flight after one step.
+                    if (!maze.canMove(intermediate, firstDirection)) continue
+                    val secondCell = intermediate.moved(firstDirection)
+                    if (isStartOrExit(maze, secondCell)) continue
+                    val secondDirection = Direction.entries.firstOrNull { direction ->
+                        direction != firstDirection &&
+                            maze.canMove(intermediate, direction) &&
+                            !isStartOrExit(maze, intermediate.moved(direction))
+                    } ?: continue
+                    return TurnableRun(start, firstDirection, secondDirection)
+                }
+            }
+        }
+        throw IllegalStateException(
+            "No in-flight turn cell found in maze ${maze.width}x${maze.height}"
+        )
     }
 
     private fun cellsNear(engine: GameEngine, origin: GridPos, maxDistance: Int): List<GridPos> {

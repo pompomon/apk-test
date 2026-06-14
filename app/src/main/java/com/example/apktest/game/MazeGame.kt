@@ -104,6 +104,9 @@ class MazeGame : ApplicationAdapter() {
 
     fun queueManualMove(direction: Direction) = enqueue { it.queueManualMove(direction) }
 
+    fun queueManualMoveUntilBlocked(direction: Direction) =
+        enqueue { it.queueManualMoveUntilBlocked(direction) }
+
     fun togglePause() = enqueue { it.togglePause() }
 
     fun restart() = enqueue {

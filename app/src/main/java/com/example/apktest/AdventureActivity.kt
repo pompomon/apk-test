@@ -4,10 +4,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewConfiguration
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.ToggleButton
@@ -29,7 +27,7 @@ import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.game.core.PowerUpType
 import com.example.apktest.game.core.automatedPlayerPolicies
-import com.example.apktest.ui.DPadRepeatController
+import com.example.apktest.ui.GameInputController
 import com.example.apktest.ui.LegendDialog
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -56,7 +54,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     private lateinit var menuButton: ImageButton
     private lateinit var autoToggle: ToggleButton
     private lateinit var statusBar: TextView
-    private val dPadRepeatController = DPadRepeatController(move = { direction: Direction -> move(direction) })
+    private val inputController = GameInputController(
+        activity = this,
+        moveUntilBlocked = { direction: Direction -> moveUntilBlocked(direction) }
+    )
 
     // Tracks the previous tick's engine status so we can detect WIN/LOSE
     // transitions exactly once and run the corresponding overlay flow.
@@ -79,12 +80,6 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun isAutomatedPolicyDialogShowingForTesting(): Boolean =
         automatedPolicyDialog?.isShowing == true
-
-    private var swipeGestureDetector: GestureDetector? = null
-    private var swipeGestureActive: Boolean = false
-    private val gameHostWindowRect = android.graphics.Rect()
-    private val overlayWindowRect = android.graphics.Rect()
-    private val viewWindowLocation = IntArray(2)
 
     private val tickHandler = Handler(Looper.getMainLooper())
     private val tickRunnable = object : Runnable {
@@ -248,7 +243,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     override fun onPause() {
         tickHandler.removeCallbacks(tickRunnable)
         // Stop held D-pad repeats while the activity is backgrounded.
-        dPadRepeatController.stop()
+        inputController.stop()
         // Adventure runs that are already terminal (WON/LOST) clear the
         // store so the next launch doesn't try to "resume" a finished run.
         if (controller.state.status != AdventureStatus.IN_PROGRESS) {
@@ -311,7 +306,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     override fun onDestroy() {
-        dPadRepeatController.stop()
+        inputController.stop()
         automatedPolicyDialog?.dismiss()
         automatedPolicyDialog = null
         autosaveExecutor.shutdown()
@@ -386,10 +381,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 disableAutomatedMovement()
             }
         }
-        dPadRepeatController.bind(findViewById(R.id.buttonUp), Direction.NORTH)
-        dPadRepeatController.bind(findViewById(R.id.buttonDown), Direction.SOUTH)
-        dPadRepeatController.bind(findViewById(R.id.buttonLeft), Direction.WEST)
-        dPadRepeatController.bind(findViewById(R.id.buttonRight), Direction.EAST)
+        inputController.bindDirectionalControls()
     }
 
     private fun enableAutomatedMovementOrSelect() {
@@ -560,8 +552,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         finish()
     }
 
-    private fun move(direction: Direction) {
-        gameFragment()?.queueManualMove(direction)
+    private fun moveUntilBlocked(direction: Direction) {
+        gameFragment()?.queueManualMoveUntilBlocked(direction)
     }
 
     /** Polls the engine status to detect WIN/LOSE transitions exactly once. */
@@ -791,82 +783,16 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun setupSwipeControls() {
-        val viewConfig = ViewConfiguration.get(this)
-        val minDistance = (viewConfig.scaledTouchSlop * SWIPE_DISTANCE_TOUCH_SLOP_MULTIPLIER).toFloat()
-        val minVelocity = viewConfig.scaledMinimumFlingVelocity.toFloat()
-        swipeGestureDetector = GestureDetector(
-            this,
-            object : GestureDetector.SimpleOnGestureListener() {
-                override fun onDown(e: MotionEvent): Boolean = true
-                override fun onFling(
-                    e1: MotionEvent?,
-                    e2: MotionEvent,
-                    velocityX: Float,
-                    velocityY: Float
-                ): Boolean {
-                    val start = e1 ?: return false
-                    val direction = SwipeDirectionResolver.resolve(
-                        deltaX = e2.x - start.x,
-                        deltaY = e2.y - start.y,
-                        velocityX = velocityX,
-                        velocityY = velocityY,
-                        minDistance = minDistance,
-                        minVelocity = minVelocity
-                    ) ?: return false
-                    move(direction)
-                    return true
-                }
-            }
-        )
+        inputController.setupSwipeControls()
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        val detector = swipeGestureDetector
-        if (detector != null) {
-            when (ev.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    swipeGestureActive = isEventInsideGameHost(ev)
-                    if (swipeGestureActive) detector.onTouchEvent(ev)
-                }
-                MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
-                    if (swipeGestureActive) detector.onTouchEvent(ev)
-                    swipeGestureActive = false
-                }
-                else -> if (swipeGestureActive) detector.onTouchEvent(ev)
-            }
-        }
+        inputController.onDispatchTouchEvent(ev)
         return super.dispatchTouchEvent(ev)
-    }
-
-    private fun isEventInsideGameHost(ev: MotionEvent): Boolean {
-        val gameHost = findViewById<View>(R.id.fragmentGameHost) ?: return false
-        if (!fillWindowRect(gameHost, gameHostWindowRect)) return false
-        val x = ev.x.toInt()
-        val y = ev.y.toInt()
-        if (!gameHostWindowRect.contains(x, y)) return false
-        if (isInsideOverlay(R.id.buttonMenu, x, y)) return false
-        if (isInsideOverlay(R.id.bottomControls, x, y)) return false
-        return true
-    }
-
-    private fun isInsideOverlay(viewId: Int, x: Int, y: Int): Boolean {
-        val overlay = findViewById<View>(viewId) ?: return false
-        if (!fillWindowRect(overlay, overlayWindowRect)) return false
-        return overlayWindowRect.contains(x, y)
-    }
-
-    private fun fillWindowRect(view: View, out: android.graphics.Rect): Boolean {
-        if (view.width <= 0 || view.height <= 0) return false
-        view.getLocationInWindow(viewWindowLocation)
-        val left = viewWindowLocation[0]
-        val top = viewWindowLocation[1]
-        out.set(left, top, left + view.width, top + view.height)
-        return true
     }
 
     companion object {
         private const val TICK_INTERVAL_MS = 200L
-        private const val SWIPE_DISTANCE_TOUCH_SLOP_MULTIPLIER = 4
         private const val SAVE_TIMEOUT_MS = 750L
         private const val KEY_AUTO_MOVEMENT_ENABLED = "autoMovementEnabled"
         private const val KEY_SELECTED_AUTO_POLICY = "selectedAutomatedPlayerPolicy"
