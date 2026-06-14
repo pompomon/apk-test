@@ -849,7 +849,7 @@ class GameEngineTest {
         for (y in 0 until maze.height) {
             for (x in 0 until maze.width) {
                 val start = GridPos(x, y)
-                if (start == maze.start || start == maze.exit) continue
+                if (isSpecialCell(maze, start)) continue
                 for (direction in Direction.entries) {
                     var cursor = start
                     var distance = 0
@@ -857,7 +857,7 @@ class GameEngineTest {
                     while (maze.canMove(cursor, direction)) {
                         cursor = cursor.moved(direction)
                         distance += 1
-                        if (cursor == maze.start || cursor == maze.exit) {
+                        if (isSpecialCell(maze, cursor)) {
                             touchesSpecialCell = true
                         }
                     }
@@ -867,17 +867,20 @@ class GameEngineTest {
                 }
             }
         }
-        throw IllegalStateException("No open run of length $minDistance found in maze ${maze.width}x${maze.height}")
+        throw IllegalStateException(
+            "No open run of length $minDistance found that avoids start/exit cells " +
+                "in maze ${maze.width}x${maze.height}"
+        )
     }
 
     private fun findTurnableOpenRun(maze: Maze): TurnableRun {
         for (y in 0 until maze.height) {
             for (x in 0 until maze.width) {
                 val start = GridPos(x, y)
-                if (start == maze.start || start == maze.exit) continue
+                if (isSpecialCell(maze, start)) continue
                 val walkable = Direction.entries.filter { direction ->
                     val next = start.moved(direction)
-                    maze.canMove(start, direction) && next != maze.start && next != maze.exit
+                    maze.canMove(start, direction) && !isSpecialCell(maze, next)
                 }
                 if (walkable.size >= 2) {
                     return TurnableRun(start, walkable[0], walkable[1])
@@ -886,6 +889,9 @@ class GameEngineTest {
         }
         throw IllegalStateException("No turnable cell found in maze ${maze.width}x${maze.height}")
     }
+
+    private fun isSpecialCell(maze: Maze, pos: GridPos): Boolean =
+        pos == maze.start || pos == maze.exit
 
     private fun cellsNear(engine: GameEngine, origin: GridPos, maxDistance: Int): List<GridPos> {
         return allCells(engine)

@@ -507,9 +507,11 @@ class GameEngine(
         }
         manualQueue.clear()
         var cursor = player.position
-        while (manualQueue.size < MAX_MANUAL_QUEUE && canPlayerTraverse(cursor, direction)) {
+        while (manualQueue.size < MAX_MANUAL_QUEUE) {
+            val next = cursor.moved(direction)
+            if (!maze.inBounds(next) || !canPlayerTraverse(cursor, direction)) break
             addManualMove(direction)
-            cursor = cursor.moved(direction)
+            cursor = next
         }
         val queuedRunDurationSeconds = manualQueue.size / effectivePlayerMovesPerSecond()
         armManualOverrideIfNeeded(queuedRunDurationSeconds)
