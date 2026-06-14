@@ -65,11 +65,11 @@ class GameInputController(
         dPadRepeatController.stop()
     }
 
-    fun feedSwipeEventForTesting(event: MotionEvent) {
+    internal fun feedSwipeEventForTesting(event: MotionEvent) {
         swipeGestureDetector?.onTouchEvent(event)
     }
 
-    fun isPointInsideGameHost(x: Float, y: Float): Boolean {
+    internal fun isPointInsideGameHost(x: Float, y: Float): Boolean {
         val gameHost = activity.findViewById<View>(R.id.fragmentGameHost) ?: return false
         if (!fillWindowRect(gameHost, gameHostWindowRect)) return false
         val truncatedX = x.toInt()
