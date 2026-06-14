@@ -31,6 +31,7 @@ import com.example.apktest.ui.LegendDialog
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
+
 class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private var menuPopover: GameMenuPopover? = null
     private lateinit var menuButton: ImageButton
