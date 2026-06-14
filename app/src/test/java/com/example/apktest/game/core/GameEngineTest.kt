@@ -121,7 +121,7 @@ class GameEngineTest {
     }
 
     @Test
-    fun manualMoveUntilBlocked_stopsAtWallWithoutExtraSteps() {
+    fun manualMoveUntilBlocked_stopsAtWallOrBoundsWithoutExtraSteps() {
         val engine = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed)
         engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
         val run = findOpenRunUntilBlocked(engine.maze, minDistance = 2)
