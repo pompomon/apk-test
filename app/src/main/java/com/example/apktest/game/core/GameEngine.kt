@@ -509,7 +509,7 @@ class GameEngine(
         var cursor = player.position
         while (manualQueue.size < MAX_MANUAL_QUEUE) {
             val next = cursor.moved(direction)
-            if (!maze.inBounds(next) || !canPlayerTraverse(cursor, direction)) break
+            if (!canPlayerTraverse(cursor, direction)) break
             addManualMove(direction)
             cursor = next
         }

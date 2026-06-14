@@ -147,7 +147,7 @@ class GameEngineTest {
     fun manualMoveUntilBlocked_replacesPendingRunWithNewDirection() {
         val engine = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed)
         engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
-        val turn = findTurnableOpenRun(engine.maze)
+        val turn = findCellWithMultipleWalkableDirections(engine.maze)
         engine.player.position = turn.start
 
         engine.queueManualMoveUntilBlocked(turn.firstDirection)
@@ -845,14 +845,14 @@ class GameEngineTest {
         val secondDirection: Direction
     )
 
-    private fun isSpecialCell(maze: Maze, pos: GridPos): Boolean =
+    private fun isStartOrExit(maze: Maze, pos: GridPos): Boolean =
         pos == maze.start || pos == maze.exit
 
     private fun findOpenRunUntilBlocked(maze: Maze, minDistance: Int): OpenRun {
         for (y in 0 until maze.height) {
             for (x in 0 until maze.width) {
                 val start = GridPos(x, y)
-                if (isSpecialCell(maze, start)) continue
+                if (isStartOrExit(maze, start)) continue
                 for (direction in Direction.entries) {
                     var cursor = start
                     var distance = 0
@@ -860,7 +860,7 @@ class GameEngineTest {
                     while (maze.canMove(cursor, direction)) {
                         cursor = cursor.moved(direction)
                         distance += 1
-                        if (isSpecialCell(maze, cursor)) {
+                        if (isStartOrExit(maze, cursor)) {
                             touchesSpecialCell = true
                         }
                     }
@@ -876,14 +876,14 @@ class GameEngineTest {
         )
     }
 
-    private fun findTurnableOpenRun(maze: Maze): TurnableRun {
+    private fun findCellWithMultipleWalkableDirections(maze: Maze): TurnableRun {
         for (y in 0 until maze.height) {
             for (x in 0 until maze.width) {
                 val start = GridPos(x, y)
-                if (isSpecialCell(maze, start)) continue
+                if (isStartOrExit(maze, start)) continue
                 val walkable = Direction.entries.filter { direction ->
                     val next = start.moved(direction)
-                    maze.canMove(start, direction) && !isSpecialCell(maze, next)
+                    maze.canMove(start, direction) && !isStartOrExit(maze, next)
                 }
                 if (walkable.size >= 2) {
                     return TurnableRun(start, walkable[0], walkable[1])
