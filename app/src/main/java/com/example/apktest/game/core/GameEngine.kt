@@ -73,6 +73,11 @@ class GameEngine(
         get() = powerUpsByCell.values
     val activePowerUps: List<ActivePowerUpEffect>
         get() = activeEffectsByType.values.sortedBy { it.type.ordinal }
+    /** Allocation-free render query for player-collected timed power-up tints. */
+    fun isPlayerPowerUpTintActive(type: PowerUpType): Boolean = isEffectActive(type)
+    /** Power-up tint applied to the maze background when an NPC pickup affects the player. */
+    val npcMazeTintType: PowerUpType?
+        get() = if (isPlayerFrozenByNpc()) PowerUpType.FREEZE else null
 
     private var random = Random(seed)
     // Independent RNG stream for NPC policy decisions (e.g. wander move under
@@ -751,6 +756,11 @@ class GameEngine(
         val npc = npcs[npcIndex]
         npc.position = position
         collectPowerUpAtNpc(npc)
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun clearNpcsForTest() {
+        npcs.clear()
     }
 
     private fun activateNpcInducedPlayerFreeze() {

@@ -1,6 +1,7 @@
 package com.example.apktest.game.render
 
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.OrthographicCamera
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
@@ -9,6 +10,7 @@ import com.badlogic.gdx.utils.viewport.ExtendViewport
 import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameEngine
 import com.example.apktest.game.core.Maze
+import com.example.apktest.game.core.PowerUpEffectKind
 import com.example.apktest.game.core.PowerUpType
 
 class MazeRenderer {
@@ -57,6 +59,7 @@ class MazeRenderer {
     private var floorHighlightY: FloatArray = FloatArray(0)
     private var floorHighlightCount: Int = 0
     private var floorPixelSize: Float = 0f
+    private val activePlayerTintColors: Array<Color> = Array(TIMED_POWER_UP_COUNT) { Color.WHITE }
 
     fun resize(width: Int, height: Int) {
         viewport.update(width, height, true)
@@ -137,6 +140,12 @@ class MazeRenderer {
             for (i in 0 until highlightCount) {
                 shapes.rect(ox + hxs[i], oy + hys[i], pixelSize, pixelSize)
             }
+        }
+        val mazeTintType = engine.npcMazeTintType
+        if (mazeTintType != null) {
+            shapes.end()
+            drawMazeTintOverlay(mazeTintType, ox, oy, maze.width.toFloat(), maze.height.toFloat())
+            shapes.begin(ShapeRenderer.ShapeType.Filled)
         }
 
         // Render the exit as a wooden door sprite centered on the exit cell.
@@ -362,6 +371,7 @@ class MazeRenderer {
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
         val player = engine.player
+        val playerTintCount = collectActivePlayerTintColors(engine)
         val playerPattern = pickFrame(
             frames = Sprites.heroFrames,
             elapsedSeconds = engine.elapsedSeconds,
@@ -374,7 +384,9 @@ class MazeRenderer {
             palette = Sprites.heroPalette(),
             centerX = mazeOriginX + player.position.x + 0.5f,
             centerY = mazeOriginY + player.position.y + 0.5f,
-            size = 0.78f
+            size = 0.78f,
+            tintColors = activePlayerTintColors,
+            tintCount = playerTintCount
         )
 
         engine.npcs.forEach { npc ->
@@ -395,6 +407,40 @@ class MazeRenderer {
         }
 
         shapes.end()
+    }
+
+    private fun collectActivePlayerTintColors(engine: GameEngine): Int {
+        var count = 0
+        for (type in PLAYER_TINT_TYPES) {
+            if (engine.isPlayerPowerUpTintActive(type)) {
+                activePlayerTintColors[count] = POWER_UP_TINT_COLORS[type.ordinal]
+                count++
+            }
+        }
+        return count
+    }
+
+    private fun drawMazeTintOverlay(
+        tintType: PowerUpType,
+        x: Float,
+        y: Float,
+        width: Float,
+        height: Float
+    ) {
+        val tint = POWER_UP_TINT_COLORS[tintType.ordinal]
+        try {
+            Gdx.gl.glEnable(GL20.GL_BLEND)
+            Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
+            shapes.begin(ShapeRenderer.ShapeType.Filled)
+            try {
+                shapes.setColor(tint.r, tint.g, tint.b, PowerUpTinting.MAZE_TINT_ALPHA)
+                shapes.rect(x, y, width, height)
+            } finally {
+                shapes.end()
+            }
+        } finally {
+            Gdx.gl.glDisable(GL20.GL_BLEND)
+        }
     }
 
     /**
@@ -527,6 +573,30 @@ class MazeRenderer {
 
         private val COUNTDOWN_COLOR = Color(1f, 0.95f, 0.5f, 1f)
         private val OVERLAY_BACKDROP_COLOR = Color(0.02f, 0.02f, 0.04f, 1f)
+        private val POWER_UP_TINT_COLORS: Array<Color> = Array(PowerUpType.entries.size) { i ->
+            PowerUpIcons.gdxColorFor(PowerUpType.entries[i])
+        }
+        private val PLAYER_TINT_TYPES: Array<PowerUpType> =
+            PowerUpType.entries.filter { playerTintEligible(it) }.toTypedArray()
+        private val TIMED_POWER_UP_COUNT: Int = PLAYER_TINT_TYPES.size
+
+        private fun playerTintEligible(type: PowerUpType): Boolean = when (type) {
+            PowerUpType.INVISIBILITY -> true
+            PowerUpType.TELEPORT -> false
+            PowerUpType.SPEED_UP -> true
+            PowerUpType.FREEZE -> true
+            PowerUpType.SHIELD -> true
+            PowerUpType.SLOW_TIME -> true
+            PowerUpType.MAGNET -> true
+            PowerUpType.BLAST -> false
+            PowerUpType.GHOST_MODE -> true
+        }.also { eligible ->
+            if (eligible) {
+                check(type.metadata.kind == PowerUpEffectKind.TIMED) {
+                    "Player tint power-up must be timed: $type"
+                }
+            }
+        }
 
         // Bright cycle for WIN — vivid yellow / lime / cyan / magenta.
         private val WIN_PALETTE = arrayOf(
