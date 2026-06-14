@@ -511,7 +511,8 @@ class GameEngine(
             addManualMove(direction)
             cursor = cursor.moved(direction)
         }
-        armManualOverrideIfNeeded()
+        val queuedRunDurationSeconds = manualQueue.size / effectivePlayerMovesPerSecond()
+        armManualOverrideIfNeeded(queuedRunDurationSeconds)
     }
 
     /**
@@ -691,9 +692,12 @@ class GameEngine(
         manualQueue.addLast(direction)
     }
 
-    private fun armManualOverrideIfNeeded() {
+    private fun armManualOverrideIfNeeded(
+        minDurationSeconds: Float = MANUAL_OVERRIDE_DURATION_SECONDS
+    ) {
         if (playerPolicyType != PlayerPolicyType.MANUAL && manualQueue.isNotEmpty()) {
-            manualOverrideUntilSeconds = elapsedSeconds + MANUAL_OVERRIDE_DURATION_SECONDS
+            manualOverrideUntilSeconds = elapsedSeconds +
+                maxOf(MANUAL_OVERRIDE_DURATION_SECONDS, minDurationSeconds)
         }
     }
 

@@ -23,8 +23,8 @@ import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.game.core.automatedPlayerPolicies
-import com.example.apktest.ui.GameMenuPopover
 import com.example.apktest.ui.GameInputController
+import com.example.apktest.ui.GameMenuPopover
 import com.example.apktest.ui.LegendDialog
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
