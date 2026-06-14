@@ -93,8 +93,9 @@ data class MazeStartupSpec(
  * Returned from [AdventureRunController.onMazeWon] to communicate what
  * the host should surface on the win overlay:
  * - the new lives count and whether a bonus life was just awarded,
- * - either a list of [unlockCandidates] (3 random locked
- *   [PlayerPolicyType]s on odd-numbered maze wins), or
+ * - either a list of [unlockCandidates] (up to 3 locked
+ *   [PlayerPolicyType]s from the checked-in Adventure ranking on
+ *   odd-numbered maze wins), or
  * - a list of [startingPowerUpCandidates] (3 random non-GHOST
  *   [PowerUpType]s on even-numbered maze wins),
  * - the maze index just completed and total mazes for messaging.
@@ -232,7 +233,7 @@ class AdventureRunController(
         // starting power-up for the next maze.
         val isOdd = newIndex % 2 == 1
         val unlockCandidates = if (runComplete || !isOdd) emptyList()
-        else sampleLockedPlayerPolicies(REWARD_SAMPLE_SIZE, newIndex)
+        else selectTopLockedPlayerPolicies(REWARD_SAMPLE_SIZE)
         val powerUpCandidates = if (runComplete || isOdd) emptyList()
         else sampleStartingPowerUps(REWARD_SAMPLE_SIZE, newIndex)
 
@@ -248,18 +249,16 @@ class AdventureRunController(
     }
 
     /**
-     * Deterministically samples up to [count] still-locked
-     * [PlayerPolicyType]s using an RNG derived from [runSeed] and
-     * [mazeIndex1Based] so the same sample is produced on a death/replay
-     * path or a snapshot rehydration.
+     * Returns up to [count] still-locked [PlayerPolicyType]s from the
+     * checked-in Adventure award ranking. Policy rewards intentionally do not
+     * use [runSeed]: every run offers the fastest successful locked policies
+     * first, according to the offline JVM ranking harness.
      */
-    internal fun sampleLockedPlayerPolicies(count: Int, mazeIndex1Based: Int): List<PlayerPolicyType> {
-        val locked = lockedPlayerPolicies()
-        if (locked.isEmpty() || count <= 0) return emptyList()
-        val rng = Random(deriveRewardSeed(mazeIndex1Based, REWARD_KIND_POLICY))
-        if (locked.size <= count) return locked.shuffled(rng)
-        return locked.shuffled(rng).take(count)
-    }
+    internal fun selectTopLockedPlayerPolicies(count: Int): List<PlayerPolicyType> =
+        if (count <= 0) emptyList()
+        else adventureAwardPlayerPolicyRanking()
+            .filter { it !in state.unlockedPlayerPolicies }
+            .take(count)
 
     /**
      * Deterministically samples up to [count] [PowerUpType]s (excluding
@@ -270,7 +269,7 @@ class AdventureRunController(
     internal fun sampleStartingPowerUps(count: Int, mazeIndex1Based: Int): List<PowerUpType> {
         val pool = PowerUpType.entries.filter { it != PowerUpType.GHOST_MODE }
         if (pool.isEmpty() || count <= 0) return emptyList()
-        val rng = Random(deriveRewardSeed(mazeIndex1Based, REWARD_KIND_POWERUP))
+        val rng = Random(derivePowerUpRewardSeed(mazeIndex1Based))
         if (pool.size <= count) return pool.shuffled(rng)
         return pool.shuffled(rng).take(count)
     }
@@ -387,8 +386,8 @@ class AdventureRunController(
     private fun deriveNpcPolicySeed(mazeIndex1Based: Int): Long =
         runSeed xor (mazeIndex1Based.toLong() * NPC_POLICY_SEED_STRIDE) xor NPC_POLICY_SEED_MIX
 
-    private fun deriveRewardSeed(mazeIndex1Based: Int, kind: Long): Long =
-        runSeed xor (mazeIndex1Based.toLong() * REWARD_SEED_STRIDE) xor REWARD_SEED_MIX xor kind
+    private fun derivePowerUpRewardSeed(mazeIndex1Based: Int): Long =
+        runSeed xor (mazeIndex1Based.toLong() * POWERUP_REWARD_SEED_STRIDE) xor POWERUP_REWARD_SEED_MIX
 
     companion object {
         // Arbitrary mix constants — chosen as signed-Long literals so they
@@ -398,10 +397,11 @@ class AdventureRunController(
         private const val MAZE_SEED_MIX: Long = -0x4F2C5D6E7A8B9C0DL
         private const val NPC_POLICY_SEED_STRIDE: Long = 0x6A09E667F3BCC908L
         private const val NPC_POLICY_SEED_MIX: Long = -0x123456789ABCDEFL
-        private const val REWARD_SEED_STRIDE: Long = 0x243F6A8885A308D3L
-        private const val REWARD_SEED_MIX: Long = -0x7E1B2C3D4E5F6071L
-        private const val REWARD_KIND_POLICY: Long = 0x0101010101010101L
-        private const val REWARD_KIND_POWERUP: Long = 0x2020202020202020L
+        private const val POWERUP_REWARD_SEED_STRIDE: Long = 0x243F6A8885A308D3L
+        // Folds in REWARD_KIND_POWERUP (0x2020202020202020) from the original
+        // deriveRewardSeed(mazeIndex1Based, REWARD_KIND_POWERUP) formula so that
+        // the power-up candidate sequence is identical to the pre-refactor output.
+        private const val POWERUP_REWARD_SEED_MIX: Long = -0x5E3B0C1D6E7F4051L
 
         /** Maximum number of choices offered to the player on a non-final maze win. */
         const val REWARD_SAMPLE_SIZE = 3

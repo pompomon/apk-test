@@ -1,6 +1,6 @@
 # Automated player policy ranking plan
 
-This document describes the automated player policies currently available in the game and proposes a detailed implementation plan for ranking them by time to exit.
+This document describes the automated player policies currently available in the game, the JVM development harness used to rank them, and the checked-in Adventure award order derived from that ranking.
 
 ## Scope and assumptions
 
@@ -10,6 +10,18 @@ This document describes the automated player policies currently available in the
 - Treat `GameStatus.LOSE` and timeout runs as incomplete attempts. The default ranking is survival-first, so policies with more successful exits rank above faster policies that lose or time out more often.
 - Keep the benchmark deterministic: every policy must be evaluated against the same difficulty, seed set, NPC policy set, and starting power-up rules.
 - Do not use live Android UI timing for ranking. The ranking harness should live in pure game-core/JVM code so it can run in unit tests and CI.
+
+## Checked-in Adventure award order
+
+Adventure mode no longer samples policy unlock candidates randomly. Odd-numbered maze wins offer the first three still-locked policies from this checked-in order:
+
+1. `BFS_EXIT` — BFS Exit
+2. `ASTAR_EXIT` — A* Exit
+3. `PLEDGE` — Pledge
+4. `FLEE_TO_EXIT` — Flee + Drift to Exit
+5. `WALL_LEFT` — Wall Left
+
+The order is static runtime data in `adventureAwardPlayerPolicyRanking()` so unlock dialogs are deterministic and cheap. It is produced during development by running the JVM-only `PlayerPolicyRankingHarness` in the test source set, then checking in the resulting order. Runtime gameplay does not execute the benchmark harness.
 
 ## Current automated player policies
 
@@ -108,7 +120,7 @@ Primary sort order:
 4. Lower median successful step count.
 5. Stable tie-break by `PlayerPolicyType.ordinal`.
 
-This is a complete tie-breaking cascade: compare each metric in order and only fall through to the next metric when the previous values tie. Use `PlayerPolicyType.ordinal` only after all numeric metrics tie. Policies with zero successful runs have undefined successful-time statistics; keep their median, mean, p90, and median-step values as `null` in the aggregate model and place them in a failed tier below every policy with at least one success. Inside that failed tier, sort by fewer losses, then fewer timeouts, then `PlayerPolicyType.ordinal`. This sort keeps "fast but frequently loses" policies below consistently successful policies. If the product goal is pure speed regardless of loss rate, make the sort configurable but keep this survival-first ordering as the default.
+This is a complete tie-breaking cascade: compare each metric in order and only fall through to the next metric when the previous values tie. Use `PlayerPolicyType.ordinal` only after all numeric metrics tie. Policies with zero successful runs have undefined successful-time statistics; keep their median, mean, p90, and median-step values as `null` in the aggregate model and place them in a failed tier below every policy with at least one success. Inside that failed tier, sort by fewer losses, then fewer timeouts, then `PlayerPolicyType.ordinal`. This sort keeps "fast but frequently loses" policies below consistently successful policies. Adventure awards use this survival-first ordering. "Fastest successful wins" is interpreted within a success-rate tier: policies with better success rate rank first, and faster successful elapsed time breaks ties among policies with the same success rate.
 
 ## Benchmark scenario matrix
 
@@ -129,17 +141,18 @@ Keep every policy evaluation on a given scenario identical except for the player
 - Same timeout.
 - Same update timestep.
 
-## Simulation loop plan
+## Simulation loop
 
-1. Add a pure game-core ranking API, for example under `app/src/main/java/com/example/apktest/game/core/`.
-2. Define immutable configuration for the benchmark:
+The JVM-only development harness lives in `app/src/test/java/com/example/apktest/game/core/PlayerPolicyRankingHarness.kt`.
+
+1. Define immutable configuration for the benchmark:
    - difficulties
    - NPC policies
    - seeds
    - maximum simulated seconds
    - timestep
    - optional starting power-up
-3. For each `(difficulty, seed, npcPolicy, playerPolicy)`:
+2. For each `(difficulty, seed, npcPolicy, playerPolicy)`:
    - Create a fresh `GameEngine(difficulty, seed)`.
    - Set the NPC policy.
    - Set the player policy.
@@ -147,14 +160,14 @@ Keep every policy evaluation on a given scenario identical except for the player
    - Do not call `GameEngine.startCountdown()` — fresh construction, restart, and restore all leave `countdownRemainingSeconds` at `0f` automatically.
    - Step `update(dt)` until `GameStatus.WIN`, `GameStatus.LOSE`, or timeout.
    - Record status, elapsed seconds, and steps.
-4. Choose a timestep that cannot skip over movement cadence unexpectedly:
+3. Choose a timestep that cannot skip over movement cadence unexpectedly:
    - `playerMovesPerSecond` and `npcMovesPerSecond` are base frequencies; the effective rates can be higher when a starting power-up is active (e.g., `SPEED_UP` multiplies player speed by `2f`).
    - Compute the effective player speed for this scenario: `val effectivePlayerSpeed = playerMovesPerSecond * (if (startingPowerUp == PowerUpType.SPEED_UP) 2f else 1f)`.
    - A safe default is `val dt = 1f / (maxOf(effectivePlayerSpeed, npcMovesPerSecond) * 4f)`.
    - The 4x oversampling keeps each simulation update at no more than one quarter of the fastest actor's effective movement interval, preventing coarse-grained power-up expiry or timing artifacts from skewing `elapsedSeconds` comparisons.
-5. Aggregate all run results by policy.
-6. Sort policies using the complete ranking metric cascade above, including the failed tier for policies with zero successful exits.
-7. Expose the result as a pure Kotlin value object that tests, debug UI, or future tooling can render.
+4. Aggregate all run results by policy.
+5. Sort policies using the complete ranking metric cascade above, including the failed tier for policies with zero successful exits.
+6. Copy the resulting order into `adventureAwardPlayerPolicyRanking()` after reviewing the harness output.
 
 ## Validation plan
 
@@ -189,9 +202,9 @@ The first implementation can expose rankings through tests or a debug-only funct
 3. Include each policy's label, rank, success rate, median time, and median steps.
 4. Keep detailed benchmark seed data out of the normal UI unless needed for diagnostics.
 
-## Open questions
+## Resolved decisions
 
-- Should ranking prioritize success rate before time, or should it be pure fastest successful time?
-- Should rankings include active NPCs and power-ups, or should the first version measure only static-maze time to exit?
-- Should rankings be computed offline and checked in, or computed at runtime/debug time from the current code?
-- How many seeds should be considered representative for each difficulty?
+- Ranking prioritizes survival first, then successful time.
+- The first checked-in Adventure order is static and benchmark-produced during development.
+- Runtime Adventure awards filter the checked-in order by locked policies; they do not run the benchmark and do not shuffle by `runSeed`.
+- The harness default matrix includes Easy, Medium, Hard; all NPC policies; and a small curated seed set. Expand the seed set before using the harness output for larger balancing passes.
