@@ -144,18 +144,29 @@ class GameEngineTest {
     }
 
     @Test
-    fun manualMoveUntilBlocked_replacesPendingRunWithNewDirection() {
+    fun manualMoveUntilBlocked_replacesInFlightRunWithNewDirection() {
         val engine = GameEngine(testPreset(initialPowerUpTypes = emptyList()), seed)
         engine.setPlayerPolicy(PlayerPolicyType.MANUAL)
-        val turn = findCellWithMultipleWalkableDirections(engine.maze)
+        val turn = findInFlightTurn(engine.maze)
         engine.player.position = turn.start
+        val playerInterval = 1f / engine.difficulty.playerMovesPerSecond
 
+        // Start a run that has at least two steps queued, then advance one step
+        // so the run is genuinely in flight before redirecting it.
         engine.queueManualMoveUntilBlocked(turn.firstDirection)
-        engine.queueManualMoveUntilBlocked(turn.secondDirection)
         engine.update(0.001f)
 
-        assertEquals(turn.start.moved(turn.secondDirection), engine.player.position)
+        val afterFirstStep = turn.start.moved(turn.firstDirection)
+        assertEquals(afterFirstStep, engine.player.position)
         assertEquals(1, engine.steps)
+
+        // Redirect the in-flight run; the next step must follow the new
+        // direction rather than draining the remaining queued steps.
+        engine.queueManualMoveUntilBlocked(turn.secondDirection)
+        engine.update(playerInterval)
+
+        assertEquals(afterFirstStep.moved(turn.secondDirection), engine.player.position)
+        assertEquals(2, engine.steps)
     }
 
     @Test
@@ -876,21 +887,39 @@ class GameEngineTest {
         )
     }
 
-    private fun findCellWithMultipleWalkableDirections(maze: Maze): TurnableRun {
+    /**
+     * Find a [start] cell from which a run of at least two cells exists in
+     * [TurnableRun.firstDirection], and where the cell reached after the first
+     * step can still be left in a different [TurnableRun.secondDirection]. This
+     * lets a test advance one step into a queued run before redirecting it,
+     * exercising in-flight replacement.
+     */
+    private fun findInFlightTurn(maze: Maze): TurnableRun {
         for (y in 0 until maze.height) {
             for (x in 0 until maze.width) {
                 val start = GridPos(x, y)
                 if (isStartOrExit(maze, start)) continue
-                val walkable = Direction.entries.filter { direction ->
-                    val next = start.moved(direction)
-                    maze.canMove(start, direction) && !isStartOrExit(maze, next)
-                }
-                if (walkable.size >= 2) {
-                    return TurnableRun(start, walkable[0], walkable[1])
+                for (firstDirection in Direction.entries) {
+                    if (!maze.canMove(start, firstDirection)) continue
+                    val intermediate = start.moved(firstDirection)
+                    if (isStartOrExit(maze, intermediate)) continue
+                    // Need a run of at least two cells in firstDirection so the
+                    // queued run is genuinely in flight after one step.
+                    if (!maze.canMove(intermediate, firstDirection)) continue
+                    val secondCell = intermediate.moved(firstDirection)
+                    if (isStartOrExit(maze, secondCell)) continue
+                    val secondDirection = Direction.entries.firstOrNull { direction ->
+                        direction != firstDirection &&
+                            maze.canMove(intermediate, direction) &&
+                            !isStartOrExit(maze, intermediate.moved(direction))
+                    } ?: continue
+                    return TurnableRun(start, firstDirection, secondDirection)
                 }
             }
         }
-        throw IllegalStateException("No turnable cell found in maze ${maze.width}x${maze.height}")
+        throw IllegalStateException(
+            "No in-flight turn cell found in maze ${maze.width}x${maze.height}"
+        )
     }
 
     private fun cellsNear(engine: GameEngine, origin: GridPos, maxDistance: Int): List<GridPos> {
