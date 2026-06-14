@@ -513,6 +513,7 @@ class GameEngine(
             addManualMove(direction)
             cursor = next
         }
+        if (manualQueue.isEmpty()) return
         val movesPerSecond = effectivePlayerMovesPerSecond()
         val queuedRunDurationSeconds = if (movesPerSecond > 0f) {
             manualQueue.size / movesPerSecond
@@ -700,7 +701,7 @@ class GameEngine(
     }
 
     private fun armManualOverrideIfNeeded(
-        minDurationSeconds: Float = MANUAL_OVERRIDE_DURATION_SECONDS
+        minDurationSeconds: Float = 0f
     ) {
         if (playerPolicyType != PlayerPolicyType.MANUAL && manualQueue.isNotEmpty()) {
             manualOverrideUntilSeconds = elapsedSeconds +
