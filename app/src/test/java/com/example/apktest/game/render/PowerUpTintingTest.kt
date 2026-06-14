@@ -3,6 +3,7 @@ package com.example.apktest.game.render
 import com.badlogic.gdx.graphics.Color
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class PowerUpTintingTest {
@@ -62,6 +63,22 @@ class PowerUpTintingTest {
         assertEquals(base.g, out.g, 0.0001f)
         assertTrue(out.b < base.b)
         assertEquals(base.a, out.a, 0.0001f)
+    }
+
+    @Test
+    fun gradientTint_rejectsTintCountBeyondProvidedColors() {
+        try {
+            PowerUpTinting.gradientTintForColumn(
+                tintColors = arrayOf(Color.RED),
+                tintCount = 2,
+                column = 0,
+                columns = 7,
+                out = Color()
+            )
+            fail("Expected tintCount larger than tintColors.size to be rejected")
+        } catch (e: IllegalArgumentException) {
+            assertEquals("tintCount (2) must be <= tintColors.size (1)", e.message)
+        }
     }
 
     private fun assertColor(color: Color, r: Float, g: Float, b: Float, a: Float) {

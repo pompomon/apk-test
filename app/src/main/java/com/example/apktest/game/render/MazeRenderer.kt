@@ -141,7 +141,12 @@ class MazeRenderer {
                 shapes.rect(ox + hxs[i], oy + hys[i], pixelSize, pixelSize)
             }
         }
-        drawMazeTintOverlay(engine.npcMazeTintType, ox, oy, maze.width.toFloat(), maze.height.toFloat())
+        val mazeTintType = engine.npcMazeTintType
+        if (mazeTintType != null) {
+            shapes.end()
+            drawMazeTintOverlay(mazeTintType, ox, oy, maze.width.toFloat(), maze.height.toFloat())
+            shapes.begin(ShapeRenderer.ShapeType.Filled)
+        }
 
         // Render the exit as a wooden door sprite centered on the exit cell.
         PixelSpriteRenderer.draw(
@@ -416,22 +421,23 @@ class MazeRenderer {
     }
 
     private fun drawMazeTintOverlay(
-        tintType: PowerUpType?,
+        tintType: PowerUpType,
         x: Float,
         y: Float,
         width: Float,
         height: Float
     ) {
-        if (tintType == null) return
         val tint = POWER_UP_TINT_COLORS[tintType.ordinal]
-        // MazeRenderer owns this ShapeRenderer pass and disables blending
-        // immediately after the translucent overlay; the remaining in-game
-        // drawing uses opaque filled shapes.
         try {
             Gdx.gl.glEnable(GL20.GL_BLEND)
             Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
-            shapes.setColor(tint.r, tint.g, tint.b, PowerUpTinting.MAZE_TINT_ALPHA)
-            shapes.rect(x, y, width, height)
+            shapes.begin(ShapeRenderer.ShapeType.Filled)
+            try {
+                shapes.setColor(tint.r, tint.g, tint.b, PowerUpTinting.MAZE_TINT_ALPHA)
+                shapes.rect(x, y, width, height)
+            } finally {
+                shapes.end()
+            }
         } finally {
             Gdx.gl.glDisable(GL20.GL_BLEND)
         }

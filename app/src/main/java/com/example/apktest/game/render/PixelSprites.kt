@@ -122,6 +122,9 @@ internal object PowerUpTinting {
         out: Color
     ): Color {
         require(tintCount > 0) { "tintCount must be positive" }
+        require(tintCount <= tintColors.size) {
+            "tintCount ($tintCount) must be <= tintColors.size (${tintColors.size})"
+        }
         if (tintCount == 1 || columns <= 1) {
             return out.set(tintColors[0])
         }
