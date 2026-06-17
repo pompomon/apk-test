@@ -53,6 +53,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     private lateinit var menuButton: ImageButton
     private lateinit var autoToggle: ToggleButton
+    private lateinit var inertiaToggle: ToggleButton
     private lateinit var statusBar: TextView
     private val inputController = GameInputController(
         activity = this,
@@ -64,6 +65,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     private var lastObservedStatus: GameStatus = GameStatus.RUNNING
     private var transitionPending: Boolean = false
     private var autoMovementEnabled: Boolean = false
+    private var inertiaMovementEnabled: Boolean = true
     private var selectedAutomatedPlayerPolicy: PlayerPolicyType? = null
     private var automatedPolicyPromptShown: Boolean = false
     private var automatedPolicyDialog: AlertDialog? = null
@@ -80,6 +82,9 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun isAutomatedPolicyDialogShowingForTesting(): Boolean =
         automatedPolicyDialog?.isShowing == true
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun isInertiaToggleCheckedForTesting(): Boolean = inertiaToggle.isChecked
 
     private val tickHandler = Handler(Looper.getMainLooper())
     private val tickRunnable = object : Runnable {
@@ -106,11 +111,13 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         statusBar = findViewById(R.id.adventureStatusBar)
         menuButton = findViewById(R.id.buttonMenu)
         autoToggle = findViewById(R.id.buttonAuto)
+        inertiaToggle = findViewById(R.id.buttonInertia)
 
         val (initialController, initialSeed, isFreshStart) = loadOrBuildController(intent, savedInstanceState)
         controller = initialController
         runSeed = initialSeed
         restoreAutomationUiState(savedInstanceState)
+        restoreInputUiState(savedInstanceState)
 
         // Always (re)create the GameFragment from the current controller
         // spec, including on activity recreation (savedInstanceState != null,
@@ -199,6 +206,13 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         }
         validateAndUpdateSelectedAutomatedPolicy()
         controller.setAutomatedPolicyPromptShown(automatedPolicyPromptShown)
+    }
+
+    private fun restoreInputUiState(savedInstanceState: Bundle?) {
+        inertiaMovementEnabled = savedInstanceState?.getBoolean(
+            KEY_INERTIA_MOVEMENT_ENABLED,
+            true
+        ) ?: true
     }
 
     private fun loadOrBuildController(
@@ -315,6 +329,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean(KEY_AUTO_MOVEMENT_ENABLED, autoMovementEnabled)
+        outState.putBoolean(KEY_INERTIA_MOVEMENT_ENABLED, inertiaMovementEnabled)
         selectedAutomatedPlayerPolicy?.let { outState.putString(KEY_SELECTED_AUTO_POLICY, it.name) }
         outState.putBoolean(KEY_AUTO_PROMPT_SHOWN, automatedPolicyPromptShown)
         super.onSaveInstanceState(outState)
@@ -374,6 +389,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     private fun setupControls() {
         menuButton.setOnClickListener { showMenu() }
+        inertiaToggle.isChecked = inertiaMovementEnabled
+        inertiaToggle.setOnClickListener {
+            inertiaMovementEnabled = inertiaToggle.isChecked
+        }
         autoToggle.setOnClickListener {
             if (autoToggle.isChecked) {
                 enableAutomatedMovementOrSelect()
@@ -553,7 +572,12 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun moveUntilBlocked(direction: Direction) {
-        gameFragment()?.queueManualMoveUntilBlocked(direction)
+        val fragment = gameFragment()
+        if (inertiaMovementEnabled) {
+            fragment?.queueManualMoveUntilBlocked(direction)
+        } else {
+            fragment?.queueManualMove(direction)
+        }
     }
 
     /** Polls the engine status to detect WIN/LOSE transitions exactly once. */
@@ -795,6 +819,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         private const val TICK_INTERVAL_MS = 200L
         private const val SAVE_TIMEOUT_MS = 750L
         private const val KEY_AUTO_MOVEMENT_ENABLED = "autoMovementEnabled"
+        private const val KEY_INERTIA_MOVEMENT_ENABLED = "inertiaMovementEnabled"
         private const val KEY_SELECTED_AUTO_POLICY = "selectedAutomatedPlayerPolicy"
         private const val KEY_AUTO_PROMPT_SHOWN = "automatedPolicyPromptShown"
     }

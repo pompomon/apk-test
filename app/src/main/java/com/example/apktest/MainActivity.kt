@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private var menuPopover: GameMenuPopover? = null
     private lateinit var menuButton: ImageButton
     private lateinit var autoToggle: ToggleButton
+    private lateinit var inertiaToggle: ToggleButton
     private lateinit var stateStore: GameStateStore
     private val autosaveExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val inputController = GameInputController(
@@ -42,6 +43,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         onSwipeResolved = { resolvedSwipeCount++ }
     )
     private var autoMovementEnabled: Boolean = false
+    private var inertiaMovementEnabled: Boolean = true
     private var selectedAutomatedPlayerPolicy: PlayerPolicyType? = null
     private var automatedPolicyPromptShown: Boolean = false
     private var automatedPolicyDialog: AlertDialog? = null
@@ -63,6 +65,9 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun isAutoToggleCheckedForTesting(): Boolean = autoToggle.isChecked
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun isInertiaToggleCheckedForTesting(): Boolean = inertiaToggle.isChecked
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun isSwipeStartInsideGameHostForTesting(x: Float, y: Float): Boolean =
@@ -102,6 +107,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
         menuButton = findViewById(R.id.buttonMenu)
         autoToggle = findViewById(R.id.buttonAuto)
+        inertiaToggle = findViewById(R.id.buttonInertia)
 
         // Load the saved snapshot at most once here and share it between the
         // auto-toggle initialization and buildGameFragmentArgs() so a cold
@@ -112,6 +118,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         val resumeSnapshot = if (resume) stateStore.load() else null
 
         restoreAutomationUiState(savedInstanceState, intent, resumeSnapshot)
+        restoreInputUiState(savedInstanceState)
 
         if (savedInstanceState == null) {
             val fragment = GameFragment().apply {
@@ -169,6 +176,13 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             return resumeSnapshot?.playerPolicy ?: intentPolicy
         }
         return intentPolicy
+    }
+
+    private fun restoreInputUiState(savedInstanceState: Bundle?) {
+        inertiaMovementEnabled = savedInstanceState?.getBoolean(
+            KEY_INERTIA_MOVEMENT_ENABLED,
+            true
+        ) ?: true
     }
 
     private fun buildGameFragmentArgs(intent: Intent, resumeSnapshot: GameEngineSnapshot?): Bundle {
@@ -310,6 +324,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean(KEY_AUTO_MOVEMENT_ENABLED, autoMovementEnabled)
+        outState.putBoolean(KEY_INERTIA_MOVEMENT_ENABLED, inertiaMovementEnabled)
         selectedAutomatedPlayerPolicy?.let { outState.putString(KEY_SELECTED_AUTO_POLICY, it.name) }
         outState.putBoolean(KEY_AUTO_PROMPT_SHOWN, automatedPolicyPromptShown)
         super.onSaveInstanceState(outState)
@@ -317,6 +332,10 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     private fun setupControls() {
         menuButton.setOnClickListener { showMenuPopover() }
+        inertiaToggle.isChecked = inertiaMovementEnabled
+        inertiaToggle.setOnClickListener {
+            inertiaMovementEnabled = inertiaToggle.isChecked
+        }
         autoToggle.setOnClickListener {
             if (autoToggle.isChecked) {
                 enableAutomatedMovementOrSelect()
@@ -508,7 +527,12 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     }
 
     private fun moveUntilBlocked(direction: Direction) {
-        gameFragment()?.queueManualMoveUntilBlocked(direction)
+        val fragment = gameFragment()
+        if (inertiaMovementEnabled) {
+            fragment?.queueManualMoveUntilBlocked(direction)
+        } else {
+            fragment?.queueManualMove(direction)
+        }
         refreshHudSnapshot()
     }
 
@@ -569,6 +593,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         // commit() to flush before giving up to avoid an ANR.
         private const val PAUSE_EXIT_SAVE_TIMEOUT_MS = 750L
         private const val KEY_AUTO_MOVEMENT_ENABLED = "autoMovementEnabled"
+        private const val KEY_INERTIA_MOVEMENT_ENABLED = "inertiaMovementEnabled"
         private const val KEY_SELECTED_AUTO_POLICY = "selectedAutomatedPlayerPolicy"
         private const val KEY_AUTO_PROMPT_SHOWN = "automatedPolicyPromptShown"
     }

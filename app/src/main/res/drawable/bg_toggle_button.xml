@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false">
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/maze_dpad_button_corner_radius" />
+            <solid android:color="@color/maze_toggle_button_background_disabled" />
+        </shape>
+    </item>
+    <item android:state_checked="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/maze_dpad_button_corner_radius" />
+            <solid android:color="@color/maze_toggle_button_background_on" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/maze_dpad_button_corner_radius" />
+            <solid android:color="@color/maze_toggle_button_background_off" />
+        </shape>
+    </item>
+</selector>

@@ -61,9 +61,18 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal">
 
-            <Space
+            <ToggleButton
+                android:id="@+id/buttonInertia"
                 android:layout_width="@dimen/maze_dpad_button_width"
-                android:layout_height="@dimen/maze_dpad_button_height" />
+                android:layout_height="@dimen/maze_dpad_button_height"
+                android:background="@drawable/bg_toggle_button"
+                android:checked="true"
+                android:contentDescription="@string/inertia_move_description"
+                android:text="@string/inertia_move"
+                android:textColor="@color/maze_toggle_button_text"
+                android:textOff="@string/inertia_move"
+                android:textOn="@string/inertia_move"
+                android:textSize="@dimen/maze_dpad_button_text_size" />
 
             <Button
                 android:id="@+id/buttonUp"
@@ -81,10 +90,10 @@
                 android:layout_width="@dimen/maze_dpad_button_width"
                 android:layout_height="@dimen/maze_dpad_button_height"
                 android:layout_marginStart="@dimen/maze_dpad_button_gap"
-                android:backgroundTint="@color/maze_dpad_button_background"
+                android:background="@drawable/bg_toggle_button"
                 android:contentDescription="@string/auto_move_description"
                 android:text="@string/auto_move"
-                android:textColor="@color/maze_dpad_button_text"
+                android:textColor="@color/maze_toggle_button_text"
                 android:textOff="@string/auto_move"
                 android:textOn="@string/auto_move"
                 android:textSize="@dimen/maze_dpad_button_text_size" />

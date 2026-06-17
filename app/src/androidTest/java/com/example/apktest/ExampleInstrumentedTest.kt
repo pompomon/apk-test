@@ -44,6 +44,7 @@ class ExampleInstrumentedTest {
                     R.id.buttonLeft,
                     R.id.buttonDown,
                     R.id.buttonRight,
+                    R.id.buttonInertia,
                     R.id.buttonAuto
                 )
                 for (id in viewIds) {
@@ -123,6 +124,7 @@ class ExampleInstrumentedTest {
                     R.id.buttonLeft,
                     R.id.buttonDown,
                     R.id.buttonRight,
+                    R.id.buttonInertia,
                     R.id.buttonAuto
                 )
                 for (id in controlIds) {
@@ -267,8 +269,31 @@ class ExampleInstrumentedTest {
                 val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonAuto)
                 assertNotNull("Auto toggle should be inflated", toggle)
                 assertTrue("Auto toggle should be enabled when automated policies exist", toggle.isEnabled)
+                assertUsesSharedToggleStyle(toggle)
                 assertTrue("Auto toggle should reflect automated launch policy", toggle.isChecked)
                 assertTrue(activity.isAutoToggleCheckedForTesting())
+            }
+        }
+    }
+
+    @Test
+    fun classicInertiaToggleDefaultsCheckedAndPersistsOffState() {
+        launchMainActivityWithBfsExitPolicy().use { scenario ->
+            scenario.onActivity { activity ->
+                val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonInertia)
+                assertNotNull("Inertia toggle should be inflated", toggle)
+                assertUsesSharedToggleStyle(toggle)
+                assertTrue("Inertia should default on", toggle.isChecked)
+                assertTrue(activity.isInertiaToggleCheckedForTesting())
+                toggle.performClick()
+                assertFalse("Clicking inertia should turn it off", toggle.isChecked)
+                assertFalse(activity.isInertiaToggleCheckedForTesting())
+            }
+            scenario.recreate()
+            scenario.onActivity { activity ->
+                val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonInertia)
+                assertFalse("Inertia off state should survive recreation", toggle.isChecked)
+                assertFalse(activity.isInertiaToggleCheckedForTesting())
             }
         }
     }
@@ -291,13 +316,19 @@ class ExampleInstrumentedTest {
         ActivityScenario.launch(AdventureActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
                 val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonAuto)
+                val inertiaToggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonInertia)
                 assertNotNull("Auto toggle should be inflated", toggle)
+                assertNotNull("Inertia toggle should be inflated", inertiaToggle)
+                assertUsesSharedToggleStyle(toggle)
+                assertUsesSharedToggleStyle(inertiaToggle)
                 assertFalse(
                     "Adventure prompt should not show before an automated unlock",
                     activity.isAutomatedPolicyDialogShowingForTesting()
                 )
                 assertFalse("Auto toggle should start disabled with only MANUAL unlocked", toggle.isEnabled)
                 assertFalse("Auto toggle should start unchecked", toggle.isChecked)
+                assertTrue("Inertia should default on in Adventure", inertiaToggle.isChecked)
+                assertTrue(activity.isInertiaToggleCheckedForTesting())
             }
         }
     }
@@ -309,12 +340,17 @@ class ExampleInstrumentedTest {
                 activity.controllerForTesting().applyPolicyUnlock(PlayerPolicyType.BFS_EXIT)
                 activity.refreshAutoToggleForTesting()
                 val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonAuto)
+                assertUsesSharedToggleStyle(toggle)
                 assertTrue("Auto toggle should enable after an automated policy unlock", toggle.isEnabled)
                 assertFalse("Auto toggle should remain unchecked until selected", toggle.isChecked)
             }
         }
     }
 
+    private fun assertUsesSharedToggleStyle(toggle: android.widget.ToggleButton) {
+        assertTrue("Toggle background should react to checked/enabled state", toggle.background.isStateful)
+        assertTrue("Toggle text color should react to enabled state", toggle.textColors.isStateful)
+    }
 
     private fun localizedPrefix(textRes: Int): String {
         return InstrumentationRegistry.getInstrumentation()
