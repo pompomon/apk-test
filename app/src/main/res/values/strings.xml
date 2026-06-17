@@ -13,6 +13,8 @@
     <string name="move_right_description">Move right</string>
     <string name="auto_move">Auto</string>
     <string name="auto_move_description">Toggle automated movement</string>
+    <string name="inertia_move">Glide</string>
+    <string name="inertia_move_description">Toggle inertia movement</string>
     <string name="pick_automated_player_strategy">Choose automated player strategy</string>
     <string name="status_running">Running</string>
     <string name="status_paused">Paused</string>

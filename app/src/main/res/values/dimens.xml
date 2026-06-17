@@ -4,6 +4,7 @@
     <dimen name="maze_dpad_button_width">84dp</dimen>
     <dimen name="maze_dpad_button_height">60dp</dimen>
     <dimen name="maze_dpad_button_gap">6dp</dimen>
+    <dimen name="maze_dpad_button_corner_radius">4dp</dimen>
     <dimen name="maze_dpad_button_text_size">26sp</dimen>
     <dimen name="maze_menu_button_size">48dp</dimen>
     <dimen name="maze_menu_button_margin">8dp</dimen>
