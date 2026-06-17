@@ -109,4 +109,15 @@ jobs:
           api-level: 29
           arch: x86_64
           profile: Nexus 6
-          script: ./gradlew connectedDebugAndroidTest
+          # The API-29 emulator occasionally aborts the instrumentation with
+          # "Process crashed" before any test logic runs (see testing.md). Wrap
+          # the run in a bounded retry so an infrastructure flake doesn't fail CI.
+          script: >-
+            for attempt in 1 2 3; do
+            echo "connectedDebugAndroidTest attempt ${attempt}/3";
+            if ./gradlew connectedDebugAndroidTest; then exit 0; fi;
+            echo "Attempt ${attempt} failed; letting the emulator settle before retrying.";
+            sleep 15;
+            done;
+            echo "connectedDebugAndroidTest failed after 3 attempts";
+            exit 1

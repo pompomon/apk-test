@@ -4,10 +4,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewConfiguration
 import android.widget.ImageButton
 import android.widget.ToggleButton
 import androidx.annotation.VisibleForTesting
@@ -25,7 +23,7 @@ import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.game.core.automatedPlayerPolicies
-import com.example.apktest.ui.DPadRepeatController
+import com.example.apktest.ui.GameInputController
 import com.example.apktest.ui.GameMenuPopover
 import com.example.apktest.ui.LegendDialog
 import java.util.concurrent.ExecutorService
@@ -38,7 +36,11 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private lateinit var autoToggle: ToggleButton
     private lateinit var stateStore: GameStateStore
     private val autosaveExecutor: ExecutorService = Executors.newSingleThreadExecutor()
-    private val dPadRepeatController = DPadRepeatController(move = { direction: Direction -> move(direction) })
+    private val inputController = GameInputController(
+        activity = this,
+        moveUntilBlocked = { direction: Direction -> moveUntilBlocked(direction) },
+        onSwipeResolved = { resolvedSwipeCount++ }
+    )
     private var autoMovementEnabled: Boolean = false
     private var selectedAutomatedPlayerPolicy: PlayerPolicyType? = null
     private var automatedPolicyPromptShown: Boolean = false
@@ -64,7 +66,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun isSwipeStartInsideGameHostForTesting(x: Float, y: Float): Boolean =
-        isPointInsideGameHost(x, y)
+        inputController.isPointInsideGameHost(x, y)
 
     /**
      * Feeds a MotionEvent directly into the swipe gesture detector, bypassing
@@ -74,14 +76,8 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
      */
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun feedSwipeEventForTesting(event: MotionEvent) {
-        swipeGestureDetector?.onTouchEvent(event)
+        inputController.feedSwipeEventForTesting(event)
     }
-
-    private var swipeGestureDetector: GestureDetector? = null
-    private var swipeGestureActive: Boolean = false
-    private val gameHostWindowRect = android.graphics.Rect()
-    private val overlayWindowRect = android.graphics.Rect()
-    private val viewWindowLocation = IntArray(2)
 
     private val hudHandler = Handler(Looper.getMainLooper())
     private val hudRefreshRunnable = object : Runnable {
@@ -234,7 +230,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     override fun onPause() {
         hudHandler.removeCallbacks(hudRefreshRunnable)
-        dPadRepeatController.stop()
+        inputController.stop()
         menuPopover?.dismiss()
         // Autosave so the user can resume after a process death, switching
         // away, or just to be safe before any incidental finish(). Skip
@@ -305,7 +301,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     }
 
     override fun onDestroy() {
-        dPadRepeatController.stop()
+        inputController.stop()
         automatedPolicyDialog?.dismiss()
         automatedPolicyDialog = null
         autosaveExecutor.shutdown()
@@ -329,10 +325,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
             }
         }
 
-        dPadRepeatController.bind(findViewById(R.id.buttonUp), Direction.NORTH)
-        dPadRepeatController.bind(findViewById(R.id.buttonDown), Direction.SOUTH)
-        dPadRepeatController.bind(findViewById(R.id.buttonLeft), Direction.WEST)
-        dPadRepeatController.bind(findViewById(R.id.buttonRight), Direction.EAST)
+        inputController.bindDirectionalControls()
     }
 
     private fun enableAutomatedMovementOrSelect() {
@@ -514,41 +507,13 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         }
     }
 
-    private fun move(direction: Direction) {
-        gameFragment()?.queueManualMove(direction)
+    private fun moveUntilBlocked(direction: Direction) {
+        gameFragment()?.queueManualMoveUntilBlocked(direction)
         refreshHudSnapshot()
     }
 
     private fun setupSwipeControls() {
-        val viewConfig = ViewConfiguration.get(this)
-        val minDistance = (viewConfig.scaledTouchSlop * SWIPE_DISTANCE_TOUCH_SLOP_MULTIPLIER).toFloat()
-        val minVelocity = viewConfig.scaledMinimumFlingVelocity.toFloat()
-        swipeGestureDetector = GestureDetector(
-            this,
-            object : GestureDetector.SimpleOnGestureListener() {
-                override fun onDown(e: MotionEvent): Boolean = true
-
-                override fun onFling(
-                    e1: MotionEvent?,
-                    e2: MotionEvent,
-                    velocityX: Float,
-                    velocityY: Float
-                ): Boolean {
-                    val start = e1 ?: return false
-                    val direction = SwipeDirectionResolver.resolve(
-                        deltaX = e2.x - start.x,
-                        deltaY = e2.y - start.y,
-                        velocityX = velocityX,
-                        velocityY = velocityY,
-                        minDistance = minDistance,
-                        minVelocity = minVelocity
-                    ) ?: return false
-                    resolvedSwipeCount++
-                    move(direction)
-                    return true
-                }
-            }
-        )
+        inputController.setupSwipeControls()
     }
 
     // Routes touches that begin inside the game host through the swipe detector before the
@@ -558,60 +523,8 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     // trigger unintended player moves. We never consume the event here so existing dispatch
     // behavior for child views and arrow-button controls is preserved.
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        val detector = swipeGestureDetector
-        if (detector != null) {
-            when (ev.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    swipeGestureActive = isPointInsideGameHost(ev.x, ev.y)
-                    if (swipeGestureActive) {
-                        detector.onTouchEvent(ev)
-                    }
-                }
-                MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
-                    if (swipeGestureActive) {
-                        detector.onTouchEvent(ev)
-                    }
-                    swipeGestureActive = false
-                }
-                else -> {
-                    if (swipeGestureActive) {
-                        detector.onTouchEvent(ev)
-                    }
-                }
-            }
-        }
+        inputController.onDispatchTouchEvent(ev)
         return super.dispatchTouchEvent(ev)
-    }
-
-    private fun isPointInsideGameHost(x: Float, y: Float): Boolean {
-        val gameHost = findViewById<View>(R.id.fragmentGameHost) ?: return false
-        if (!fillWindowRect(gameHost, gameHostWindowRect)) return false
-        // MotionEvent.x/y in Activity.dispatchTouchEvent are window/decor-relative, so compare
-        // against window-relative rects (getLocationInWindow + width/height) for consistent space.
-        val truncatedX = x.toInt()
-        val truncatedY = y.toInt()
-        if (!gameHostWindowRect.contains(truncatedX, truncatedY)) return false
-        // The fragment host now spans the full screen above the D-pad; exclude touches that
-        // fall on the hamburger button (top-right overlay) and on the D-pad so taps/flings on
-        // controls don't trigger unintended player moves.
-        if (isInsideOverlay(R.id.buttonMenu, truncatedX, truncatedY)) return false
-        if (isInsideOverlay(R.id.bottomControls, truncatedX, truncatedY)) return false
-        return true
-    }
-
-    private fun isInsideOverlay(viewId: Int, x: Int, y: Int): Boolean {
-        val overlay = findViewById<View>(viewId) ?: return false
-        if (!fillWindowRect(overlay, overlayWindowRect)) return false
-        return overlayWindowRect.contains(x, y)
-    }
-
-    private fun fillWindowRect(view: View, out: android.graphics.Rect): Boolean {
-        if (view.width <= 0 || view.height <= 0) return false
-        view.getLocationInWindow(viewWindowLocation)
-        val left = viewWindowLocation[0]
-        val top = viewWindowLocation[1]
-        out.set(left, top, left + view.width, top + view.height)
-        return true
     }
 
     private fun refreshHudSnapshot() {
@@ -652,8 +565,6 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     companion object {
         private const val HUD_REFRESH_INTERVAL_MS = 250L
-        // 4x touch slop requires a deliberate drag, reducing accidental move input from taps/jitter.
-        private const val SWIPE_DISTANCE_TOUCH_SLOP_MULTIPLIER = 4
         // Upper bound on how long Pause & Exit will wait for the snapshot
         // commit() to flush before giving up to avoid an ANR.
         private const val PAUSE_EXIT_SAVE_TIMEOUT_MS = 750L

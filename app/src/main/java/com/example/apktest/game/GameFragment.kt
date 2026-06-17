@@ -128,6 +128,10 @@ class GameFragment : AndroidFragmentApplication() {
         game?.queueManualMove(direction)
     }
 
+    fun queueManualMoveUntilBlocked(direction: Direction) {
+        game?.queueManualMoveUntilBlocked(direction)
+    }
+
     fun togglePause() {
         game?.togglePause()
     }
