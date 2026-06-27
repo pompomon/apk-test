@@ -14,5 +14,9 @@
     <dimen name="start_menu_button_min_height">52dp</dimen>
     <dimen name="start_menu_button_text_size">16sp</dimen>
     <dimen name="start_menu_button_gap">12dp</dimen>
+    <dimen name="start_menu_button_horizontal_padding">14dp</dimen>
+    <dimen name="start_menu_button_vertical_padding">8dp</dimen>
+    <dimen name="start_menu_button_pixel_border">2dp</dimen>
+    <dimen name="start_menu_button_pixel_offset">4dp</dimen>
     <dimen name="start_menu_title_text_size">26sp</dimen>
 </resources>

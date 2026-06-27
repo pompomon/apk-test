@@ -47,6 +47,10 @@
     <!-- Start menu -->
     <string name="menu_resume">Resume Game</string>
     <string name="menu_new_game">New Game</string>
+    <string name="menu_classic_mode">Classic mode</string>
+    <string name="menu_resume_classic">Resume Classic</string>
+    <string name="menu_start_classic">Start Classic</string>
+    <string name="menu_back">Back</string>
     <string name="menu_difficulty">Difficulty: %1$s</string>
     <string name="menu_player_strategy">Player: %1$s</string>
     <string name="menu_npc_strategy">NPCs: %1$s</string>

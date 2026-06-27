@@ -4,7 +4,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -86,7 +85,7 @@ class AdventureSetupActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
-        buttonPickDifficulty.setOnClickListener { showDifficultyPicker() }
+        buttonPickDifficulty.setOnClickListener { cycleDifficulty() }
         buttonLegend.setOnClickListener { LegendDialog.show(this) }
         buttonBack.setOnClickListener { finish() }
     }
@@ -117,17 +116,11 @@ class AdventureSetupActivity : AppCompatActivity() {
         )
     }
 
-    private fun showDifficultyPicker() {
-        val items = DifficultyPresets.all.map { it.name }.toTypedArray()
-        val current = items.indexOf(selectedDifficultyName).coerceAtLeast(0)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_pick_difficulty)
-            .setSingleChoiceItems(items, current) { dialog, which ->
-                selectedDifficultyName = items[which]
-                refreshSelectionLabels()
-                dialog.dismiss()
-            }
-            .show()
+    private fun cycleDifficulty() {
+        val presets = DifficultyPresets.all
+        val current = presets.indexOfFirst { it.name == selectedDifficultyName }
+        selectedDifficultyName = presets[(current + 1) % presets.size].name
+        refreshSelectionLabels()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

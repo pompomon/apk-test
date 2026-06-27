@@ -12,10 +12,6 @@
         android:layout_height="wrap_content"
         android:padding="24dp">
 
-        <!-- Centre column: buttons fill 70% of horizontal space via these
-             guidelines (15% / 85%). Switching to ConstraintLayout lets us
-             scale the buttons responsively without per-screen layout
-             variants. -->
         <androidx.constraintlayout.widget.Guideline
             android:id="@+id/guidelineStart"
             android:layout_width="wrap_content"
@@ -45,7 +41,7 @@
             app:layout_constraintTop_toTopOf="parent" />
 
         <androidx.appcompat.widget.LinearLayoutCompat
-            android:id="@+id/startMenuButtonColumn"
+            android:id="@+id/startMenuRootButtonColumn"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -56,33 +52,10 @@
             app:layout_constraintVertical_bias="0.1">
 
             <Button
-                android:id="@+id/buttonResume"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:minHeight="@dimen/start_menu_button_min_height"
-                android:text="@string/menu_resume"
-                android:textSize="@dimen/start_menu_button_text_size"
-                app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
-                app:autoSizeMinTextSize="12sp"
-                app:autoSizeTextType="uniform" />
-
-            <Button
-                android:id="@+id/buttonStart"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/start_menu_button_gap"
-                android:minHeight="@dimen/start_menu_button_min_height"
-                android:text="@string/menu_new_game"
-                android:textSize="@dimen/start_menu_button_text_size"
-                app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
-                app:autoSizeMinTextSize="12sp"
-                app:autoSizeTextType="uniform" />
-
-            <Button
                 android:id="@+id/buttonAdventureMode"
+                style="@style/StartMenuPixelButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/start_menu_button_gap"
                 android:minHeight="@dimen/start_menu_button_min_height"
                 android:text="@string/menu_adventure_mode"
                 android:textSize="@dimen/start_menu_button_text_size"
@@ -91,7 +64,72 @@
                 app:autoSizeTextType="uniform" />
 
             <Button
+                android:id="@+id/buttonClassicMode"
+                style="@style/StartMenuPixelButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/start_menu_button_gap"
+                android:minHeight="@dimen/start_menu_button_min_height"
+                android:text="@string/menu_classic_mode"
+                android:textSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMinTextSize="12sp"
+                app:autoSizeTextType="uniform" />
+
+            <Button
+                android:id="@+id/buttonLegend"
+                style="@style/StartMenuPixelButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/start_menu_button_gap"
+                android:minHeight="@dimen/start_menu_button_min_height"
+                android:text="@string/legend"
+                android:textSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMinTextSize="12sp"
+                app:autoSizeTextType="uniform" />
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/startMenuClassicButtonColumn"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/guidelineEnd"
+            app:layout_constraintStart_toEndOf="@id/guidelineStart"
+            app:layout_constraintTop_toBottomOf="@id/setupTitle"
+            app:layout_constraintVertical_bias="0.1">
+
+            <Button
+                android:id="@+id/buttonResume"
+                style="@style/StartMenuPixelButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="@dimen/start_menu_button_min_height"
+                android:text="@string/menu_resume_classic"
+                android:textSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMinTextSize="12sp"
+                app:autoSizeTextType="uniform" />
+
+            <Button
+                android:id="@+id/buttonStart"
+                style="@style/StartMenuPixelButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/start_menu_button_gap"
+                android:minHeight="@dimen/start_menu_button_min_height"
+                android:text="@string/menu_start_classic"
+                android:textSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
+                app:autoSizeMinTextSize="12sp"
+                app:autoSizeTextType="uniform" />
+
+            <Button
                 android:id="@+id/buttonPickDifficulty"
+                style="@style/StartMenuPixelButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/start_menu_button_gap"
@@ -103,6 +141,7 @@
 
             <Button
                 android:id="@+id/buttonPickPlayerStrategy"
+                style="@style/StartMenuPixelButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/start_menu_button_gap"
@@ -114,6 +153,7 @@
 
             <Button
                 android:id="@+id/buttonPickNpcStrategy"
+                style="@style/StartMenuPixelButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/start_menu_button_gap"
@@ -124,12 +164,13 @@
                 app:autoSizeTextType="uniform" />
 
             <Button
-                android:id="@+id/buttonLegend"
+                android:id="@+id/buttonClassicBack"
+                style="@style/StartMenuPixelButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/start_menu_button_gap"
                 android:minHeight="@dimen/start_menu_button_min_height"
-                android:text="@string/legend"
+                android:text="@string/menu_back"
                 android:textSize="@dimen/start_menu_button_text_size"
                 app:autoSizeMaxTextSize="@dimen/start_menu_button_text_size"
                 app:autoSizeMinTextSize="12sp"

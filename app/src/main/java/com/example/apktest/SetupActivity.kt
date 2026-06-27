@@ -2,8 +2,10 @@ package com.example.apktest
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
+import android.view.View.GONE
+import android.view.View.VISIBLE
 import android.widget.Button
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -14,10 +16,9 @@ import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.ui.LegendDialog
 
 /**
- * Start menu: lets the player resume a saved game, start a new one, and
- * pick difficulty / player strategy / NPC strategy. Buttons fill 70% of
- * the available horizontal space (constrained by 15% / 85% guidelines in
- * the layout) and stack vertically, centered on the screen.
+ * Start menu: presents Adventure and Classic as the top-level choices.
+ * Classic-specific actions live in a one-level-deep panel so mode choice
+ * remains the first decision on launch.
  */
 class SetupActivity : AppCompatActivity() {
     private lateinit var stateStore: GameStateStore
@@ -30,6 +31,8 @@ class SetupActivity : AppCompatActivity() {
     private lateinit var buttonPickDifficulty: Button
     private lateinit var buttonPickPlayerStrategy: Button
     private lateinit var buttonPickNpcStrategy: Button
+    private lateinit var startMenuRootButtonColumn: View
+    private lateinit var startMenuClassicButtonColumn: View
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,12 +79,23 @@ class SetupActivity : AppCompatActivity() {
         buttonPickDifficulty = findViewById(R.id.buttonPickDifficulty)
         buttonPickPlayerStrategy = findViewById(R.id.buttonPickPlayerStrategy)
         buttonPickNpcStrategy = findViewById(R.id.buttonPickNpcStrategy)
+        startMenuRootButtonColumn = findViewById(R.id.startMenuRootButtonColumn)
+        startMenuClassicButtonColumn = findViewById(R.id.startMenuClassicButtonColumn)
         val buttonStart = findViewById<Button>(R.id.buttonStart)
         val buttonAdventure = findViewById<Button>(R.id.buttonAdventureMode)
+        val buttonClassic = findViewById<Button>(R.id.buttonClassicMode)
         val buttonLegend = findViewById<Button>(R.id.buttonLegend)
+        val buttonClassicBack = findViewById<Button>(R.id.buttonClassicBack)
 
         refreshSelectionLabels()
         refreshResumeButtonState()
+        val showingClassicMenu = savedInstanceState
+            ?.getBoolean(STATE_SHOWING_CLASSIC_MENU, false) ?: false
+        if (showingClassicMenu) {
+            showClassicMenu()
+        } else {
+            showRootMenu()
+        }
 
         buttonResume.setOnClickListener {
             // Also forward the currently selected difficulty/player/npc so
@@ -111,13 +125,15 @@ class SetupActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
-        buttonPickDifficulty.setOnClickListener { showDifficultyPicker() }
-        buttonPickPlayerStrategy.setOnClickListener { showPlayerStrategyPicker() }
-        buttonPickNpcStrategy.setOnClickListener { showNpcStrategyPicker() }
+        buttonPickDifficulty.setOnClickListener { cycleDifficulty() }
+        buttonPickPlayerStrategy.setOnClickListener { cyclePlayerStrategy() }
+        buttonPickNpcStrategy.setOnClickListener { cycleNpcStrategy() }
         buttonLegend.setOnClickListener { LegendDialog.show(this) }
         buttonAdventure.setOnClickListener {
             startActivity(Intent(this, AdventureSetupActivity::class.java))
         }
+        buttonClassic.setOnClickListener { showClassicMenu() }
+        buttonClassicBack.setOnClickListener { showRootMenu() }
     }
 
     override fun onResume() {
@@ -143,45 +159,38 @@ class SetupActivity : AppCompatActivity() {
             getString(R.string.menu_npc_strategy, selectedNpcPolicy.label)
     }
 
-    private fun showDifficultyPicker() {
-        val items = DifficultyPresets.all.map { it.name }.toTypedArray()
-        val current = items.indexOf(selectedDifficultyName).coerceAtLeast(0)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_pick_difficulty)
-            .setSingleChoiceItems(items, current) { dialog, which ->
-                selectedDifficultyName = items[which]
-                refreshSelectionLabels()
-                dialog.dismiss()
-            }
-            .show()
+    private fun showRootMenu() {
+        setClassicMenuVisible(false)
     }
 
-    private fun showPlayerStrategyPicker() {
+    private fun showClassicMenu() {
+        setClassicMenuVisible(true)
+    }
+
+    private fun setClassicMenuVisible(visible: Boolean) {
+        startMenuRootButtonColumn.visibility = if (visible) GONE else VISIBLE
+        startMenuClassicButtonColumn.visibility = if (visible) VISIBLE else GONE
+    }
+
+    private fun cycleDifficulty() {
+        val presets = DifficultyPresets.all
+        val current = presets.indexOfFirst { it.name == selectedDifficultyName }
+        selectedDifficultyName = presets[(current + 1) % presets.size].name
+        refreshSelectionLabels()
+    }
+
+    private fun cyclePlayerStrategy() {
         val entries = PlayerPolicyType.entries
-        val items = entries.map { it.label }.toTypedArray()
-        val current = entries.indexOf(selectedPlayerPolicy).coerceAtLeast(0)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_pick_player_strategy)
-            .setSingleChoiceItems(items, current) { dialog, which ->
-                selectedPlayerPolicy = entries[which]
-                refreshSelectionLabels()
-                dialog.dismiss()
-            }
-            .show()
+        val current = entries.indexOf(selectedPlayerPolicy)
+        selectedPlayerPolicy = entries[(current + 1) % entries.size]
+        refreshSelectionLabels()
     }
 
-    private fun showNpcStrategyPicker() {
+    private fun cycleNpcStrategy() {
         val entries = NpcPolicyType.entries
-        val items = entries.map { it.label }.toTypedArray()
-        val current = entries.indexOf(selectedNpcPolicy).coerceAtLeast(0)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_pick_npc_strategy)
-            .setSingleChoiceItems(items, current) { dialog, which ->
-                selectedNpcPolicy = entries[which]
-                refreshSelectionLabels()
-                dialog.dismiss()
-            }
-            .show()
+        val current = entries.indexOf(selectedNpcPolicy)
+        selectedNpcPolicy = entries[(current + 1) % entries.size]
+        refreshSelectionLabels()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -189,6 +198,10 @@ class SetupActivity : AppCompatActivity() {
         outState.putString(STATE_PLAYER_POLICY, selectedPlayerPolicy.name)
         outState.putString(STATE_NPC_POLICY, selectedNpcPolicy.name)
         outState.putString(STATE_DIFFICULTY, selectedDifficultyName)
+        outState.putBoolean(
+            STATE_SHOWING_CLASSIC_MENU,
+            startMenuClassicButtonColumn.visibility == VISIBLE
+        )
     }
 
     companion object {
@@ -200,5 +213,6 @@ class SetupActivity : AppCompatActivity() {
         private const val STATE_PLAYER_POLICY = "state_player_policy"
         private const val STATE_NPC_POLICY = "state_npc_policy"
         private const val STATE_DIFFICULTY = "state_difficulty"
+        private const val STATE_SHOWING_CLASSIC_MENU = "state_showing_classic_menu"
     }
 }

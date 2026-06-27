@@ -1,6 +1,7 @@
 package com.example.apktest
 
 import android.content.Intent
+import android.content.Context
 import android.os.SystemClock
 import android.view.MotionEvent
 import androidx.test.core.app.ActivityScenario
@@ -8,6 +9,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.apktest.BuildConfig
 import com.example.apktest.game.GameFragment
+import com.example.apktest.game.core.DifficultyPresets
+import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
@@ -26,6 +29,123 @@ class ExampleInstrumentedTest {
         }
         return ActivityScenario.launch(intent)
     }
+
+    @Test
+    fun setupActivity_rootMenuShowsAdventureThenClassic() {
+        clearClassicRawState()
+        ActivityScenario.launch(SetupActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val rootColumn = activity.findViewById<android.widget.LinearLayout>(
+                    R.id.startMenuRootButtonColumn
+                )
+                val classicColumn = activity.findViewById<android.view.View>(
+                    R.id.startMenuClassicButtonColumn
+                )
+                assertEquals(android.view.View.VISIBLE, rootColumn.visibility)
+                assertEquals(android.view.View.GONE, classicColumn.visibility)
+                assertEquals(
+                    activity.getString(R.string.menu_adventure_mode),
+                    (rootColumn.getChildAt(0) as android.widget.Button).text.toString()
+                )
+                assertEquals(
+                    activity.getString(R.string.menu_classic_mode),
+                    (rootColumn.getChildAt(1) as android.widget.Button).text.toString()
+                )
+            }
+        }
+    }
+
+    @Test
+    fun setupActivity_classicMenuExposesClassicOptionsOneLevelDeep() {
+        clearClassicRawState()
+        ActivityScenario.launch(SetupActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.findViewById<android.view.View>(R.id.buttonClassicMode).performClick()
+                val rootColumn = activity.findViewById<android.view.View>(
+                    R.id.startMenuRootButtonColumn
+                )
+                val classicColumn = activity.findViewById<android.view.View>(
+                    R.id.startMenuClassicButtonColumn
+                )
+                assertEquals(android.view.View.GONE, rootColumn.visibility)
+                assertEquals(android.view.View.VISIBLE, classicColumn.visibility)
+                assertEquals(
+                    activity.getString(R.string.menu_resume_classic),
+                    activity.findViewById<android.widget.Button>(R.id.buttonResume).text.toString()
+                )
+                assertEquals(
+                    activity.getString(R.string.menu_start_classic),
+                    activity.findViewById<android.widget.Button>(R.id.buttonStart).text.toString()
+                )
+                assertEquals(
+                    activity.getString(R.string.menu_difficulty, DifficultyPresets.MEDIUM.name),
+                    activity.findViewById<android.widget.Button>(R.id.buttonPickDifficulty)
+                        .text
+                        .toString()
+                )
+                assertEquals(
+                    activity.getString(R.string.menu_player_strategy, PlayerPolicyType.MANUAL.label),
+                    activity.findViewById<android.widget.Button>(R.id.buttonPickPlayerStrategy)
+                        .text
+                        .toString()
+                )
+                assertEquals(
+                    activity.getString(
+                        R.string.menu_npc_strategy,
+                        NpcPolicyType.DIRECT_CHASE.label
+                    ),
+                    activity.findViewById<android.widget.Button>(R.id.buttonPickNpcStrategy)
+                        .text
+                        .toString()
+                )
+            }
+        }
+    }
+
+    @Test
+    fun setupActivity_classicResumeReflectsRawSavedStatePresence() {
+        clearClassicRawState()
+        ActivityScenario.launch(SetupActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.findViewById<android.view.View>(R.id.buttonClassicMode).performClick()
+                assertFalse(activity.findViewById<android.widget.Button>(R.id.buttonResume).isEnabled)
+            }
+        }
+
+        writeClassicRawState()
+        try {
+            ActivityScenario.launch(SetupActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    activity.findViewById<android.view.View>(R.id.buttonClassicMode).performClick()
+                    assertTrue(
+                        activity.findViewById<android.widget.Button>(R.id.buttonResume).isEnabled
+                    )
+                }
+            }
+        } finally {
+            clearClassicRawState()
+        }
+    }
+
+    private fun clearClassicRawState() {
+        classicStatePrefs()
+            .edit()
+            .remove("state_json")
+            .commit()
+    }
+
+    private fun writeClassicRawState() {
+        // Resume enablement intentionally checks only for the raw key; validation
+        // and stale-blob cleanup happen later when MainActivity calls load().
+        classicStatePrefs()
+            .edit()
+            .putString("state_json", RAW_STATE_PRESENCE_ONLY_JSON)
+            .commit()
+    }
+
+    private fun classicStatePrefs() =
+        InstrumentationRegistry.getInstrumentation().targetContext
+            .getSharedPreferences("maze_state", Context.MODE_PRIVATE)
 
     @Test
     fun useAppContext() {
@@ -498,5 +618,6 @@ class ExampleInstrumentedTest {
         // Retry the entire 4-swipe sequence a few times if no fling resolves; synthetic flings
         // can be intermittently dropped by the emulator's input pipeline.
         private const val MAX_SWIPE_RETRY_ATTEMPTS = 5
+        private const val RAW_STATE_PRESENCE_ONLY_JSON = """{"invalid":true}"""
     }
 }
