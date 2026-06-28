@@ -127,10 +127,13 @@ class ExampleInstrumentedTest {
         }
     }
 
+    private val classicPrefsName = "maze_state"
+    private val classicStateJsonKey = "state_json"
+
     private fun clearClassicRawState() {
         classicStatePrefs()
             .edit()
-            .remove("state_json")
+            .remove(classicStateJsonKey)
             .commit()
     }
 
@@ -139,13 +142,13 @@ class ExampleInstrumentedTest {
         // and stale-blob cleanup happen later when MainActivity calls load().
         classicStatePrefs()
             .edit()
-            .putString("state_json", RAW_STATE_PRESENCE_ONLY_JSON)
+            .putString(classicStateJsonKey, RAW_STATE_PRESENCE_ONLY_JSON)
             .commit()
     }
 
     private fun classicStatePrefs() =
         InstrumentationRegistry.getInstrumentation().targetContext
-            .getSharedPreferences("maze_state", Context.MODE_PRIVATE)
+            .getSharedPreferences(classicPrefsName, Context.MODE_PRIVATE)
 
     @Test
     fun useAppContext() {
