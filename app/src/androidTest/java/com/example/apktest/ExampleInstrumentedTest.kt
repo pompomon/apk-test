@@ -35,7 +35,7 @@ class ExampleInstrumentedTest {
         clearClassicRawState()
         ActivityScenario.launch(SetupActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
-                val rootColumn = activity.findViewById<android.widget.LinearLayout>(
+                val rootColumn = activity.findViewById<android.view.ViewGroup>(
                     R.id.startMenuRootButtonColumn
                 )
                 val classicColumn = activity.findViewById<android.view.View>(
