@@ -6,6 +6,7 @@ import android.view.View
 import android.view.View.GONE
 import android.view.View.VISIBLE
 import android.widget.Button
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -34,12 +35,23 @@ class SetupActivity : AppCompatActivity() {
     private lateinit var startMenuRootButtonColumn: View
     private lateinit var startMenuClassicButtonColumn: View
 
+    // When the Classic panel is showing, a system Back press should return
+    // to the root menu rather than finishing the activity, so Classic behaves
+    // like a real one-level-deep submenu.
+    private val classicBackCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            showRootMenu()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_setup)
 
         stateStore = GameStateStore(this)
+
+        onBackPressedDispatcher.addCallback(this, classicBackCallback)
 
         // Restore selections across process death / config change so the
         // user doesn't lose their picks if the OS recreates this activity.
@@ -170,6 +182,7 @@ class SetupActivity : AppCompatActivity() {
     private fun setClassicMenuVisible(visible: Boolean) {
         startMenuRootButtonColumn.visibility = if (visible) GONE else VISIBLE
         startMenuClassicButtonColumn.visibility = if (visible) VISIBLE else GONE
+        classicBackCallback.isEnabled = visible
     }
 
     private fun cycleDifficulty() {
