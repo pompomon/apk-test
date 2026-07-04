@@ -224,7 +224,8 @@ class AdventureRunController(
         check(state.status == AdventureStatus.IN_PROGRESS) {
             "onMazeWon called in terminal state ${state.status}"
         }
-        state.totalElapsedSeconds += elapsedSeconds.coerceAtLeast(0f)
+        val sanitizedElapsed = if (elapsedSeconds.isFinite()) elapsedSeconds.coerceAtLeast(0f) else 0f
+        state.totalElapsedSeconds += sanitizedElapsed
         state.totalSteps += steps.coerceAtLeast(0)
         val newIndex = state.currentMazeIndex + 1
         state.currentMazeIndex = newIndex

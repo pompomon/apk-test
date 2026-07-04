@@ -36,8 +36,23 @@ class AdventureBestStore(context: Context) {
      * or `null` if no run has been completed for that difficulty yet.
      */
     fun bestTimeSeconds(difficultyName: String): Float? {
-        val key = prefKey(difficultyName)
-        return if (prefs.contains(key)) prefs.getFloat(key, Float.MAX_VALUE) else null
+        return readStoredBest(prefKey(difficultyName))
+    }
+
+    /**
+     * Reads the stored best time for [key], or `null` if it is absent or
+     * type-corrupted. SharedPreferences values can become type-corrupted
+     * across restores/downgrades, in which case [android.content.SharedPreferences.getFloat]
+     * throws [ClassCastException]; treat that as absent/corrupt rather than
+     * crashing.
+     */
+    private fun readStoredBest(key: String): Float? {
+        if (!prefs.contains(key)) return null
+        return try {
+            prefs.getFloat(key, Float.MAX_VALUE)
+        } catch (_: ClassCastException) {
+            null
+        }
     }
 
     /**
@@ -52,14 +67,22 @@ class AdventureBestStore(context: Context) {
         totalElapsedSeconds: Float
     ): BestTimeResult {
         val key = prefKey(difficultyName)
-        val previous = if (prefs.contains(key)) prefs.getFloat(key, Float.MAX_VALUE) else null
-        val isNewBest = previous == null || totalElapsedSeconds < previous
+        // Sanitize the incoming time so non-finite/negative values never
+        // get persisted (they would poison formatting and future
+        // comparisons).
+        val sanitizedTime =
+            if (totalElapsedSeconds.isFinite()) totalElapsedSeconds.coerceAtLeast(0f) else 0f
+        val previous = readStoredBest(key)
+        val isNewBest = previous == null || sanitizedTime < previous
         if (isNewBest) {
-            prefs.edit().putFloat(key, totalElapsedSeconds).apply()
+            // Commit synchronously: this write happens at run-complete, so
+            // persisting immediately keeps the best reliable even if the
+            // process is killed right after finishing.
+            prefs.edit().putFloat(key, sanitizedTime).commit()
         }
         return BestTimeResult(
             previousBestSeconds = previous,
-            currentTimeSeconds = totalElapsedSeconds,
+            currentTimeSeconds = sanitizedTime,
             isNewBest = isNewBest
         )
     }

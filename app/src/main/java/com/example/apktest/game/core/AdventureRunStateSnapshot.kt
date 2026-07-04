@@ -208,7 +208,7 @@ data class AdventureRunStateSnapshot(
                 if (snapshot.currentMazeIndex < 0) return null
                 if (snapshot.livesRemaining < 0) return null
                 if (snapshot.winStreakSinceLastBonus < 0) return null
-                if (snapshot.totalElapsedSeconds < 0f) return null
+                if (snapshot.totalElapsedSeconds < 0f || !snapshot.totalElapsedSeconds.isFinite()) return null
                 if (snapshot.totalSteps < 0) return null
                 if (snapshot.deathsThisRun < 0) return null
                 // MANUAL invariant was enforced above by re-adding it if absent.
