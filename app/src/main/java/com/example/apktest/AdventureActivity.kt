@@ -649,7 +649,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             } else {
                 "\n" + getString(
                     R.string.adventure_best_time,
-                    AdventureTimeFormatter.format(bestResult.previousBestSeconds ?: outcome.totalElapsedSeconds)
+                    AdventureTimeFormatter.format(bestResult.previousBestSeconds!!)
                 )
             }
             getString(
@@ -764,9 +764,6 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun handleMazeLost() {
-        val hud = gameFragment()?.hudState()
-        val elapsedSeconds = hud?.elapsedSeconds ?: 0f
-        val steps = hud?.steps ?: 0
         val outcome = controller.onPlayerDied()
         persistAdventureStateAsync()
         val title = if (outcome.runOver)
@@ -778,8 +775,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 R.string.adventure_run_lost_body_stats,
                 controller.state.currentMazeIndex + 1,
                 controller.config.totalMazes,
-                AdventureTimeFormatter.format(controller.state.totalElapsedSeconds + elapsedSeconds.coerceAtLeast(0f)),
-                controller.state.totalSteps + steps.coerceAtLeast(0),
+                AdventureTimeFormatter.format(controller.state.totalElapsedSeconds),
+                controller.state.totalSteps,
                 controller.state.deathsThisRun
             )
         else
