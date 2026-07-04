@@ -12,6 +12,8 @@ import com.example.apktest.game.core.GameEngine
 import com.example.apktest.game.core.Maze
 import com.example.apktest.game.core.PowerUpEffectKind
 import com.example.apktest.game.core.PowerUpType
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 class MazeRenderer {
     private val camera = OrthographicCamera()
@@ -148,13 +150,19 @@ class MazeRenderer {
             shapes.begin(ShapeRenderer.ShapeType.Filled)
         }
 
-        // Render the exit as a wooden door sprite centered on the exit cell.
+        val exitCenterX = mazeOriginX + maze.exit.x + 0.5f
+        val exitCenterY = mazeOriginY + maze.exit.y + 0.5f
+        shapes.end()
+        drawExitGlow(exitCenterX, exitCenterY)
+        shapes.begin(ShapeRenderer.ShapeType.Filled)
+
+        // Render the exit as a neon portal sprite centered on the exit cell.
         PixelSpriteRenderer.draw(
             shapes = shapes,
             pattern = Sprites.exitDoor,
             palette = Sprites.doorPalette(),
-            centerX = mazeOriginX + maze.exit.x + 0.5f,
-            centerY = mazeOriginY + maze.exit.y + 0.5f,
+            centerX = exitCenterX,
+            centerY = exitCenterY,
             size = 0.9f
         )
 
@@ -443,6 +451,34 @@ class MazeRenderer {
         }
     }
 
+    private fun drawExitGlow(centerX: Float, centerY: Float) {
+        try {
+            Gdx.gl.glEnable(GL20.GL_BLEND)
+            Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
+            shapes.begin(ShapeRenderer.ShapeType.Filled)
+            try {
+                shapes.setColor(
+                    EXIT_GLOW_OUTER_COLOR.r,
+                    EXIT_GLOW_OUTER_COLOR.g,
+                    EXIT_GLOW_OUTER_COLOR.b,
+                    EXIT_GLOW_OUTER_ALPHA
+                )
+                shapes.circle(centerX, centerY, EXIT_GLOW_OUTER_RADIUS, EXIT_GLOW_SEGMENTS)
+                shapes.setColor(
+                    EXIT_GLOW_INNER_COLOR.r,
+                    EXIT_GLOW_INNER_COLOR.g,
+                    EXIT_GLOW_INNER_COLOR.b,
+                    EXIT_GLOW_INNER_ALPHA
+                )
+                shapes.circle(centerX, centerY, EXIT_GLOW_INNER_RADIUS, EXIT_GLOW_SEGMENTS)
+            } finally {
+                shapes.end()
+            }
+        } finally {
+            Gdx.gl.glDisable(GL20.GL_BLEND)
+        }
+    }
+
     /**
      * Pick the active animation frame. Entities that haven't moved in
      * [GameEngine.ANIMATION_IDLE_THRESHOLD_SECONDS] are drawn as the idle
@@ -494,6 +530,7 @@ class MazeRenderer {
         drawBackdrop(cx, cy, glyphSize, glyphGap, text)
 
         shapes.begin(ShapeRenderer.ShapeType.Filled)
+        drawCountdownExitArrow(engine, cx, cy, glyphSize, remaining, goFlash)
         PixelTextRenderer.drawCentered(
             shapes = shapes,
             text = text,
@@ -504,6 +541,125 @@ class MazeRenderer {
             fallbackColor = COUNTDOWN_COLOR
         )
         shapes.end()
+    }
+
+    private fun drawCountdownExitArrow(
+        engine: GameEngine,
+        centerX: Float,
+        centerY: Float,
+        glyphSize: Float,
+        remaining: Float,
+        goFlash: Float
+    ) {
+        val exitX = mazeOriginX + engine.maze.exit.x + 0.5f
+        val exitY = mazeOriginY + engine.maze.exit.y + 0.5f
+        val rawDx = exitX - centerX
+        val rawDy = exitY - centerY
+        val distance = sqrt((rawDx * rawDx + rawDy * rawDy).toDouble()).toFloat()
+        val dirX: Float
+        val dirY: Float
+        if (distance > 0.0001f) {
+            dirX = rawDx / distance
+            dirY = rawDy / distance
+        } else {
+            dirX = 0f
+            dirY = 1f
+        }
+
+        val phase = if (remaining > 0f) {
+            GameEngine.COUNTDOWN_DEFAULT_SECONDS - remaining
+        } else {
+            GameEngine.COUNTDOWN_DEFAULT_SECONDS +
+                (GameEngine.COUNTDOWN_GO_FLASH_SECONDS - goFlash)
+        }
+        val bob = sin((phase * COUNTDOWN_ARROW_BOB_RADIANS_PER_SECOND).toDouble()).toFloat() *
+            glyphSize * COUNTDOWN_ARROW_BOB_DISTANCE_FACTOR
+        val baseDistance = glyphSize * COUNTDOWN_ARROW_DISTANCE_FACTOR + bob
+        val arrowCenterX = (centerX + dirX * baseDistance).coerceIn(
+            COUNTDOWN_ARROW_VIEWPORT_PADDING,
+            viewport.worldWidth - COUNTDOWN_ARROW_VIEWPORT_PADDING
+        )
+        val arrowCenterY = (centerY + dirY * baseDistance).coerceIn(
+            COUNTDOWN_ARROW_VIEWPORT_PADDING,
+            viewport.worldHeight - COUNTDOWN_ARROW_VIEWPORT_PADDING
+        )
+        val arrowLength = glyphSize * COUNTDOWN_ARROW_LENGTH_FACTOR
+        val headLength = arrowLength * COUNTDOWN_ARROW_HEAD_LENGTH_FACTOR
+        val shaftLength = arrowLength - headLength
+        val shaftWidth = glyphSize * COUNTDOWN_ARROW_SHAFT_WIDTH_FACTOR
+        val headWidth = glyphSize * COUNTDOWN_ARROW_HEAD_WIDTH_FACTOR
+        val perpX = -dirY
+        val perpY = dirX
+        val tipX = arrowCenterX + dirX * arrowLength * 0.5f
+        val tipY = arrowCenterY + dirY * arrowLength * 0.5f
+        val headBaseX = tipX - dirX * headLength
+        val headBaseY = tipY - dirY * headLength
+        val tailX = headBaseX - dirX * shaftLength
+        val tailY = headBaseY - dirY * shaftLength
+        val halfShaft = shaftWidth * 0.5f
+        val halfHead = headWidth * 0.5f
+
+        shapes.color = COUNTDOWN_ARROW_SHADOW_COLOR
+        drawArrow(
+            tipX + COUNTDOWN_ARROW_SHADOW_OFFSET,
+            tipY - COUNTDOWN_ARROW_SHADOW_OFFSET,
+            headBaseX + COUNTDOWN_ARROW_SHADOW_OFFSET,
+            headBaseY - COUNTDOWN_ARROW_SHADOW_OFFSET,
+            tailX + COUNTDOWN_ARROW_SHADOW_OFFSET,
+            tailY - COUNTDOWN_ARROW_SHADOW_OFFSET,
+            perpX,
+            perpY,
+            halfShaft,
+            halfHead
+        )
+        shapes.color = COUNTDOWN_ARROW_COLOR
+        drawArrow(tipX, tipY, headBaseX, headBaseY, tailX, tailY, perpX, perpY, halfShaft, halfHead)
+    }
+
+    private fun drawArrow(
+        tipX: Float,
+        tipY: Float,
+        headBaseX: Float,
+        headBaseY: Float,
+        tailX: Float,
+        tailY: Float,
+        perpX: Float,
+        perpY: Float,
+        halfShaft: Float,
+        halfHead: Float
+    ) {
+        val shaftLeftTailX = tailX + perpX * halfShaft
+        val shaftLeftTailY = tailY + perpY * halfShaft
+        val shaftRightTailX = tailX - perpX * halfShaft
+        val shaftRightTailY = tailY - perpY * halfShaft
+        val shaftLeftHeadX = headBaseX + perpX * halfShaft
+        val shaftLeftHeadY = headBaseY + perpY * halfShaft
+        val shaftRightHeadX = headBaseX - perpX * halfShaft
+        val shaftRightHeadY = headBaseY - perpY * halfShaft
+        shapes.triangle(
+            shaftLeftTailX,
+            shaftLeftTailY,
+            shaftRightTailX,
+            shaftRightTailY,
+            shaftLeftHeadX,
+            shaftLeftHeadY
+        )
+        shapes.triangle(
+            shaftRightTailX,
+            shaftRightTailY,
+            shaftRightHeadX,
+            shaftRightHeadY,
+            shaftLeftHeadX,
+            shaftLeftHeadY
+        )
+        shapes.triangle(
+            tipX,
+            tipY,
+            headBaseX + perpX * halfHead,
+            headBaseY + perpY * halfHead,
+            headBaseX - perpX * halfHead,
+            headBaseY - perpY * halfHead
+        )
     }
 
     private fun countdownLabel(remaining: Float): String = when {
@@ -572,7 +728,25 @@ class MazeRenderer {
         private const val WALL_PATTERN_PIXELS_PER_SEGMENT = 32
 
         private val COUNTDOWN_COLOR = Color(1f, 0.95f, 0.5f, 1f)
+        private val COUNTDOWN_ARROW_COLOR = Color(0.00f, 1.00f, 0.95f, 1f)
+        private val COUNTDOWN_ARROW_SHADOW_COLOR = Color(0.02f, 0.02f, 0.08f, 1f)
         private val OVERLAY_BACKDROP_COLOR = Color(0.02f, 0.02f, 0.04f, 1f)
+        private val EXIT_GLOW_OUTER_COLOR = Color(0.00f, 0.95f, 1.00f, 1f)
+        private val EXIT_GLOW_INNER_COLOR = Color(1.00f, 0.15f, 0.95f, 1f)
+        private const val EXIT_GLOW_OUTER_ALPHA = 0.30f
+        private const val EXIT_GLOW_INNER_ALPHA = 0.48f
+        private const val EXIT_GLOW_OUTER_RADIUS = 0.82f
+        private const val EXIT_GLOW_INNER_RADIUS = 0.58f
+        private const val EXIT_GLOW_SEGMENTS = 24
+        private const val COUNTDOWN_ARROW_DISTANCE_FACTOR = 1.18f
+        private const val COUNTDOWN_ARROW_BOB_DISTANCE_FACTOR = 0.18f
+        private const val COUNTDOWN_ARROW_LENGTH_FACTOR = 0.90f
+        private const val COUNTDOWN_ARROW_HEAD_LENGTH_FACTOR = 0.38f
+        private const val COUNTDOWN_ARROW_SHAFT_WIDTH_FACTOR = 0.16f
+        private const val COUNTDOWN_ARROW_HEAD_WIDTH_FACTOR = 0.46f
+        private const val COUNTDOWN_ARROW_VIEWPORT_PADDING = 0.55f
+        private const val COUNTDOWN_ARROW_SHADOW_OFFSET = 0.06f
+        private const val COUNTDOWN_ARROW_BOB_RADIANS_PER_SECOND = 12.566371f
         private val POWER_UP_TINT_COLORS: Array<Color> = Array(PowerUpType.entries.size) { i ->
             PowerUpIcons.gdxColorFor(PowerUpType.entries[i])
         }

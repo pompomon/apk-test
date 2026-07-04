@@ -270,13 +270,13 @@ object Sprites {
     val monster: Array<String> = monsterIdle
     val monsterFrames: Array<Array<String>> = arrayOf(monsterIdle, monsterStep1, monsterStep2)
 
-    // Exit: wooden door with frame, planks, knob (7x7).
+    // Exit: neon portal door with bright frame, energy panels, and core (7x7).
     private val doorPalette = mapOf(
-        'F' to Color(0.32f, 0.20f, 0.10f, 1f), // dark frame
-        'P' to Color(0.65f, 0.42f, 0.22f, 1f), // plank body
-        'L' to Color(0.80f, 0.55f, 0.30f, 1f), // lighter wood-grain highlight
-        'K' to Color(0.95f, 0.80f, 0.20f, 1f), // brass knob
-        'E' to Color(0.10f, 0.06f, 0.04f, 1f)  // outline / hinges
+        'F' to Color(0.00f, 1.00f, 0.95f, 1f), // cyan neon frame
+        'P' to Color(0.30f, 0.05f, 0.75f, 1f), // violet portal body
+        'L' to Color(0.95f, 1.00f, 0.25f, 1f), // electric highlight
+        'K' to Color(1.00f, 0.15f, 0.95f, 1f), // magenta core
+        'E' to Color(0.02f, 0.02f, 0.08f, 1f)  // dark contrast outline
     )
     val exitDoor: Array<String> = arrayOf(
         "FFFFFFF",
