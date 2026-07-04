@@ -579,8 +579,8 @@ class MazeRenderer {
             GameEngine.COUNTDOWN_DEFAULT_SECONDS +
                 (GameEngine.COUNTDOWN_GO_FLASH_SECONDS - goFlash)
         }
-        val bobbingOffset = sin(animationTimeSeconds * COUNTDOWN_ARROW_BOB_RADIANS_PER_SECOND) *
-            glyphSize * COUNTDOWN_ARROW_BOB_DISTANCE_FACTOR
+        val bobbingPhase = animationTimeSeconds * COUNTDOWN_ARROW_BOB_RADIANS_PER_SECOND
+        val bobbingOffset = sin(bobbingPhase) * glyphSize * COUNTDOWN_ARROW_BOB_DISTANCE_FACTOR
         val baseDistance = glyphSize * COUNTDOWN_ARROW_DISTANCE_FACTOR + bobbingOffset
         val arrowCenterX = (centerX + dirX * baseDistance).coerceIn(
             COUNTDOWN_ARROW_VIEWPORT_PADDING,
@@ -635,6 +635,10 @@ class MazeRenderer {
         halfShaft: Float,
         halfHead: Float
     ) {
+        // The arrow is three filled triangles: two form the shaft rectangle,
+        // and one forms the head. `perpX` / `perpY` is the unit vector
+        // perpendicular to the arrow direction, used to expand center-line
+        // points into left/right edges without allocating helper objects.
         val shaftLeftTailX = tailX + perpX * halfShaft
         val shaftLeftTailY = tailY + perpY * halfShaft
         val shaftRightTailX = tailX - perpX * halfShaft
