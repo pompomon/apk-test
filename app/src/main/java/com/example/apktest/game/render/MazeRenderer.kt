@@ -451,6 +451,10 @@ class MazeRenderer {
         }
     }
 
+    /**
+     * Draws with its own ShapeRenderer batch because translucent glow requires
+     * enabling GL blending between the opaque floor and wall batches.
+     */
     private fun drawExitGlow(centerX: Float, centerY: Float) {
         try {
             Gdx.gl.glEnable(GL20.GL_BLEND)
@@ -555,7 +559,7 @@ class MazeRenderer {
         val exitY = mazeOriginY + engine.maze.exit.y + 0.5f
         val rawDx = exitX - centerX
         val rawDy = exitY - centerY
-        val distance = sqrt((rawDx * rawDx + rawDy * rawDy).toDouble()).toFloat()
+        val distance = sqrt(rawDx * rawDx + rawDy * rawDy)
         val dirX: Float
         val dirY: Float
         if (distance > 0.0001f) {
@@ -572,7 +576,7 @@ class MazeRenderer {
             GameEngine.COUNTDOWN_DEFAULT_SECONDS +
                 (GameEngine.COUNTDOWN_GO_FLASH_SECONDS - goFlash)
         }
-        val bob = sin((phase * COUNTDOWN_ARROW_BOB_RADIANS_PER_SECOND).toDouble()).toFloat() *
+        val bob = sin(phase * COUNTDOWN_ARROW_BOB_RADIANS_PER_SECOND) *
             glyphSize * COUNTDOWN_ARROW_BOB_DISTANCE_FACTOR
         val baseDistance = glyphSize * COUNTDOWN_ARROW_DISTANCE_FACTOR + bob
         val arrowCenterX = (centerX + dirX * baseDistance).coerceIn(
@@ -746,6 +750,7 @@ class MazeRenderer {
         private const val COUNTDOWN_ARROW_HEAD_WIDTH_FACTOR = 0.46f
         private const val COUNTDOWN_ARROW_VIEWPORT_PADDING = 0.55f
         private const val COUNTDOWN_ARROW_SHADOW_OFFSET = 0.06f
+        /** 4π radians/sec = two full bobbing cycles per second. */
         private const val COUNTDOWN_ARROW_BOB_RADIANS_PER_SECOND = 12.566371f
         private val POWER_UP_TINT_COLORS: Array<Color> = Array(PowerUpType.entries.size) { i ->
             PowerUpIcons.gdxColorFor(PowerUpType.entries[i])
