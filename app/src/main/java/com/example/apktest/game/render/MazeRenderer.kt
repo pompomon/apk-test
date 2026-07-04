@@ -145,17 +145,22 @@ class MazeRenderer {
             }
         }
         val mazeTintType = engine.npcMazeTintType
-        if (mazeTintType != null) {
-            shapes.end()
-            drawMazeTintOverlay(mazeTintType, ox, oy, maze.width.toFloat(), maze.height.toFloat())
-            shapes.begin(ShapeRenderer.ShapeType.Filled)
-        }
-
         val exitCenterX = mazeOriginX + maze.exit.x + 0.5f
         val exitCenterY = mazeOriginY + maze.exit.y + 0.5f
-        shapes.end()
-        drawExitGlow(exitCenterX, exitCenterY)
-        shapes.begin(ShapeRenderer.ShapeType.Filled)
+        // The optional maze tint and the exit glow are both translucent and
+        // need GL blending. Draw them as a single blended segment inside this
+        // open Filled batch (flush + enable blend + draw + flush + disable)
+        // instead of ending/reopening the batch for each, so floor, overlays,
+        // exit, and walls all render in one ShapeRenderer batch per frame.
+        drawBlendedMazeOverlays(
+            tintType = mazeTintType,
+            x = ox,
+            y = oy,
+            width = maze.width.toFloat(),
+            height = maze.height.toFloat(),
+            exitCenterX = exitCenterX,
+            exitCenterY = exitCenterY
+        )
 
         // Render the exit as a neon portal sprite centered on the exit cell.
         PixelSpriteRenderer.draw(
@@ -429,58 +434,52 @@ class MazeRenderer {
         return count
     }
 
-    private fun drawMazeTintOverlay(
-        tintType: PowerUpType,
+    /**
+     * Draws the translucent maze-tint overlay (when active) and the exit glow
+     * as a single blended segment inside the caller's already-open Filled
+     * batch. The opaque geometry buffered so far is flushed first (with
+     * blending still disabled), then GL blending is enabled for the translucent
+     * shapes and flushed, then disabled again — so the caller can keep
+     * appending opaque exit/wall geometry to the same batch without any nested
+     * begin/end. This avoids the per-frame batch churn of ending and reopening
+     * the ShapeRenderer once per translucent overlay.
+     */
+    private fun drawBlendedMazeOverlays(
+        tintType: PowerUpType?,
         x: Float,
         y: Float,
         width: Float,
-        height: Float
+        height: Float,
+        exitCenterX: Float,
+        exitCenterY: Float
     ) {
-        val tint = POWER_UP_TINT_COLORS[tintType.ordinal]
+        // Flush the opaque floor verts before enabling blending so they are
+        // rendered with the correct (blend-disabled) GL state.
+        shapes.flush()
         try {
             Gdx.gl.glEnable(GL20.GL_BLEND)
             Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
-            shapes.begin(ShapeRenderer.ShapeType.Filled)
-            try {
+            if (tintType != null) {
+                val tint = POWER_UP_TINT_COLORS[tintType.ordinal]
                 shapes.setColor(tint.r, tint.g, tint.b, PowerUpTinting.MAZE_TINT_ALPHA)
                 shapes.rect(x, y, width, height)
-            } finally {
-                shapes.end()
             }
-        } finally {
-            Gdx.gl.glDisable(GL20.GL_BLEND)
-        }
-    }
-
-    /**
-     * Draws with its own ShapeRenderer batch because translucent glow requires
-     * enabling GL blending between the opaque floor and wall batches. The extra
-     * GL state changes do not allocate; if more translucent effects are added,
-     * they should share a blended batch.
-     */
-    private fun drawExitGlow(centerX: Float, centerY: Float) {
-        try {
-            Gdx.gl.glEnable(GL20.GL_BLEND)
-            Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
-            shapes.begin(ShapeRenderer.ShapeType.Filled)
-            try {
-                shapes.setColor(
-                    EXIT_GLOW_OUTER_COLOR.r,
-                    EXIT_GLOW_OUTER_COLOR.g,
-                    EXIT_GLOW_OUTER_COLOR.b,
-                    EXIT_GLOW_OUTER_ALPHA
-                )
-                shapes.circle(centerX, centerY, EXIT_GLOW_OUTER_RADIUS, EXIT_GLOW_SEGMENTS)
-                shapes.setColor(
-                    EXIT_GLOW_INNER_COLOR.r,
-                    EXIT_GLOW_INNER_COLOR.g,
-                    EXIT_GLOW_INNER_COLOR.b,
-                    EXIT_GLOW_INNER_ALPHA
-                )
-                shapes.circle(centerX, centerY, EXIT_GLOW_INNER_RADIUS, EXIT_GLOW_SEGMENTS)
-            } finally {
-                shapes.end()
-            }
+            shapes.setColor(
+                EXIT_GLOW_OUTER_COLOR.r,
+                EXIT_GLOW_OUTER_COLOR.g,
+                EXIT_GLOW_OUTER_COLOR.b,
+                EXIT_GLOW_OUTER_ALPHA
+            )
+            shapes.circle(exitCenterX, exitCenterY, EXIT_GLOW_OUTER_RADIUS, EXIT_GLOW_SEGMENTS)
+            shapes.setColor(
+                EXIT_GLOW_INNER_COLOR.r,
+                EXIT_GLOW_INNER_COLOR.g,
+                EXIT_GLOW_INNER_COLOR.b,
+                EXIT_GLOW_INNER_ALPHA
+            )
+            shapes.circle(exitCenterX, exitCenterY, EXIT_GLOW_INNER_RADIUS, EXIT_GLOW_SEGMENTS)
+            // Flush the translucent verts while blending is still enabled.
+            shapes.flush()
         } finally {
             Gdx.gl.glDisable(GL20.GL_BLEND)
         }
