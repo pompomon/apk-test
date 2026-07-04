@@ -12,6 +12,7 @@ import com.example.apktest.game.core.GameEngine
 import com.example.apktest.game.core.Maze
 import com.example.apktest.game.core.PowerUpEffectKind
 import com.example.apktest.game.core.PowerUpType
+import kotlin.math.PI
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -453,7 +454,9 @@ class MazeRenderer {
 
     /**
      * Draws with its own ShapeRenderer batch because translucent glow requires
-     * enabling GL blending between the opaque floor and wall batches.
+     * enabling GL blending between the opaque floor and wall batches. The extra
+     * GL state changes do not allocate; if more translucent effects are added,
+     * they should share a blended batch.
      */
     private fun drawExitGlow(centerX: Float, centerY: Float) {
         try {
@@ -753,7 +756,7 @@ class MazeRenderer {
         /** Prevents divide-by-zero when the countdown center overlaps the exit. */
         private const val COUNTDOWN_ARROW_DIRECTION_EPSILON = 0.0001f
         /** 4π radians/sec = two full bobbing cycles per second. */
-        private const val COUNTDOWN_ARROW_BOB_RADIANS_PER_SECOND = 12.566371f
+        private val COUNTDOWN_ARROW_BOB_RADIANS_PER_SECOND = (4.0 * PI).toFloat()
         private val POWER_UP_TINT_COLORS: Array<Color> = Array(PowerUpType.entries.size) { i ->
             PowerUpIcons.gdxColorFor(PowerUpType.entries[i])
         }
