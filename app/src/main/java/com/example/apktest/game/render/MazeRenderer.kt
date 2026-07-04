@@ -562,7 +562,7 @@ class MazeRenderer {
         val distance = sqrt(rawDx * rawDx + rawDy * rawDy)
         val dirX: Float
         val dirY: Float
-        if (distance > 0.0001f) {
+        if (distance > COUNTDOWN_ARROW_DIRECTION_EPSILON) {
             dirX = rawDx / distance
             dirY = rawDy / distance
         } else {
@@ -570,15 +570,15 @@ class MazeRenderer {
             dirY = 1f
         }
 
-        val phase = if (remaining > 0f) {
+        val animationTimeSeconds = if (remaining > 0f) {
             GameEngine.COUNTDOWN_DEFAULT_SECONDS - remaining
         } else {
             GameEngine.COUNTDOWN_DEFAULT_SECONDS +
                 (GameEngine.COUNTDOWN_GO_FLASH_SECONDS - goFlash)
         }
-        val bob = sin(phase * COUNTDOWN_ARROW_BOB_RADIANS_PER_SECOND) *
+        val bobbingOffset = sin(animationTimeSeconds * COUNTDOWN_ARROW_BOB_RADIANS_PER_SECOND) *
             glyphSize * COUNTDOWN_ARROW_BOB_DISTANCE_FACTOR
-        val baseDistance = glyphSize * COUNTDOWN_ARROW_DISTANCE_FACTOR + bob
+        val baseDistance = glyphSize * COUNTDOWN_ARROW_DISTANCE_FACTOR + bobbingOffset
         val arrowCenterX = (centerX + dirX * baseDistance).coerceIn(
             COUNTDOWN_ARROW_VIEWPORT_PADDING,
             viewport.worldWidth - COUNTDOWN_ARROW_VIEWPORT_PADDING
@@ -750,6 +750,8 @@ class MazeRenderer {
         private const val COUNTDOWN_ARROW_HEAD_WIDTH_FACTOR = 0.46f
         private const val COUNTDOWN_ARROW_VIEWPORT_PADDING = 0.55f
         private const val COUNTDOWN_ARROW_SHADOW_OFFSET = 0.06f
+        /** Prevents divide-by-zero when the countdown center overlaps the exit. */
+        private const val COUNTDOWN_ARROW_DIRECTION_EPSILON = 0.0001f
         /** 4π radians/sec = two full bobbing cycles per second. */
         private const val COUNTDOWN_ARROW_BOB_RADIANS_PER_SECOND = 12.566371f
         private val POWER_UP_TINT_COLORS: Array<Color> = Array(PowerUpType.entries.size) { i ->
