@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="StartMenuPixelButton">
+        <item name="android:background">@drawable/bg_start_pixel_button</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:paddingStart">@dimen/start_menu_button_horizontal_padding</item>
+        <item name="android:paddingEnd">@dimen/start_menu_button_horizontal_padding</item>
+        <item name="android:paddingTop">@dimen/start_menu_button_vertical_padding</item>
+        <item name="android:paddingBottom">@dimen/start_menu_button_vertical_padding</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">@color/start_menu_pixel_button_text</item>
+    </style>
+</resources>

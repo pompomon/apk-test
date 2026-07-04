@@ -23,4 +23,13 @@
     <color name="maze_menu_button_icon">#F2FFFFFF</color>
     <color name="maze_menu_popover_background">#F01A1B22</color>
     <color name="maze_menu_popover_divider">#33FFFFFF</color>
+    <color name="start_menu_pixel_button_background">#FF2A3142</color>
+    <color name="start_menu_pixel_button_background_pressed">#FF3A435A</color>
+    <color name="start_menu_pixel_button_background_disabled">#FF20242E</color>
+    <color name="start_menu_pixel_button_border">#FFE8D56A</color>
+    <color name="start_menu_pixel_button_border_disabled">#665F5A3A</color>
+    <color name="start_menu_pixel_button_shadow">#FF07080C</color>
+    <color name="start_menu_pixel_button_shadow_disabled">#9907080C</color>
+    <color name="start_menu_pixel_button_text_enabled">#FFFFFFFF</color>
+    <color name="start_menu_pixel_button_text_disabled">#88FFFFFF</color>
 </resources>

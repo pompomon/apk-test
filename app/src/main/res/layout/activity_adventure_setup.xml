@@ -53,6 +53,7 @@
 
             <Button
                 android:id="@+id/buttonAdventureResume"
+                style="@style/StartMenuPixelButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:minHeight="@dimen/start_menu_button_min_height"
@@ -64,6 +65,7 @@
 
             <Button
                 android:id="@+id/buttonAdventureStart"
+                style="@style/StartMenuPixelButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/start_menu_button_gap"
@@ -76,6 +78,7 @@
 
             <Button
                 android:id="@+id/buttonAdventurePickDifficulty"
+                style="@style/StartMenuPixelButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/start_menu_button_gap"
@@ -96,6 +99,7 @@
 
             <Button
                 android:id="@+id/buttonAdventureLegend"
+                style="@style/StartMenuPixelButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/start_menu_button_gap"
@@ -108,6 +112,7 @@
 
             <Button
                 android:id="@+id/buttonAdventureBack"
+                style="@style/StartMenuPixelButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/start_menu_button_gap"
