@@ -31,7 +31,10 @@ data class AdventureRunStateSnapshot(
     val status: AdventureStatus,
     val lastAutomatedPlayerPolicy: PlayerPolicyType? = null,
     val automatedPolicyPromptShown: Boolean = false,
-    val pendingStartingPowerUp: PowerUpType? = null
+    val pendingStartingPowerUp: PowerUpType? = null,
+    val totalElapsedSeconds: Float = 0f,
+    val totalSteps: Int = 0,
+    val deathsThisRun: Int = 0
 ) {
     fun toJson(): String = JSONObject().apply {
         put(KEY_VERSION, schemaVersion)
@@ -61,6 +64,9 @@ data class AdventureRunStateSnapshot(
         if (pendingStartingPowerUp != null) {
             put(KEY_PENDING_POWERUP, pendingStartingPowerUp.name)
         }
+        put(KEY_TOTAL_ELAPSED_SECONDS, totalElapsedSeconds.toDouble())
+        put(KEY_TOTAL_STEPS, totalSteps)
+        put(KEY_DEATHS_THIS_RUN, deathsThisRun)
     }.toString()
 
     companion object {
@@ -73,7 +79,10 @@ data class AdventureRunStateSnapshot(
         // version would invalidate every existing in-progress run via the
         // exact-match check in fromJson, so only bump it for a breaking
         // change that genuinely cannot be read by the previous schema.
-        const val SCHEMA_VERSION = 1
+        // v2: adds totalElapsedSeconds, totalSteps, deathsThisRun. The
+        // validation in fromJson rejects negative values so a schema bump
+        // is required to prevent misinterpreting old saves.
+        const val SCHEMA_VERSION = 2
 
         private const val KEY_VERSION = "v"
         private const val KEY_RUN_SEED = "runSeed"
@@ -90,6 +99,9 @@ data class AdventureRunStateSnapshot(
         private const val KEY_MAZE_SNAPSHOT = "mazeSnapshot"
         private const val KEY_STATUS = "status"
         private const val KEY_PENDING_POWERUP = "pendingPowerUp"
+        private const val KEY_TOTAL_ELAPSED_SECONDS = "totalElapsedSeconds"
+        private const val KEY_TOTAL_STEPS = "totalSteps"
+        private const val KEY_DEATHS_THIS_RUN = "deathsThisRun"
 
         fun fromState(state: AdventureRunState, runSeed: Long): AdventureRunStateSnapshot =
             AdventureRunStateSnapshot(
@@ -106,7 +118,10 @@ data class AdventureRunStateSnapshot(
                 currentMazeNpcPolicies = state.currentMazeNpcPolicies,
                 currentMazeSnapshot = state.currentMazeSnapshot,
                 status = state.status,
-                pendingStartingPowerUp = state.pendingStartingPowerUp
+                pendingStartingPowerUp = state.pendingStartingPowerUp,
+                totalElapsedSeconds = state.totalElapsedSeconds,
+                totalSteps = state.totalSteps,
+                deathsThisRun = state.deathsThisRun
             )
 
         fun fromJson(json: String): AdventureRunStateSnapshot? {
@@ -175,7 +190,10 @@ data class AdventureRunStateSnapshot(
                     currentMazeNpcPolicies = mazePolicies,
                     currentMazeSnapshot = mazeSnapshot,
                     status = AdventureStatus.valueOf(obj.getString(KEY_STATUS)),
-                    pendingStartingPowerUp = pendingPowerUp
+                    pendingStartingPowerUp = pendingPowerUp,
+                    totalElapsedSeconds = obj.optDouble(KEY_TOTAL_ELAPSED_SECONDS, 0.0).toFloat(),
+                    totalSteps = obj.optInt(KEY_TOTAL_STEPS, 0),
+                    deathsThisRun = obj.optInt(KEY_DEATHS_THIS_RUN, 0)
                 )
 
                 // Reject unknown difficulty names outright. The Adventure
@@ -190,6 +208,9 @@ data class AdventureRunStateSnapshot(
                 if (snapshot.currentMazeIndex < 0) return null
                 if (snapshot.livesRemaining < 0) return null
                 if (snapshot.winStreakSinceLastBonus < 0) return null
+                if (snapshot.totalElapsedSeconds < 0f) return null
+                if (snapshot.totalSteps < 0) return null
+                if (snapshot.deathsThisRun < 0) return null
                 // MANUAL invariant was enforced above by re-adding it if absent.
                 snapshot
             } catch (_: Exception) {
@@ -217,6 +238,9 @@ data class AdventureRunStateSnapshot(
         currentMazeNpcPolicies = currentMazeNpcPolicies,
         currentMazeSnapshot = currentMazeSnapshot,
         status = status,
-        pendingStartingPowerUp = pendingStartingPowerUp
+        pendingStartingPowerUp = pendingStartingPowerUp,
+        totalElapsedSeconds = totalElapsedSeconds,
+        totalSteps = totalSteps,
+        deathsThisRun = deathsThisRun
     )
 }

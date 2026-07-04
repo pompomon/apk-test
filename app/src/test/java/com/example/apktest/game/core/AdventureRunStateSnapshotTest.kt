@@ -233,4 +233,59 @@ class AdventureRunStateSnapshotTest {
         assertEquals(state.currentMazeSeed, spec.seed)
         assertEquals(state.currentMazeNpcPolicies, spec.npcPolicies)
     }
+
+    @Test
+    fun toJsonFromJson_roundTripsTotalElapsedSecondsStepsAndDeaths() {
+        val state = sampleState().apply {
+            totalElapsedSeconds = 123.5f
+            totalSteps = 456
+            deathsThisRun = 3
+        }
+        val snap = AdventureRunStateSnapshot.fromState(state, runSeed = 9L)
+        val restored = AdventureRunStateSnapshot.fromJson(snap.toJson())!!
+        assertEquals(123.5f, restored.totalElapsedSeconds, 0.001f)
+        assertEquals(456, restored.totalSteps)
+        assertEquals(3, restored.deathsThisRun)
+        val restoredState = restored.toState()
+        assertEquals(123.5f, restoredState.totalElapsedSeconds, 0.001f)
+        assertEquals(456, restoredState.totalSteps)
+        assertEquals(3, restoredState.deathsThisRun)
+    }
+
+    @Test
+    fun fromJson_returnsNullForNegativeTotalElapsedSeconds() {
+        val snap = AdventureRunStateSnapshot.fromState(
+            sampleState().apply { totalElapsedSeconds = 10f }, runSeed = 1L
+        )
+        // Replace the positive value with a negative one; 10.0 serialises as "10.0" with org.json
+        val tampered = snap.toJson().replace(
+            "\"totalElapsedSeconds\":10.0",
+            "\"totalElapsedSeconds\":-1.0"
+        )
+        assertNull(AdventureRunStateSnapshot.fromJson(tampered))
+    }
+
+    @Test
+    fun fromJson_returnsNullForNegativeTotalSteps() {
+        val snap = AdventureRunStateSnapshot.fromState(
+            sampleState().apply { totalSteps = 5 }, runSeed = 1L
+        )
+        val tampered = snap.toJson().replace(
+            "\"totalSteps\":5",
+            "\"totalSteps\":-1"
+        )
+        assertNull(AdventureRunStateSnapshot.fromJson(tampered))
+    }
+
+    @Test
+    fun fromJson_returnsNullForNegativeDeathsThisRun() {
+        val snap = AdventureRunStateSnapshot.fromState(
+            sampleState().apply { deathsThisRun = 2 }, runSeed = 1L
+        )
+        val tampered = snap.toJson().replace(
+            "\"deathsThisRun\":2",
+            "\"deathsThisRun\":-1"
+        )
+        assertNull(AdventureRunStateSnapshot.fromJson(tampered))
+    }
 }

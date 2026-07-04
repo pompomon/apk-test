@@ -29,6 +29,7 @@ import com.example.apktest.game.core.PowerUpType
 import com.example.apktest.game.core.automatedPlayerPolicies
 import com.example.apktest.ui.GameInputController
 import com.example.apktest.ui.LegendDialog
+import com.example.apktest.ui.AdventureTimeFormatter
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -46,6 +47,7 @@ import java.util.concurrent.RejectedExecutionException
 class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     private lateinit var adventureStore: AdventureStateStore
+    private lateinit var bestStore: AdventureBestStore
     private val autosaveExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
     private lateinit var controller: AdventureRunController
@@ -100,6 +102,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         setContentView(R.layout.activity_adventure)
 
         adventureStore = AdventureStateStore(this)
+        bestStore = AdventureBestStore(this)
 
         val root = findViewById<View>(R.id.adventureRoot)
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
@@ -610,7 +613,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     private fun handleMazeWon() {
         // No engine pause needed: GameEngine.update() early-returns when
         // status != RUNNING, and we only get here after observing WIN.
-        val outcome = controller.onMazeWon()
+        val hud = gameFragment()?.hudState()
+        val elapsedSeconds = hud?.elapsedSeconds ?: 0f
+        val steps = hud?.steps ?: 0
+        val outcome = controller.onMazeWon(elapsedSeconds = elapsedSeconds, steps = steps)
         // Intentionally do NOT persist controller state here. The controller
         // has advanced (mazeIndex / lives / streak), but if the run is
         // continuing the player still has to confirm the win dialog and,
@@ -634,10 +640,27 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         val body = if (outcome.runComplete) {
             val livesWord = if (outcome.livesRemaining == 1)
                 getString(R.string.adventure_lives_singular) else getString(R.string.adventure_lives_plural)
+            val bestResult = bestStore.recordCompletedRun(
+                difficultyName = controller.config.difficulty.name,
+                totalElapsedSeconds = outcome.totalElapsedSeconds
+            )
+            val bestMsg = if (bestResult.isNewBest) {
+                "\n" + getString(R.string.adventure_new_best_time)
+            } else {
+                "\n" + getString(
+                    R.string.adventure_best_time,
+                    AdventureTimeFormatter.format(bestResult.previousBestSeconds ?: outcome.totalElapsedSeconds)
+                )
+            }
             getString(
-                R.string.adventure_run_complete_body,
-                outcome.totalMazes, outcome.livesRemaining, livesWord
-            ) + bonusMsg
+                R.string.adventure_run_complete_body_stats,
+                outcome.totalMazes,
+                outcome.livesRemaining,
+                livesWord,
+                AdventureTimeFormatter.format(outcome.totalElapsedSeconds),
+                outcome.totalSteps,
+                outcome.deathsThisRun
+            ) + bestMsg + bonusMsg
         } else {
             val rewardPrompt = when {
                 outcome.unlockAvailable -> getString(R.string.adventure_unlock_prompt)
@@ -741,6 +764,9 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun handleMazeLost() {
+        val hud = gameFragment()?.hudState()
+        val elapsedSeconds = hud?.elapsedSeconds ?: 0f
+        val steps = hud?.steps ?: 0
         val outcome = controller.onPlayerDied()
         persistAdventureStateAsync()
         val title = if (outcome.runOver)
@@ -749,9 +775,12 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             getString(R.string.adventure_caught_title, outcome.livesRemaining)
         val body = if (outcome.runOver)
             getString(
-                R.string.adventure_run_lost_body,
+                R.string.adventure_run_lost_body_stats,
                 controller.state.currentMazeIndex + 1,
-                controller.config.totalMazes
+                controller.config.totalMazes,
+                AdventureTimeFormatter.format(controller.state.totalElapsedSeconds + elapsedSeconds.coerceAtLeast(0f)),
+                controller.state.totalSteps + steps.coerceAtLeast(0),
+                controller.state.deathsThisRun
             )
         else
             ""
@@ -795,6 +824,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             R.string.adventure_status_format,
             displayIndex,
             controller.config.totalMazes,
+            AdventureTimeFormatter.format(state.totalElapsedSeconds),
+            state.totalSteps,
             state.livesRemaining,
             state.winStreakSinceLastBonus,
             AdventureConfig.STREAK_BONUS_THRESHOLD
