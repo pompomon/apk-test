@@ -27,6 +27,7 @@ import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.game.core.PowerUpType
 import com.example.apktest.game.core.automatedPlayerPolicies
+import com.example.apktest.game.ui.HudState
 import com.example.apktest.ui.GameInputController
 import com.example.apktest.ui.LegendDialog
 import com.example.apktest.ui.AdventureTimeFormatter
@@ -602,7 +603,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             (status == GameStatus.WIN || status == GameStatus.LOSE)) {
             transitionPending = true
             when (status) {
-                GameStatus.WIN -> handleMazeWon()
+                GameStatus.WIN -> handleMazeWon(hud)
                 GameStatus.LOSE -> handleMazeLost()
                 else -> {}
             }
@@ -610,13 +611,13 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         lastObservedStatus = status
     }
 
-    private fun handleMazeWon() {
+    private fun handleMazeWon(hud: HudState) {
         // No engine pause needed: GameEngine.update() early-returns when
         // status != RUNNING, and we only get here after observing WIN.
-        val hud = gameFragment()?.hudState()
-        val elapsedSeconds = hud?.elapsedSeconds ?: 0f
-        val steps = hud?.steps ?: 0
-        val outcome = controller.onMazeWon(elapsedSeconds = elapsedSeconds, steps = steps)
+        // [hud] is the same non-null snapshot that detected the WIN in
+        // [pollEngineStatus], so time/steps are always the real values —
+        // we never silently record a 0-time run or a bogus 00:00 best time.
+        val outcome = controller.onMazeWon(elapsedSeconds = hud.elapsedSeconds, steps = hud.steps)
         // Intentionally do NOT persist controller state here. The controller
         // has advanced (mazeIndex / lives / streak), but if the run is
         // continuing the player still has to confirm the win dialog and,

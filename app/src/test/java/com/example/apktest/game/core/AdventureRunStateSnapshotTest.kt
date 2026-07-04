@@ -5,6 +5,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONObject
 
 class AdventureRunStateSnapshotTest {
 
@@ -257,11 +258,11 @@ class AdventureRunStateSnapshotTest {
         val snap = AdventureRunStateSnapshot.fromState(
             sampleState().apply { totalElapsedSeconds = 10f }, runSeed = 1L
         )
-        // Replace the positive value with a negative one; 10.0 serialises as "10.0" with org.json
-        val tampered = snap.toJson().replace(
-            "\"totalElapsedSeconds\":10.0",
-            "\"totalElapsedSeconds\":-1.0"
-        )
+        // Mutate via JSONObject so the negative-path is exercised regardless of
+        // how org.json renders the numeric literal (e.g. 10.0 serialises as "10").
+        val tampered = JSONObject(snap.toJson())
+            .put("totalElapsedSeconds", -1.0)
+            .toString()
         assertNull(AdventureRunStateSnapshot.fromJson(tampered))
     }
 
