@@ -41,18 +41,22 @@ class AdventureBestStore(context: Context) {
 
     /**
      * Reads the stored best time for [key], or `null` if it is absent or
-     * type-corrupted. SharedPreferences values can become type-corrupted
+     * corrupt. SharedPreferences values can become type-corrupted
      * across restores/downgrades, in which case [android.content.SharedPreferences.getFloat]
      * throws [ClassCastException]; treat that as absent/corrupt rather than
-     * crashing.
+     * crashing. A stored value that is non-finite (NaN/Infinity) or negative
+     * is also treated as corrupt/absent, since it would break best-time
+     * comparisons and prevent recording any future best.
      */
     private fun readStoredBest(key: String): Float? {
         if (!prefs.contains(key)) return null
-        return try {
+        val stored = try {
             prefs.getFloat(key, Float.MAX_VALUE)
         } catch (_: ClassCastException) {
-            null
+            return null
         }
+        if (!stored.isFinite() || stored < 0f) return null
+        return stored
     }
 
     /**

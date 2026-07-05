@@ -79,9 +79,12 @@ data class AdventureRunStateSnapshot(
         // version would invalidate every existing in-progress run via the
         // exact-match check in fromJson, so only bump it for a breaking
         // change that genuinely cannot be read by the previous schema.
-        // v2: adds totalElapsedSeconds, totalSteps, deathsThisRun. The
-        // validation in fromJson rejects negative values so a schema bump
-        // is required to prevent misinterpreting old saves.
+        // v2: adds totalElapsedSeconds, totalSteps, deathsThisRun. This bump
+        // is not strictly required for readability — v1 payloads simply omit
+        // these keys and fromJson would default them to 0. It is an
+        // intentional breaking bump: invalidating in-progress v1 runs is
+        // preferred over silently resuming them with zeroed run stats, which
+        // would misrepresent already-earned time/steps/death counts.
         const val SCHEMA_VERSION = 2
 
         private const val KEY_VERSION = "v"

@@ -271,10 +271,9 @@ class AdventureRunStateSnapshotTest {
         val snap = AdventureRunStateSnapshot.fromState(
             sampleState().apply { totalSteps = 5 }, runSeed = 1L
         )
-        val tampered = snap.toJson().replace(
-            "\"totalSteps\":5",
-            "\"totalSteps\":-1"
-        )
+        val tampered = JSONObject(snap.toJson())
+            .put("totalSteps", -1)
+            .toString()
         assertNull(AdventureRunStateSnapshot.fromJson(tampered))
     }
 
@@ -283,10 +282,9 @@ class AdventureRunStateSnapshotTest {
         val snap = AdventureRunStateSnapshot.fromState(
             sampleState().apply { deathsThisRun = 2 }, runSeed = 1L
         )
-        val tampered = snap.toJson().replace(
-            "\"deathsThisRun\":2",
-            "\"deathsThisRun\":-1"
-        )
+        val tampered = JSONObject(snap.toJson())
+            .put("deathsThisRun", -1)
+            .toString()
         assertNull(AdventureRunStateSnapshot.fromJson(tampered))
     }
 }
