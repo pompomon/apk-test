@@ -267,6 +267,27 @@ class AdventureRunStateSnapshotTest {
     }
 
     @Test
+    fun fromJson_returnsNullWhenRunStatKeysMissing() {
+        val snap = AdventureRunStateSnapshot.fromState(sampleState(), runSeed = 1L)
+        for (key in listOf("totalElapsedSeconds", "totalSteps", "deathsThisRun")) {
+            val tampered = JSONObject(snap.toJson()).apply { remove(key) }.toString()
+            assertNull(
+                "Missing $key should fail the load rather than default to 0",
+                AdventureRunStateSnapshot.fromJson(tampered)
+            )
+        }
+    }
+
+    @Test
+    fun fromJson_returnsNullWhenRunStatWrongType() {
+        val snap = AdventureRunStateSnapshot.fromState(sampleState(), runSeed = 1L)
+        val tampered = JSONObject(snap.toJson())
+            .put("totalSteps", "not-a-number")
+            .toString()
+        assertNull(AdventureRunStateSnapshot.fromJson(tampered))
+    }
+
+    @Test
     fun fromJson_returnsNullForNegativeTotalSteps() {
         val snap = AdventureRunStateSnapshot.fromState(
             sampleState().apply { totalSteps = 5 }, runSeed = 1L

@@ -194,9 +194,14 @@ data class AdventureRunStateSnapshot(
                     currentMazeSnapshot = mazeSnapshot,
                     status = AdventureStatus.valueOf(obj.getString(KEY_STATUS)),
                     pendingStartingPowerUp = pendingPowerUp,
-                    totalElapsedSeconds = obj.optDouble(KEY_TOTAL_ELAPSED_SECONDS, 0.0).toFloat(),
-                    totalSteps = obj.optInt(KEY_TOTAL_STEPS, 0),
-                    deathsThisRun = obj.optInt(KEY_DEATHS_THIS_RUN, 0)
+                    // Strict reads: a valid v2 payload always writes these
+                    // keys (see toJson). Missing or wrong-typed values throw
+                    // and fail the load (caller clears the blob) rather than
+                    // silently resuming with zeroed run stats, which would
+                    // misrepresent already-earned time/steps/death counts.
+                    totalElapsedSeconds = obj.getDouble(KEY_TOTAL_ELAPSED_SECONDS).toFloat(),
+                    totalSteps = obj.getInt(KEY_TOTAL_STEPS),
+                    deathsThisRun = obj.getInt(KEY_DEATHS_THIS_RUN)
                 )
 
                 // Reject unknown difficulty names outright. The Adventure

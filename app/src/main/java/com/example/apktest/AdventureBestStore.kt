@@ -53,9 +53,18 @@ class AdventureBestStore(context: Context) {
         val stored = try {
             prefs.getFloat(key, Float.MAX_VALUE)
         } catch (_: ClassCastException) {
+            // Type-corrupted value: drop the key so subsequent reads don't
+            // keep paying the cost of throwing, letting the preference
+            // self-heal immediately.
+            prefs.edit().remove(key).apply()
             return null
         }
-        if (!stored.isFinite() || stored < 0f) return null
+        if (!stored.isFinite() || stored < 0f) {
+            // Non-finite/negative stored value is unusable; remove it so it
+            // is treated as absent and a future best can be recorded.
+            prefs.edit().remove(key).apply()
+            return null
+        }
         return stored
     }
 
