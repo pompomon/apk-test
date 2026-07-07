@@ -646,11 +646,16 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 totalElapsedSeconds = outcome.totalElapsedSeconds
             )
             val bestMsg = if (bestResult.isNewBest) {
-                "\n" + getString(R.string.adventure_new_best_time)
+                getString(R.string.adventure_new_best_time)
             } else {
-                "\n" + getString(
+                val previousBestSeconds = checkNotNull(bestResult.previousBestSeconds) {
+                    "Internal error: previousBestSeconds unexpectedly null when " +
+                        "isNewBest=${bestResult.isNewBest}, " +
+                        "currentTimeSeconds=${bestResult.currentTimeSeconds}"
+                }
+                getString(
                     R.string.adventure_best_time,
-                    AdventureTimeFormatter.format(bestResult.previousBestSeconds!!)
+                    AdventureTimeFormatter.format(previousBestSeconds)
                 )
             }
             getString(
@@ -660,8 +665,9 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 livesWord,
                 AdventureTimeFormatter.format(outcome.totalElapsedSeconds),
                 outcome.totalSteps,
-                outcome.deathsThisRun
-            ) + bestMsg + bonusMsg
+                outcome.deathsThisRun,
+                bestMsg
+            ) + bonusMsg
         } else {
             val rewardPrompt = when {
                 outcome.unlockAvailable -> getString(R.string.adventure_unlock_prompt)
