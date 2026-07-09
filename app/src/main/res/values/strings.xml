@@ -73,7 +73,7 @@
         <item quantity="one">%d NPC to start</item>
         <item quantity="other">%d NPCs to start</item>
     </plurals>
-    <string name="adventure_status_format">Maze %1$d / %2$d · Lives: %3$d · Streak: %4$d/%5$d</string>
+    <string name="adventure_status_format">Maze %1$d/%2$d · Time %3$s · Steps %4$d · Lives %5$d · Streak %6$d/%7$d</string>
     <string name="adventure_status_default">Adventure: —</string>
     <string name="adventure_maze_won_title">Maze %1$d of %2$d cleared!</string>
     <string name="adventure_bonus_life">Bonus life awarded! Lives: %1$d</string>
@@ -84,8 +84,12 @@
     <string name="adventure_caught_title">Caught! Lives remaining: %1$d</string>
     <string name="adventure_run_complete_title">Adventure complete!</string>
     <string name="adventure_run_complete_body">You cleared all %1$d mazes with %2$d %3$s remaining.</string>
+    <string name="adventure_run_complete_body_stats">You cleared all %1$d mazes with %2$d %3$s remaining.\n\nTime: %4$s\nSteps: %5$d\nDeaths: %6$d\n\n%7$s</string>
+    <string name="adventure_new_best_time">New best time!</string>
+    <string name="adventure_best_time">Best time: %1$s</string>
     <string name="adventure_run_lost_title">Adventure lost</string>
     <string name="adventure_run_lost_body">You ran out of lives on maze %1$d of %2$d.</string>
+    <string name="adventure_run_lost_body_stats">You ran out of lives on maze %1$d of %2$d.\n\nTime: %3$s\nSteps: %4$d\nDeaths: %5$d</string>
     <string name="adventure_finish">Finish</string>
     <string name="adventure_lives_singular">life</string>
     <string name="adventure_lives_plural">lives</string>

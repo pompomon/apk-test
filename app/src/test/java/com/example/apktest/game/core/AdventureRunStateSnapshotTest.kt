@@ -5,6 +5,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONObject
 
 class AdventureRunStateSnapshotTest {
 
@@ -232,5 +233,79 @@ class AdventureRunStateSnapshotTest {
         val spec = controller.prepareCurrentMaze()!!
         assertEquals(state.currentMazeSeed, spec.seed)
         assertEquals(state.currentMazeNpcPolicies, spec.npcPolicies)
+    }
+
+    @Test
+    fun toJsonFromJson_roundTripsTotalElapsedSecondsStepsAndDeaths() {
+        val state = sampleState().apply {
+            totalElapsedSeconds = 123.5f
+            totalSteps = 456
+            deathsThisRun = 3
+        }
+        val snap = AdventureRunStateSnapshot.fromState(state, runSeed = 9L)
+        val restored = AdventureRunStateSnapshot.fromJson(snap.toJson())!!
+        assertEquals(123.5f, restored.totalElapsedSeconds, 0.001f)
+        assertEquals(456, restored.totalSteps)
+        assertEquals(3, restored.deathsThisRun)
+        val restoredState = restored.toState()
+        assertEquals(123.5f, restoredState.totalElapsedSeconds, 0.001f)
+        assertEquals(456, restoredState.totalSteps)
+        assertEquals(3, restoredState.deathsThisRun)
+    }
+
+    @Test
+    fun fromJson_returnsNullForNegativeTotalElapsedSeconds() {
+        val snap = AdventureRunStateSnapshot.fromState(
+            sampleState().apply { totalElapsedSeconds = 10f }, runSeed = 1L
+        )
+        // Mutate via JSONObject so the negative-path is exercised regardless of
+        // how org.json renders the numeric literal (e.g. 10.0 serialises as "10").
+        val tampered = JSONObject(snap.toJson())
+            .put("totalElapsedSeconds", -1.0)
+            .toString()
+        assertNull(AdventureRunStateSnapshot.fromJson(tampered))
+    }
+
+    @Test
+    fun fromJson_returnsNullWhenRunStatKeysMissing() {
+        val snap = AdventureRunStateSnapshot.fromState(sampleState(), runSeed = 1L)
+        for (key in listOf("totalElapsedSeconds", "totalSteps", "deathsThisRun")) {
+            val tampered = JSONObject(snap.toJson()).apply { remove(key) }.toString()
+            assertNull(
+                "Missing $key should fail the load rather than default to 0",
+                AdventureRunStateSnapshot.fromJson(tampered)
+            )
+        }
+    }
+
+    @Test
+    fun fromJson_returnsNullWhenRunStatWrongType() {
+        val snap = AdventureRunStateSnapshot.fromState(sampleState(), runSeed = 1L)
+        val tampered = JSONObject(snap.toJson())
+            .put("totalSteps", "not-a-number")
+            .toString()
+        assertNull(AdventureRunStateSnapshot.fromJson(tampered))
+    }
+
+    @Test
+    fun fromJson_returnsNullForNegativeTotalSteps() {
+        val snap = AdventureRunStateSnapshot.fromState(
+            sampleState().apply { totalSteps = 5 }, runSeed = 1L
+        )
+        val tampered = JSONObject(snap.toJson())
+            .put("totalSteps", -1)
+            .toString()
+        assertNull(AdventureRunStateSnapshot.fromJson(tampered))
+    }
+
+    @Test
+    fun fromJson_returnsNullForNegativeDeathsThisRun() {
+        val snap = AdventureRunStateSnapshot.fromState(
+            sampleState().apply { deathsThisRun = 2 }, runSeed = 1L
+        )
+        val tampered = JSONObject(snap.toJson())
+            .put("deathsThisRun", -1)
+            .toString()
+        assertNull(AdventureRunStateSnapshot.fromJson(tampered))
     }
 }

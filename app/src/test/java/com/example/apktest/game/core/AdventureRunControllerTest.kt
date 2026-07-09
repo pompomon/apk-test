@@ -314,4 +314,74 @@ class AdventureRunControllerTest {
         c.onPlayerDied()
         assertNull(c.state.currentMazeSnapshot)
     }
+
+    @Test
+    fun onMazeWon_accumulatesElapsedSecondsAndSteps() {
+        val c = easyController()
+        c.prepareCurrentMaze()
+        val outcome = c.onMazeWon(elapsedSeconds = 30f, steps = 50)
+        assertEquals(30f, outcome.totalElapsedSeconds, 0.001f)
+        assertEquals(50, outcome.totalSteps)
+        assertEquals(30f, c.state.totalElapsedSeconds, 0.001f)
+        assertEquals(50, c.state.totalSteps)
+    }
+
+    @Test
+    fun onMazeWon_multipleWinsAccumulateStats() {
+        val c = easyController()
+        c.prepareCurrentMaze()
+        c.onMazeWon(elapsedSeconds = 10f, steps = 20)
+        c.prepareCurrentMaze()
+        val outcome = c.onMazeWon(elapsedSeconds = 15f, steps = 30)
+        assertEquals(25f, outcome.totalElapsedSeconds, 0.001f)
+        assertEquals(50, outcome.totalSteps)
+        assertEquals(25f, c.state.totalElapsedSeconds, 0.001f)
+        assertEquals(50, c.state.totalSteps)
+    }
+
+    @Test
+    fun onPlayerDied_incrementsDeathsThisRun() {
+        val c = easyController()
+        c.prepareCurrentMaze()
+        assertEquals(0, c.state.deathsThisRun)
+        c.onPlayerDied()
+        assertEquals(1, c.state.deathsThisRun)
+        c.prepareCurrentMaze()
+        c.onPlayerDied()
+        assertEquals(2, c.state.deathsThisRun)
+    }
+
+    @Test
+    fun onPlayerDied_doesNotAddTimeOrSteps() {
+        val c = easyController()
+        c.prepareCurrentMaze()
+        c.onMazeWon(elapsedSeconds = 10f, steps = 20)
+        val timeBefore = c.state.totalElapsedSeconds
+        val stepsBefore = c.state.totalSteps
+        c.prepareCurrentMaze()
+        c.onPlayerDied()
+        assertEquals(timeBefore, c.state.totalElapsedSeconds, 0.001f)
+        assertEquals(stepsBefore, c.state.totalSteps)
+    }
+
+    @Test
+    fun onMazeWon_clampsNegativeStatsToZero() {
+        val c = easyController()
+        c.prepareCurrentMaze()
+        val outcome = c.onMazeWon(elapsedSeconds = -5f, steps = -10)
+        assertEquals(0f, outcome.totalElapsedSeconds, 0.001f)
+        assertEquals(0, outcome.totalSteps)
+    }
+
+    @Test
+    fun winOutcome_includesDeathsThisRun() {
+        val c = easyController()
+        c.prepareCurrentMaze()
+        c.onPlayerDied() // death 1
+        c.prepareCurrentMaze()
+        c.onPlayerDied() // death 2
+        c.prepareCurrentMaze()
+        val outcome = c.onMazeWon()
+        assertEquals(2, outcome.deathsThisRun)
+    }
 }
