@@ -64,7 +64,13 @@ data class AdventureRunState(
      * between persisting state and the GL thread actually applying the
      * power-up to a fresh engine instance.
      */
-    var pendingStartingPowerUp: PowerUpType? = null
+    var pendingStartingPowerUp: PowerUpType? = null,
+    /** Accumulated elapsed seconds from all completed mazes this run. */
+    var totalElapsedSeconds: Float = 0f,
+    /** Accumulated step count from all completed mazes this run. */
+    var totalSteps: Int = 0,
+    /** Number of player deaths this run, including the run-ending death. */
+    var deathsThisRun: Int = 0
 )
 
 /**
@@ -111,7 +117,13 @@ data class WinOutcome(
     val startingPowerUpCandidates: List<PowerUpType>,
     val mazeIndexCompleted: Int,
     val totalMazes: Int,
-    val runComplete: Boolean
+    val runComplete: Boolean,
+    /** Accumulated elapsed seconds across all completed mazes this run. */
+    val totalElapsedSeconds: Float,
+    /** Accumulated step count across all completed mazes this run. */
+    val totalSteps: Int,
+    /** Number of player deaths so far this run. */
+    val deathsThisRun: Int
 ) {
     val unlockAvailable: Boolean get() = unlockCandidates.isNotEmpty() && !runComplete
     val startingPowerUpAvailable: Boolean
@@ -203,12 +215,18 @@ class AdventureRunController(
      * draws a fresh seed and per-NPC policies, clears any mid-maze
      * snapshot, and returns a [WinOutcome] describing the new state.
      *
+     * Accumulates [elapsedSeconds] and [steps] (clamped to ≥ 0) into the
+     * run totals. Time and steps are never accumulated on death.
+     *
      * If this was the final maze sets [AdventureStatus.WON].
      */
-    fun onMazeWon(): WinOutcome {
+    fun onMazeWon(elapsedSeconds: Float = 0f, steps: Int = 0): WinOutcome {
         check(state.status == AdventureStatus.IN_PROGRESS) {
             "onMazeWon called in terminal state ${state.status}"
         }
+        val sanitizedElapsed = if (elapsedSeconds.isFinite()) elapsedSeconds.coerceAtLeast(0f) else 0f
+        state.totalElapsedSeconds += sanitizedElapsed
+        state.totalSteps += steps.coerceAtLeast(0)
         val newIndex = state.currentMazeIndex + 1
         state.currentMazeIndex = newIndex
         state.winStreakSinceLastBonus += 1
@@ -244,7 +262,10 @@ class AdventureRunController(
             startingPowerUpCandidates = powerUpCandidates,
             mazeIndexCompleted = newIndex,
             totalMazes = config.totalMazes,
-            runComplete = runComplete
+            runComplete = runComplete,
+            totalElapsedSeconds = state.totalElapsedSeconds,
+            totalSteps = state.totalSteps,
+            deathsThisRun = state.deathsThisRun
         )
     }
 
@@ -335,12 +356,16 @@ class AdventureRunController(
      * [AdventureRunState.currentMazeSeed] and [AdventureRunState.currentMazeNpcPolicies]
      * are deliberately preserved so the same maze is replayed.
      *
+     * Increments [AdventureRunState.deathsThisRun] on every death, including
+     * the final run-ending death. Time and steps are never accumulated here.
+     *
      * Transitions to [AdventureStatus.LOST] when lives reach zero.
      */
     fun onPlayerDied(): DeathOutcome {
         check(state.status == AdventureStatus.IN_PROGRESS) {
             "onPlayerDied called in terminal state ${state.status}"
         }
+        state.deathsThisRun += 1
         state.livesRemaining = (state.livesRemaining - 1).coerceAtLeast(0)
         state.winStreakSinceLastBonus = 0
         state.currentMazeSnapshot = null

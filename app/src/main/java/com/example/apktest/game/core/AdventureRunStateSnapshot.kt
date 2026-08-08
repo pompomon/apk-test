@@ -31,7 +31,10 @@ data class AdventureRunStateSnapshot(
     val status: AdventureStatus,
     val lastAutomatedPlayerPolicy: PlayerPolicyType? = null,
     val automatedPolicyPromptShown: Boolean = false,
-    val pendingStartingPowerUp: PowerUpType? = null
+    val pendingStartingPowerUp: PowerUpType? = null,
+    val totalElapsedSeconds: Float = 0f,
+    val totalSteps: Int = 0,
+    val deathsThisRun: Int = 0
 ) {
     fun toJson(): String = JSONObject().apply {
         put(KEY_VERSION, schemaVersion)
@@ -61,19 +64,28 @@ data class AdventureRunStateSnapshot(
         if (pendingStartingPowerUp != null) {
             put(KEY_PENDING_POWERUP, pendingStartingPowerUp.name)
         }
+        put(KEY_TOTAL_ELAPSED_SECONDS, totalElapsedSeconds.toDouble())
+        put(KEY_TOTAL_STEPS, totalSteps)
+        put(KEY_DEATHS_THIS_RUN, deathsThisRun)
     }.toString()
 
     companion object {
-        // Intentionally kept at v1. The newer fields — the automation
-        // fields (lastAutomatedPlayerPolicy, automatedPolicyPromptShown)
-        // and the per-maze starting power-up state (pendingStartingPowerUp)
-        // — are additive and backward-compatible:
+        // Was previously kept at v1. The automation fields
+        // (lastAutomatedPlayerPolicy, automatedPolicyPromptShown) and the
+        // per-maze starting power-up state (pendingStartingPowerUp) are
+        // additive and backward-compatible:
         // older payloads simply omit them and fromJson falls back to the
         // defaults, while older builds ignore the unknown keys. Bumping this
-        // version would invalidate every existing in-progress run via the
+        // version invalidates every existing in-progress run via the
         // exact-match check in fromJson, so only bump it for a breaking
         // change that genuinely cannot be read by the previous schema.
-        const val SCHEMA_VERSION = 1
+        // v2: adds totalElapsedSeconds, totalSteps, deathsThisRun. This bump
+        // is not strictly required for readability — v1 payloads simply omit
+        // these keys and fromJson would default them to 0. It is an
+        // intentional breaking bump: invalidating in-progress v1 runs is
+        // preferred over silently resuming them with zeroed run stats, which
+        // would misrepresent already-earned time/steps/death counts.
+        const val SCHEMA_VERSION = 2
 
         private const val KEY_VERSION = "v"
         private const val KEY_RUN_SEED = "runSeed"
@@ -90,6 +102,9 @@ data class AdventureRunStateSnapshot(
         private const val KEY_MAZE_SNAPSHOT = "mazeSnapshot"
         private const val KEY_STATUS = "status"
         private const val KEY_PENDING_POWERUP = "pendingPowerUp"
+        private const val KEY_TOTAL_ELAPSED_SECONDS = "totalElapsedSeconds"
+        private const val KEY_TOTAL_STEPS = "totalSteps"
+        private const val KEY_DEATHS_THIS_RUN = "deathsThisRun"
 
         fun fromState(state: AdventureRunState, runSeed: Long): AdventureRunStateSnapshot =
             AdventureRunStateSnapshot(
@@ -106,7 +121,10 @@ data class AdventureRunStateSnapshot(
                 currentMazeNpcPolicies = state.currentMazeNpcPolicies,
                 currentMazeSnapshot = state.currentMazeSnapshot,
                 status = state.status,
-                pendingStartingPowerUp = state.pendingStartingPowerUp
+                pendingStartingPowerUp = state.pendingStartingPowerUp,
+                totalElapsedSeconds = state.totalElapsedSeconds,
+                totalSteps = state.totalSteps,
+                deathsThisRun = state.deathsThisRun
             )
 
         fun fromJson(json: String): AdventureRunStateSnapshot? {
@@ -175,7 +193,15 @@ data class AdventureRunStateSnapshot(
                     currentMazeNpcPolicies = mazePolicies,
                     currentMazeSnapshot = mazeSnapshot,
                     status = AdventureStatus.valueOf(obj.getString(KEY_STATUS)),
-                    pendingStartingPowerUp = pendingPowerUp
+                    pendingStartingPowerUp = pendingPowerUp,
+                    // Strict reads: a valid v2 payload always writes these
+                    // keys (see toJson). Missing or wrong-typed values throw
+                    // and fail the load (caller clears the blob) rather than
+                    // silently resuming with zeroed run stats, which would
+                    // misrepresent already-earned time/steps/death counts.
+                    totalElapsedSeconds = obj.getDouble(KEY_TOTAL_ELAPSED_SECONDS).toFloat(),
+                    totalSteps = obj.getInt(KEY_TOTAL_STEPS),
+                    deathsThisRun = obj.getInt(KEY_DEATHS_THIS_RUN)
                 )
 
                 // Reject unknown difficulty names outright. The Adventure
@@ -190,6 +216,9 @@ data class AdventureRunStateSnapshot(
                 if (snapshot.currentMazeIndex < 0) return null
                 if (snapshot.livesRemaining < 0) return null
                 if (snapshot.winStreakSinceLastBonus < 0) return null
+                if (snapshot.totalElapsedSeconds < 0f || !snapshot.totalElapsedSeconds.isFinite()) return null
+                if (snapshot.totalSteps < 0) return null
+                if (snapshot.deathsThisRun < 0) return null
                 // MANUAL invariant was enforced above by re-adding it if absent.
                 snapshot
             } catch (_: Exception) {
@@ -217,6 +246,9 @@ data class AdventureRunStateSnapshot(
         currentMazeNpcPolicies = currentMazeNpcPolicies,
         currentMazeSnapshot = currentMazeSnapshot,
         status = status,
-        pendingStartingPowerUp = pendingStartingPowerUp
+        pendingStartingPowerUp = pendingStartingPowerUp,
+        totalElapsedSeconds = totalElapsedSeconds,
+        totalSteps = totalSteps,
+        deathsThisRun = deathsThisRun
     )
 }
