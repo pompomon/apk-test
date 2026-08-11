@@ -71,10 +71,14 @@ The CI emulator (`api-level: 29`, `arch: x86_64`) is the source of most historic
 
 ## CI
 
-`.github/workflows/build.yml` runs three jobs on PRs to `main`:
+`.github/workflows/build.yml` runs three jobs on PRs to `main` and pushes to `main`:
 
 1. `unit-test` — `./gradlew testDebugUnitTest`.
 2. `instrumented-test` — emulator API 29, `./gradlew connectedDebugAndroidTest`.
 3. `build` — `./gradlew assembleDebug` (depends on the other two).
+
+Superseded PR runs are cancelled. Gradle caching is disabled to avoid consuming Actions
+cache storage, and the debug APK is uploaded only for pushes to `main`, with one-day
+retention.
 
 When you change CI, remember `sdkmanager` is not on PATH; the workflow invokes it as `$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager` (PR #1).
