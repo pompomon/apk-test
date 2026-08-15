@@ -83,7 +83,7 @@ class DifficultyPresetTest {
     }
 
     @Test
-    fun defaultPresets_keepAdventurerSpeedWithinConfiguredRange() {
+    fun defaultPresets_haveExpectedAdventurerConfiguration() {
         DifficultyPresets.all.forEach { preset ->
             assertEquals(1, preset.adventurerCount)
             assertTrue(
