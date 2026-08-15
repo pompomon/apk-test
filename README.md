@@ -18,6 +18,7 @@ A lightweight Android 2D top-down maze game using libGDX rendering.
   - Predictive chase
   - Patrol/guard with alert-search transitions
 - Difficulty presets that scale maze size, NPC count, and movement speed
+- Autonomous Adventurers that race toward the exit and can distract enemies
 - Easy/Medium balancing keeps NPC movement slower than player so escapes are possible
 - Unit tests for maze generation/pathfinding/policies
 - Instrumented UI smoke test for game host and controls

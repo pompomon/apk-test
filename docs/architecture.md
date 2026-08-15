@@ -31,8 +31,9 @@ SetupActivity  ── Intent extras ──▶  MainActivity  ── Fragment arg
 
 1. Drain `manualQueue` (if `manualOverrideRemainingSeconds > 0` or policy is `MANUAL`).
 2. Advance player by one step if their accumulator says so → `evaluateEndConditions()` (WIN if on exit; LOSE if sharing a cell with an NPC and no FREEZE/INVISIBILITY).
-3. Advance each NPC by one step if its accumulator says so → `evaluateEndConditions()` again.
-4. Tick power-up spawning, despawn timers, and active-effect timers.
+3. Advance Adventurers toward the exit at the preset's player-speed ratio; remove any that escape or meet an NPC.
+4. Advance each NPC by one step, targeting the nearest visible player or Adventurer (player wins distance ties) → `evaluateEndConditions()` again.
+5. Tick power-up spawning, despawn timers, and active-effect timers.
 
 **Rule:** end conditions are evaluated *after each movement step*, not once per `update()`. See `GameEngine.update` / `evaluateEndConditions`.
 
@@ -51,11 +52,12 @@ SetupActivity  ── Intent extras ──▶  MainActivity  ── Fragment arg
 - `GameStateStore` persists a JSON-serialized `GameEngineSnapshot` in `SharedPreferences`. Validated load only — never read raw JSON to drive UI.
 - `MainActivity.onPause` writes a snapshot via a **shared single-thread `ExecutorService`**. "Pause & Exit" *clears* the saved state when status is `WIN` or `LOSE` instead of saving.
 - `GameEngineSnapshot.fromJson` returns `null` on:
-  - schema-version mismatch (`SCHEMA_VERSION` is currently `3`),
+  - schema-version mismatch (`SCHEMA_VERSION` is currently `4`),
   - unknown `difficultyName` (does **not** silently fall back to MEDIUM the way `DifficultyPresets.byName` does),
   - any persisted coordinate (player, NPCs, spawned power-ups, or `removedWalls` cell) falling outside the maze bounds implied by the preset (rounded up to even, like the generator),
   - JSON / enum-value parse errors.
 - The snapshot persists `removedWalls` — walls destroyed during gameplay — so restore re-applies them on the regenerated baseline maze.
+- The snapshot persists surviving Adventurers; shipped presets spawn one in both Classic and Adventure modes.
 - The snapshot also persists Adventure-mode overrides — `npcCountOverride` (replaces the preset's `npcCount`) and `npcPolicies` (per-NPC policy by spawn id) — so a paused-mid-maze resume re-spawns the same set of NPCs with the same per-NPC strategies.
 
 ## Adventure mode

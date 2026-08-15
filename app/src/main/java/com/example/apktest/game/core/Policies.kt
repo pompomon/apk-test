@@ -29,17 +29,17 @@ enum class NpcPolicyType(
 ) {
     DIRECT_CHASE(
         label = "Direct Chase",
-        description = "Walks straight toward the player along the shortest maze path.",
+        description = "Takes the shortest maze path to the nearest player or Adventurer.",
         colorRgb = Triple(0.78f, 0.18f, 0.20f) // red (legacy goblin tint)
     ),
     PREDICTIVE_CHASE(
         label = "Predictive",
-        description = "Anticipates the player's next moves and cuts them off.",
+        description = "Anticipates the nearest player or Adventurer and cuts them off.",
         colorRgb = Triple(0.62f, 0.30f, 0.78f) // purple/magenta
     ),
     PATROL_GUARD(
         label = "Patrol/Guard",
-        description = "Patrols a region and only chases when the player is nearby.",
+        description = "Patrols a region and chases a nearby player or Adventurer.",
         colorRgb = Triple(0.95f, 0.55f, 0.15f) // orange/amber
     )
 }

@@ -163,6 +163,12 @@ object Sprites {
         'B' to Color(0.40f, 0.27f, 0.16f, 1f), // belt / boots
         'E' to Color(0.05f, 0.05f, 0.08f, 1f)  // eyes / outline
     )
+    private val adventurerPalette = mapOf(
+        'H' to Color(0.16f, 0.64f, 0.34f, 1f), // hat / tunic (green)
+        'S' to Color(0.97f, 0.83f, 0.68f, 1f), // skin
+        'B' to Color(0.55f, 0.34f, 0.12f, 1f), // belt / boots
+        'E' to Color(0.05f, 0.05f, 0.08f, 1f)  // eyes / outline
+    )
     // Idle: legs together / boots planted.
     val heroIdle: Array<String> = arrayOf(
         "0HHHHH0",
@@ -196,6 +202,8 @@ object Sprites {
     /** Backwards-compatible alias for the legacy single-frame hero pattern. */
     val hero: Array<String> = heroIdle
     val heroFrames: Array<Array<String>> = arrayOf(heroIdle, heroStep1, heroStep2)
+    val adventurerIdle: Array<String> = heroIdle
+    val adventurerFrames: Array<Array<String>> = heroFrames
 
     // Monster: red goblin/ghost with white eyes and jagged bottom (7x7).
     // The default palette below preserves the legacy DIRECT_CHASE colors and is
@@ -289,6 +297,7 @@ object Sprites {
     )
 
     fun heroPalette(): Map<Char, Color> = heroPalette
+    fun adventurerPalette(): Map<Char, Color> = adventurerPalette
     fun monsterPalette(): Map<Char, Color> = monsterPalette
     /**
      * Per-policy NPC palette, derived from [NpcPolicyType.colorRgb]. Cached at

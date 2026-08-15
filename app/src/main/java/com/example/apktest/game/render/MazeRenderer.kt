@@ -384,6 +384,42 @@ class MazeRenderer {
     private fun drawEntities(engine: GameEngine) {
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
+        engine.adventurers.forEach { adventurer ->
+            val adventurerPattern = pickFrame(
+                frames = Sprites.adventurerFrames,
+                elapsedSeconds = engine.elapsedSeconds,
+                lastMoveAtSeconds = adventurer.lastMoveAtSeconds,
+                animationFrame = adventurer.animationFrame
+            )
+            PixelSpriteRenderer.draw(
+                shapes = shapes,
+                pattern = adventurerPattern,
+                palette = Sprites.adventurerPalette(),
+                centerX = mazeOriginX + adventurer.position.x + 0.5f,
+                centerY = mazeOriginY + adventurer.position.y + 0.5f,
+                size = 0.75f
+            )
+        }
+
+        engine.npcs.forEach { npc ->
+            val npcPattern = pickFrame(
+                frames = Sprites.monsterFrames,
+                elapsedSeconds = engine.elapsedSeconds,
+                lastMoveAtSeconds = npc.lastMoveAtSeconds,
+                animationFrame = npc.animationFrame
+            )
+            PixelSpriteRenderer.draw(
+                shapes = shapes,
+                pattern = npcPattern,
+                palette = Sprites.monsterPaletteFor(npc.policyType),
+                centerX = mazeOriginX + npc.position.x + 0.5f,
+                centerY = mazeOriginY + npc.position.y + 0.5f,
+                size = 0.72f
+            )
+        }
+
+        // Draw the player last so they retain visual priority when sharing a
+        // cell with an Adventurer during movement resolution.
         val player = engine.player
         val playerTintCount = collectActivePlayerTintColors(engine)
         val playerPattern = pickFrame(
@@ -402,23 +438,6 @@ class MazeRenderer {
             tintColors = activePlayerTintColors,
             tintCount = playerTintCount
         )
-
-        engine.npcs.forEach { npc ->
-            val npcPattern = pickFrame(
-                frames = Sprites.monsterFrames,
-                elapsedSeconds = engine.elapsedSeconds,
-                lastMoveAtSeconds = npc.lastMoveAtSeconds,
-                animationFrame = npc.animationFrame
-            )
-            PixelSpriteRenderer.draw(
-                shapes = shapes,
-                pattern = npcPattern,
-                palette = Sprites.monsterPaletteFor(npc.policyType),
-                centerX = mazeOriginX + npc.position.x + 0.5f,
-                centerY = mazeOriginY + npc.position.y + 0.5f,
-                size = 0.72f
-            )
-        }
 
         shapes.end()
     }
