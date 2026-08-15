@@ -198,6 +198,39 @@ class AdventurerTest {
         assertEquals(adventurer.position, npc.lastKnownPlayerPos)
     }
 
+    @Test
+    fun patrolGuardFiltersVisionRangeBeforeChoosingNearestPathTarget() {
+        val maze = Maze(
+            width = 2,
+            height = 3,
+            cells = IntArray(6) { Maze.ALL_WALLS },
+            start = GridPos(0, 0),
+            exit = GridPos(1, 0)
+        )
+        val npcPosition = GridPos(0, 0)
+        val playerPosition = GridPos(1, 0)
+        val adventurerPosition = GridPos(0, 2)
+        maze.removeWall(npcPosition, Direction.NORTH)
+        maze.removeWall(GridPos(0, 1), Direction.NORTH)
+        maze.removeWall(GridPos(0, 1), Direction.EAST)
+        maze.removeWall(GridPos(1, 1), Direction.SOUTH)
+        val npc = Npc(id = 0, position = npcPosition)
+        val context = NpcPolicyContext(
+            maze = maze,
+            navigator = MazeNavigator(maze),
+            player = Player(playerPosition),
+            visionRange = 1,
+            playerVisible = true,
+            npcsFrozen = false,
+            adventurers = listOf(Adventurer(id = 0, position = adventurerPosition))
+        )
+
+        PatrolGuardPolicy().nextMove(npc, context)
+
+        assertEquals(NpcState.CHASE, npc.state)
+        assertEquals(playerPosition, npc.lastKnownPlayerPos)
+    }
+
     private fun adventurerPreset(
         adventurerCount: Int,
         npcCount: Int = 0,

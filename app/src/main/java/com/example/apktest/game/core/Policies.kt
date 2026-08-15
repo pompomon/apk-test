@@ -466,12 +466,13 @@ class PredictiveChasePolicy(private val random: Random = Random.Default) : NpcPo
 class PatrolGuardPolicy : NpcPolicy {
     override fun nextMove(npc: Npc, context: NpcPolicyContext): Direction? {
         if (context.npcsFrozen) return null
-        val visibleTarget = selectEnemyTarget(npc, context)
-        val targetDistance = visibleTarget?.let {
-            manhattanDistance(npc.position, it.runner.position)
-        }
+        val visibleTarget = selectEnemyTarget(
+            npc = npc,
+            context = context,
+            maxManhattanDistance = context.visionRange
+        )
 
-        if (visibleTarget != null && targetDistance != null && targetDistance <= context.visionRange) {
+        if (visibleTarget != null) {
             npc.state = NpcState.CHASE
             npc.lastKnownPlayerPos = visibleTarget.runner.position
             npc.searchTicksRemaining = DEFAULT_SEARCH_TICKS
@@ -789,13 +790,23 @@ private data class EnemyTarget(
  * exact-distance ties; Adventurers then tie-break by id for deterministic
  * multi-target behaviour.
  */
-private fun selectEnemyTarget(npc: Npc, context: NpcPolicyContext): EnemyTarget? {
+private fun selectEnemyTarget(
+    npc: Npc,
+    context: NpcPolicyContext,
+    maxManhattanDistance: Int? = null
+): EnemyTarget? {
     var bestRunner: MazeRunner? = null
     var bestPath: List<GridPos> = emptyList()
     var bestDistance = Int.MAX_VALUE
     var bestAdventurerId = Int.MAX_VALUE
 
-    if (context.playerVisible) {
+    if (
+        context.playerVisible &&
+        (
+            maxManhattanDistance == null ||
+                manhattanDistance(npc.position, context.player.position) <= maxManhattanDistance
+            )
+    ) {
         val path = context.navigator.bfsPath(npc.position, context.player.position)
         if (path.isNotEmpty()) {
             bestRunner = context.player
@@ -805,6 +816,12 @@ private fun selectEnemyTarget(npc: Npc, context: NpcPolicyContext): EnemyTarget?
     }
 
     for (adventurer in context.adventurers) {
+        if (
+            maxManhattanDistance != null &&
+            manhattanDistance(npc.position, adventurer.position) > maxManhattanDistance
+        ) {
+            continue
+        }
         val path = context.navigator.bfsPath(npc.position, adventurer.position)
         if (path.isEmpty()) continue
         val distance = path.size - 1
