@@ -136,6 +136,10 @@ class GameEngineSnapshotSchemaCoverageTest {
             GameEngineSnapshot.NpcSnapshot(id = 0, x = 2, y = 4, facing = Direction.SOUTH),
             GameEngineSnapshot.NpcSnapshot(id = 1, x = 6, y = 8, facing = Direction.WEST)
         ),
+        adventurers = listOf(
+            GameEngineSnapshot.AdventurerSnapshot(id = 0, x = 4, y = 5, facing = Direction.EAST),
+            GameEngineSnapshot.AdventurerSnapshot(id = 2, x = 7, y = 9, facing = Direction.NORTH)
+        ),
         spawnedPowerUps = listOf(
             GameEngineSnapshot.SpawnedPowerUpSnapshot(
                 type = PowerUpType.INVISIBILITY,
@@ -178,6 +182,9 @@ class GameEngineSnapshotSchemaCoverageTest {
         player = GameEngineSnapshot.PlayerSnapshot(x = 4, y = 6, facing = Direction.SOUTH),
         npcs = listOf(
             GameEngineSnapshot.NpcSnapshot(id = 0, x = 5, y = 7, facing = Direction.EAST)
+        ),
+        adventurers = listOf(
+            GameEngineSnapshot.AdventurerSnapshot(id = 1, x = 3, y = 4, facing = Direction.SOUTH)
         ),
         spawnedPowerUps = listOf(
             GameEngineSnapshot.SpawnedPowerUpSnapshot(

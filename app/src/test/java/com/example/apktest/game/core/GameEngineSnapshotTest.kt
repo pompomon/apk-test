@@ -35,6 +35,10 @@ class GameEngineSnapshotTest {
             original.npcs.map { it.position to it.facing },
             other.npcs.map { it.position to it.facing }
         )
+        assertEquals(
+            original.adventurers.map { Triple(it.id, it.position, it.facing) },
+            other.adventurers.map { Triple(it.id, it.position, it.facing) }
+        )
         assertEquals(original.steps, other.steps)
         assertEquals(original.elapsedSeconds, other.elapsedSeconds, 0.0001f)
         assertEquals(original.status, other.status)
@@ -129,6 +133,24 @@ class GameEngineSnapshotTest {
             )
         )
         GameEngine(DifficultyPresets.MEDIUM, seed + 7).restore(bad)
+    }
+
+    @Test
+    fun fromJson_returnsNullForOutOfBoundsAdventurer() {
+        val original = GameEngine(DifficultyPresets.MEDIUM, seed)
+        val snap = original.snapshot()
+        val bad = snap.copy(
+            adventurers = listOf(
+                GameEngineSnapshot.AdventurerSnapshot(
+                    id = 0,
+                    x = DifficultyPresets.MEDIUM.mazeWidth + 10,
+                    y = 0,
+                    facing = Direction.EAST
+                )
+            )
+        )
+
+        assertEquals(null, GameEngineSnapshot.fromJson(bad.toJson()))
     }
 
     /**

@@ -27,6 +27,7 @@ data class GameEngineSnapshot(
     val steps: Int,
     val player: PlayerSnapshot,
     val npcs: List<NpcSnapshot>,
+    val adventurers: List<AdventurerSnapshot> = emptyList(),
     val spawnedPowerUps: List<SpawnedPowerUpSnapshot>,
     val activeEffects: List<ActiveEffectSnapshot>,
     /** Remaining seconds on an NPC-induced player freeze, or `null` if none. */
@@ -66,6 +67,7 @@ data class GameEngineSnapshot(
 ) {
     data class PlayerSnapshot(val x: Int, val y: Int, val facing: Direction)
     data class NpcSnapshot(val id: Int, val x: Int, val y: Int, val facing: Direction)
+    data class AdventurerSnapshot(val id: Int, val x: Int, val y: Int, val facing: Direction)
     data class RemovedWallSnapshot(val x: Int, val y: Int, val direction: Direction)
     data class SpawnedPowerUpSnapshot(
         val type: PowerUpType,
@@ -112,6 +114,7 @@ data class GameEngineSnapshot(
         fun ok(x: Int, y: Int): Boolean = x in 0 until w && y in 0 until h
         if (!ok(player.x, player.y)) return false
         if (npcs.any { !ok(it.x, it.y) }) return false
+        if (adventurers.any { !ok(it.x, it.y) }) return false
         if (spawnedPowerUps.any { !ok(it.x, it.y) }) return false
         if (removedWalls.any { !ok(it.x, it.y) }) return false
         return true
@@ -135,6 +138,16 @@ data class GameEngineSnapshot(
             npcs.forEach { n ->
                 put(JSONObject().apply {
                     put("id", n.id); put("x", n.x); put("y", n.y); put("facing", n.facing.name)
+                })
+            }
+        })
+        put(KEY_ADVENTURERS, JSONArray().apply {
+            adventurers.forEach { adventurer ->
+                put(JSONObject().apply {
+                    put("id", adventurer.id)
+                    put("x", adventurer.x)
+                    put("y", adventurer.y)
+                    put("facing", adventurer.facing.name)
                 })
             }
         })
@@ -177,7 +190,7 @@ data class GameEngineSnapshot(
     }.toString()
 
     companion object {
-        const val SCHEMA_VERSION = 3
+        const val SCHEMA_VERSION = 4
 
         private const val KEY_VERSION = "v"
         private const val KEY_DIFFICULTY = "difficulty"
@@ -189,6 +202,7 @@ data class GameEngineSnapshot(
         private const val KEY_STEPS = "steps"
         private const val KEY_PLAYER = "player"
         private const val KEY_NPCS = "npcs"
+        private const val KEY_ADVENTURERS = "adventurers"
         private const val KEY_POWERUPS = "powerups"
         private const val KEY_EFFECTS = "effects"
         private const val KEY_NPC_FREEZE = "npcFreezeRem"
@@ -218,6 +232,17 @@ data class GameEngineSnapshot(
                             x = n.getInt("x"),
                             y = n.getInt("y"),
                             facing = Direction.valueOf(n.getString("facing"))
+                        )
+                    }
+                }
+                val adventurers = obj.getJSONArray(KEY_ADVENTURERS).let { arr ->
+                    List(arr.length()) { i ->
+                        val adventurer = arr.getJSONObject(i)
+                        AdventurerSnapshot(
+                            id = adventurer.getInt("id"),
+                            x = adventurer.getInt("x"),
+                            y = adventurer.getInt("y"),
+                            facing = Direction.valueOf(adventurer.getString("facing"))
                         )
                     }
                 }
@@ -275,6 +300,7 @@ data class GameEngineSnapshot(
                     steps = obj.getInt(KEY_STEPS),
                     player = player,
                     npcs = npcs,
+                    adventurers = adventurers,
                     spawnedPowerUps = powerUps,
                     activeEffects = effects,
                     npcInducedPlayerFreezeRemainingSeconds = if (obj.has(KEY_NPC_FREEZE)) {
@@ -304,6 +330,9 @@ data class GameEngineSnapshot(
                 val npcIds = npcs.map { it.id }
                 if (npcIds.toSet().size != npcIds.size) return null
                 if (npcIds.any { it < 0 || it >= npcs.size }) return null
+                val adventurerIds = adventurers.map { it.id }
+                if (adventurerIds.toSet().size != adventurerIds.size) return null
+                if (adventurerIds.any { it < 0 }) return null
                 // Reject snapshots whose difficulty name doesn't match a
                 // known preset exactly (DifficultyPresets.byName silently
                 // falls back to MEDIUM, which would regenerate a
