@@ -65,6 +65,8 @@ class GameEngine(
         private set
     var npcs: MutableList<Npc> = mutableListOf()
         private set
+    var adventurers: MutableList<Adventurer> = mutableListOf()
+        private set
 
     val spawnedPowerUps: List<SpawnedPowerUp>
         get() = powerUpsByCell.values.sortedBy { it.position.y * maze.width + it.position.x }
@@ -85,8 +87,10 @@ class GameEngine(
     // reproducible, but kept separate from `random` so power-up spawning and
     // other engine RNG consumers don't perturb the wander sequence.
     private var npcRandom = Random(seed xor NPC_RANDOM_SEED_MIX)
+    private var adventurerRandom = Random(seed xor ADVENTURER_RANDOM_SEED_MIX)
     private var playerPolicy: PlayerPolicy = PolicyFactory.player(playerPolicyType)
     private var npcPolicy: NpcPolicy = PolicyFactory.npc(npcPolicyType, npcRandom)
+    private val adventurerPoliciesById = mutableMapOf<Int, PlayerPolicy>()
     /**
      * Per-`NpcPolicyType` cache. In single-maze mode every NPC shares
      * [npcPolicy] (= the entry at [npcPolicyType]); in Adventure mode each
@@ -121,6 +125,7 @@ class GameEngine(
         private set
 
     private var playerAccumulator = 0f
+    private var adventurerAccumulator = 0f
     private var npcAccumulator = 0f
     private val manualQueue = ArrayDeque<Direction>()
     /**
@@ -143,6 +148,7 @@ class GameEngine(
 
     init {
         spawnNpcs()
+        spawnAdventurers()
         spawnInitialPowerUps()
     }
 
@@ -152,10 +158,13 @@ class GameEngine(
         navigator = MazeNavigator(maze)
         player = Player(maze.start)
         npcs = mutableListOf()
+        adventurers = mutableListOf()
         random = Random(seed)
         npcRandom = Random(seed xor NPC_RANDOM_SEED_MIX)
+        adventurerRandom = Random(seed xor ADVENTURER_RANDOM_SEED_MIX)
         npcPolicy = PolicyFactory.npc(npcPolicyType, npcRandom)
         npcPolicyCache.clear()
+        adventurerPoliciesById.clear()
         status = GameStatus.RUNNING
         elapsedSeconds = 0f
         steps = 0
@@ -163,6 +172,7 @@ class GameEngine(
         goFlashRemainingSeconds = 0f
         manualOverrideUntilSeconds = 0f
         playerAccumulator = 0f
+        adventurerAccumulator = 0f
         npcAccumulator = 0f
         powerUpRespawnAccumulator = 0f
         powerUpsByCell.clear()
@@ -172,6 +182,7 @@ class GameEngine(
         playerPolicy.reset()
         npcPolicy.reset()
         spawnNpcs()
+        spawnAdventurers()
         spawnInitialPowerUps()
     }
 
@@ -289,6 +300,9 @@ class GameEngine(
         npcs = npcs.map {
             GameEngineSnapshot.NpcSnapshot(it.id, it.position.x, it.position.y, it.facing)
         },
+        adventurers = adventurers.map {
+            GameEngineSnapshot.AdventurerSnapshot(it.id, it.position.x, it.position.y, it.facing)
+        },
         spawnedPowerUps = powerUpsByCell.values.map { p ->
             GameEngineSnapshot.SpawnedPowerUpSnapshot(
                 type = p.type,
@@ -396,8 +410,10 @@ class GameEngine(
         navigator = MazeNavigator(maze)
         random = Random(currentSeed)
         npcRandom = Random(currentSeed xor NPC_RANDOM_SEED_MIX)
+        adventurerRandom = Random(currentSeed xor ADVENTURER_RANDOM_SEED_MIX)
         npcPolicy = PolicyFactory.npc(npcPolicyType, npcRandom)
         npcPolicyCache.clear()
+        adventurerPoliciesById.clear()
         playerPolicy.reset()
         npcPolicy.reset()
 
@@ -445,6 +461,15 @@ class GameEngine(
                 policyType = snapshot.npcPolicies.getOrNull(n.id) ?: npcPolicyType
             )
         }.toMutableList()
+        adventurers = snapshot.adventurers.map { adventurer ->
+            Adventurer(
+                id = adventurer.id,
+                position = GridPos(adventurer.x, adventurer.y),
+                facing = adventurer.facing
+            ).also {
+                adventurerPoliciesById[it.id] = PolicyFactory.player(difficulty.adventurerPolicyType)
+            }
+        }.toMutableList()
 
         powerUpsByCell.clear()
         snapshot.spawnedPowerUps.forEach { p ->
@@ -475,6 +500,7 @@ class GameEngine(
         snapshot.manualQueue.forEach { manualQueue.addLast(it) }
         manualOverrideUntilSeconds = elapsedSeconds + snapshot.manualOverrideRemainingSeconds.coerceAtLeast(0f)
         playerAccumulator = 0f
+        adventurerAccumulator = 0f
         npcAccumulator = 0f
         powerUpRespawnAccumulator = 0f
     }
@@ -584,6 +610,7 @@ class GameEngine(
         if (!isPlayerFrozenByNpc()) {
             playerAccumulator += effectiveDelta
         }
+        adventurerAccumulator += effectiveDelta
         // Pause NPC time accumulation while FREEZE is active so freezing truly
         // pauses NPC movement. Preserve the existing accumulator value so any
         // partial progress made before FREEZE started is not discarded
@@ -606,6 +633,16 @@ class GameEngine(
             playerAccumulator -= playerInterval
             updatePlayer()
             evaluateEndConditions()
+        }
+
+        val adventurerInterval = 1f / effectiveAdventurerMovesPerSecond()
+        while (
+            adventurers.isNotEmpty() &&
+            adventurerAccumulator >= adventurerInterval &&
+            status == GameStatus.RUNNING
+        ) {
+            adventurerAccumulator -= adventurerInterval
+            updateAdventurers()
         }
 
         if (!isEffectActive(PowerUpType.FREEZE)) {
@@ -743,7 +780,8 @@ class GameEngine(
             player = player,
             visionRange = difficulty.npcVisionRange,
             playerVisible = !isEffectActive(PowerUpType.INVISIBILITY),
-            npcsFrozen = isEffectActive(PowerUpType.FREEZE)
+            npcsFrozen = isEffectActive(PowerUpType.FREEZE),
+            adventurers = adventurers
         )
 
         npcs.forEach { npc ->
@@ -756,6 +794,52 @@ class GameEngine(
             npc.animationFrame = (npc.animationFrame + 1) % ANIMATION_FRAMES
             npc.lastMoveAtSeconds = elapsedSeconds
             collectPowerUpAtNpc(npc)
+            eliminateAdventurersAt(npc.position)
+        }
+    }
+
+    private fun updateAdventurers() {
+        val iterator = adventurers.iterator()
+        while (iterator.hasNext()) {
+            val adventurer = iterator.next()
+            val policy = adventurerPoliciesById.getOrPut(adventurer.id) {
+                PolicyFactory.player(difficulty.adventurerPolicyType)
+            }
+            val direction = policy.nextMove(
+                PlayerPolicyContext(
+                    maze = maze,
+                    navigator = navigator,
+                    player = adventurer,
+                    exit = maze.exit,
+                    npcs = npcs,
+                    // Player power-ups never transfer to Adventurers.
+                    playerInvisibleToNpcs = false,
+                    npcsFrozen = isEffectActive(PowerUpType.FREEZE)
+                )
+            )
+            if (direction != null && maze.canMove(adventurer.position, direction)) {
+                adventurer.position = adventurer.position.moved(direction)
+                adventurer.facing = direction
+                adventurer.animationFrame = (adventurer.animationFrame + 1) % ANIMATION_FRAMES
+                adventurer.lastMoveAtSeconds = elapsedSeconds
+            }
+
+            val caught = npcs.any { it.position == adventurer.position }
+            val escaped = adventurer.position == maze.exit
+            if (caught || escaped) {
+                iterator.remove()
+                adventurerPoliciesById.remove(adventurer.id)
+            }
+        }
+    }
+
+    private fun eliminateAdventurersAt(position: GridPos) {
+        val iterator = adventurers.iterator()
+        while (iterator.hasNext()) {
+            val adventurer = iterator.next()
+            if (adventurer.position != position) continue
+            iterator.remove()
+            adventurerPoliciesById.remove(adventurer.id)
         }
     }
 
@@ -798,11 +882,18 @@ class GameEngine(
         val npc = npcs[npcIndex]
         npc.position = position
         collectPowerUpAtNpc(npc)
+        eliminateAdventurersAt(position)
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun clearNpcsForTest() {
         npcs.clear()
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun clearAdventurersForTest() {
+        adventurers.clear()
+        adventurerPoliciesById.clear()
     }
 
     private fun activateNpcInducedPlayerFreeze() {
@@ -857,6 +948,50 @@ class GameEngine(
                 policyType = perNpcPolicy
             )
         }
+    }
+
+    private fun spawnAdventurers() {
+        val requestedCount = difficulty.adventurerCount
+        if (requestedCount <= 0) return
+
+        val candidates = adventurerSpawnCandidates()
+        val spawnCount = requestedCount.coerceAtMost(candidates.size)
+        repeat(spawnCount) { id ->
+            val adventurer = Adventurer(id = id, position = candidates[id])
+            adventurers += adventurer
+            adventurerPoliciesById[id] = PolicyFactory.player(difficulty.adventurerPolicyType)
+        }
+    }
+
+    /**
+     * Ranks free cells by how closely their shortest-path distance to the exit
+     * matches the player's initial distance. Equal-distance candidates retain a
+     * deterministic shuffle order from an Adventurer-only RNG stream so adding
+     * Adventurers does not advance the power-up or enemy RNG state.
+     */
+    private fun adventurerSpawnCandidates(): List<GridPos> {
+        val playerPath = navigator.bfsPath(maze.start, maze.exit)
+        if (playerPath.isEmpty()) return emptyList()
+        val targetDistance = playerPath.size - 1
+        val reserved = HashSet<GridPos>(npcs.size + 2).apply {
+            add(maze.start)
+            add(maze.exit)
+            npcs.forEach { add(it.position) }
+        }
+        val candidates = mutableListOf<Pair<GridPos, Int>>()
+        for (y in 0 until maze.height) {
+            for (x in 0 until maze.width) {
+                val pos = GridPos(x, y)
+                if (pos in reserved) continue
+                val path = navigator.bfsPath(pos, maze.exit)
+                if (path.isNotEmpty()) {
+                    candidates += pos to (path.size - 1)
+                }
+            }
+        }
+        candidates.shuffle(adventurerRandom)
+        candidates.sortBy { (_, distance) -> abs(distance - targetDistance) }
+        return candidates.map { it.first }
     }
 
     private fun npcSpawnCandidates(): List<GridPos> {
@@ -925,6 +1060,7 @@ class GameEngine(
         if (position == maze.start || position == maze.exit) return
         if (position == player.position) return
         if (npcs.any { it.position == position }) return
+        if (adventurers.any { it.position == position }) return
         val lifetime = difficulty.powerUpPickupLifetimeSeconds
         val expiresAt = if (lifetime > 0f) {
             elapsedSeconds + lifetime + extraDelaySeconds.coerceAtLeast(0f)
@@ -991,6 +1127,7 @@ class GameEngine(
             add(maze.exit)
             add(player.position)
             npcs.forEach { add(it.position) }
+            adventurers.forEach { add(it.position) }
             powerUpsByCell.keys.forEach { add(it) }
         }
         val candidates = mutableListOf<GridPos>()
@@ -1074,6 +1211,7 @@ class GameEngine(
                 val pos = GridPos(x, y)
                 if (pos == maze.exit || pos == player.position) continue
                 if (npcs.any { it.position == pos }) continue
+                if (adventurers.any { it.position == pos }) continue
                 if (navigator.bfsPath(pos, maze.exit).isNotEmpty()) {
                     candidates += pos
                 }
@@ -1139,6 +1277,9 @@ class GameEngine(
         return difficulty.npcMovesPerSecond * speedMultiplier
     }
 
+    private fun effectiveAdventurerMovesPerSecond(): Float =
+        difficulty.playerMovesPerSecond * difficulty.adventurerSpeedRatio
+
     companion object {
         private const val MAX_EXTRA_PATROL_WAYPOINTS = 2
         private const val MAX_MANUAL_QUEUE = 64
@@ -1156,6 +1297,7 @@ class GameEngine(
         // as a signed-Long literal because Kotlin `const val` initializers must
         // be compile-time constants (UInt/ULong .toLong() is not).
         private const val NPC_RANDOM_SEED_MIX: Long = -0x61C8864680B583EBL
+        private const val ADVENTURER_RANDOM_SEED_MIX: Long = 0x5DEECE66DL
 
         /**
          * Stride between per-`NpcPolicyType` RNG streams in Adventure mode.

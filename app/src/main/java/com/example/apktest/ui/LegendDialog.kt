@@ -15,11 +15,8 @@ import com.example.apktest.game.core.PowerUpType
 
 /**
  * Builds and shows the in-game legend dialog. Rows are generated from
- * [PowerUpType.entries] and [NpcPolicyType.entries] and each row reads its
- * `label` and `description` directly from the enum, which is the single
- * source of truth (shared with the HUD and renderer). Any new enum entry
- * therefore automatically appears in the legend without additional wiring or
- * string resources.
+ * [PowerUpType.entries] and [NpcPolicyType.entries] and each enum-backed row
+ * reads its `label` and `description` from the shared source of truth.
  */
 object LegendDialog {
     fun show(context: Context) {
@@ -50,6 +47,18 @@ object LegendDialog {
             row.addView(rowText(context, type.label, type.description))
             container.addView(row)
         }
+
+        container.addView(sectionHeader(context, R.string.legend_section_adventurers, topMargin = sectionSpacing))
+        val adventurerRow = newRow(context, rowPadding, isFirst = true)
+        adventurerRow.addView(adventurerIcon(context, iconSize))
+        adventurerRow.addView(
+            rowText(
+                context,
+                context.getString(R.string.legend_adventurer_label),
+                context.getString(R.string.legend_adventurer_description)
+            )
+        )
+        container.addView(adventurerRow)
 
         container.addView(sectionHeader(context, R.string.legend_section_npcs, topMargin = sectionSpacing))
         NpcPolicyType.entries.forEachIndexed { index, type ->
@@ -101,6 +110,13 @@ object LegendDialog {
         return NpcIconView(context).apply {
             layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
             setNpcPolicyType(type)
+            importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+    }
+
+    private fun adventurerIcon(context: Context, iconSize: Int): AdventurerIconView {
+        return AdventurerIconView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
             importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
     }

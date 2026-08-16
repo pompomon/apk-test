@@ -83,6 +83,45 @@ class DifficultyPresetTest {
     }
 
     @Test
+    fun defaultPresets_haveExpectedAdventurerConfiguration() {
+        DifficultyPresets.all.forEach { preset ->
+            assertEquals(1, preset.adventurerCount)
+            assertTrue(
+                preset.adventurerSpeedRatio in
+                    DifficultyPreset.MIN_ADVENTURER_SPEED_RATIO..DifficultyPreset.MAX_ADVENTURER_SPEED_RATIO
+            )
+            assertTrue(preset.adventurerPolicyType != PlayerPolicyType.MANUAL)
+        }
+        assertEquals(0.8f, DifficultyPresets.EASY.adventurerSpeedRatio, 0.0001f)
+        assertEquals(0.9f, DifficultyPresets.MEDIUM.adventurerSpeedRatio, 0.0001f)
+        assertEquals(0.95f, DifficultyPresets.HARD.adventurerSpeedRatio, 0.0001f)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun difficultyPreset_rejectsManualAdventurerPolicy() {
+        DifficultyPresets.EASY.copy(adventurerPolicyType = PlayerPolicyType.MANUAL)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun difficultyPreset_rejectsNegativeAdventurerCount() {
+        DifficultyPresets.EASY.copy(adventurerCount = -1)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun difficultyPreset_rejectsAdventurerSpeedRatioBelowMinimum() {
+        DifficultyPresets.EASY.copy(
+            adventurerSpeedRatio = DifficultyPreset.MIN_ADVENTURER_SPEED_RATIO - 0.01f
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun difficultyPreset_rejectsAdventurerSpeedRatioAboveMaximum() {
+        DifficultyPresets.EASY.copy(
+            adventurerSpeedRatio = DifficultyPreset.MAX_ADVENTURER_SPEED_RATIO + 0.01f
+        )
+    }
+
+    @Test
     fun mediumPowerUpPolicy_usesFortyFiveSecondLifetimeAndRespawns() {
         assertEquals(45f, DifficultyPresets.MEDIUM.powerUpPickupLifetimeSeconds, 0.0001f)
         val respawn = DifficultyPresets.MEDIUM.powerUpRespawnIntervalSeconds

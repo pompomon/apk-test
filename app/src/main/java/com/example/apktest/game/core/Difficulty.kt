@@ -21,6 +21,16 @@ data class DifficultyPreset(
     val powerUpRespawnIntervalSeconds: Float? = null,
     val initialPowerUpTypes: List<PowerUpType> = PowerUpType.entries,
     /**
+     * Automated explorers present in both Classic and Adventure mazes.
+     * Test-only/custom presets can opt out with `0`; shipped presets start
+     * with one and can be tuned independently later.
+     */
+    val adventurerCount: Int = 0,
+    /** Adventurer speed as a fraction of the preset's base player speed. */
+    val adventurerSpeedRatio: Float = 0.9f,
+    /** Fixed exit-seeking strategy used by every Adventurer in this preset. */
+    val adventurerPolicyType: PlayerPolicyType = PlayerPolicyType.BFS_EXIT,
+    /**
      * Preferred minimum Chebyshev-cell buffer around the direct start-to-exit
      * path for initial NPC placement. Candidates outside this buffer are ranked
      * first, with fallback to inside-buffer cells when needed to satisfy NPC
@@ -53,6 +63,21 @@ data class DifficultyPreset(
         require(npcDirectPathSpawnBuffer >= 0) {
             "npcDirectPathSpawnBuffer ($npcDirectPathSpawnBuffer) must be >= 0 for $name."
         }
+        require(adventurerCount >= 0) {
+            "adventurerCount ($adventurerCount) must be >= 0 for $name."
+        }
+        require(adventurerSpeedRatio in MIN_ADVENTURER_SPEED_RATIO..MAX_ADVENTURER_SPEED_RATIO) {
+            "adventurerSpeedRatio ($adventurerSpeedRatio) must be between " +
+                "$MIN_ADVENTURER_SPEED_RATIO and $MAX_ADVENTURER_SPEED_RATIO for $name."
+        }
+        require(adventurerPolicyType != PlayerPolicyType.MANUAL) {
+            "adventurerPolicyType must be automated for $name."
+        }
+    }
+
+    companion object {
+        const val MIN_ADVENTURER_SPEED_RATIO = 0.8f
+        const val MAX_ADVENTURER_SPEED_RATIO = 0.95f
     }
 }
 
@@ -73,6 +98,9 @@ object DifficultyPresets {
         balanceRule = NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER,
         powerUpPickupLifetimeSeconds = 0f,
         powerUpRespawnIntervalSeconds = 12f,
+        adventurerCount = 1,
+        adventurerSpeedRatio = 0.8f,
+        adventurerPolicyType = PlayerPolicyType.BFS_EXIT,
         npcDirectPathSpawnBuffer = 2
     )
 
@@ -87,6 +115,9 @@ object DifficultyPresets {
         balanceRule = NpcSpeedBalanceRule.NPC_MUST_BE_SLOWER_THAN_PLAYER,
         powerUpPickupLifetimeSeconds = 45f,
         powerUpRespawnIntervalSeconds = 20f,
+        adventurerCount = 1,
+        adventurerSpeedRatio = 0.9f,
+        adventurerPolicyType = PlayerPolicyType.BFS_EXIT,
         npcDirectPathSpawnBuffer = 1
     )
 
@@ -101,6 +132,9 @@ object DifficultyPresets {
         balanceRule = NpcSpeedBalanceRule.NONE,
         powerUpPickupLifetimeSeconds = 40f,
         powerUpRespawnIntervalSeconds = 25f,
+        adventurerCount = 1,
+        adventurerSpeedRatio = 0.95f,
+        adventurerPolicyType = PlayerPolicyType.BFS_EXIT,
         npcDirectPathSpawnBuffer = 0
     )
 

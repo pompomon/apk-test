@@ -29,17 +29,17 @@ enum class NpcPolicyType(
 ) {
     DIRECT_CHASE(
         label = "Direct Chase",
-        description = "Walks straight toward the player along the shortest maze path.",
+        description = "Takes the shortest maze path to the nearest player or Adventurer.",
         colorRgb = Triple(0.78f, 0.18f, 0.20f) // red (legacy goblin tint)
     ),
     PREDICTIVE_CHASE(
         label = "Predictive",
-        description = "Anticipates the player's next moves and cuts them off.",
+        description = "Anticipates the nearest player or Adventurer and cuts them off.",
         colorRgb = Triple(0.62f, 0.30f, 0.78f) // purple/magenta
     ),
     PATROL_GUARD(
         label = "Patrol/Guard",
-        description = "Patrols a region and only chases when the player is nearby.",
+        description = "Patrols a region and chases a nearby player or Adventurer.",
         colorRgb = Triple(0.95f, 0.55f, 0.15f) // orange/amber
     )
 }
@@ -47,7 +47,7 @@ enum class NpcPolicyType(
 data class PlayerPolicyContext(
     val maze: Maze,
     val navigator: MazeNavigator,
-    val player: Player,
+    val player: MazeRunner,
     val exit: GridPos,
     val npcs: List<Npc>,
     /**
@@ -83,7 +83,8 @@ data class NpcPolicyContext(
     val player: Player,
     val visionRange: Int,
     val playerVisible: Boolean,
-    val npcsFrozen: Boolean
+    val npcsFrozen: Boolean,
+    val adventurers: List<Adventurer> = emptyList()
 )
 
 interface PlayerPolicy {
@@ -433,27 +434,28 @@ class AvoidanceWrapperPolicy(internal val inner: PlayerPolicy) : PlayerPolicy {
 class DirectChasePolicy(private val random: Random = Random.Default) : NpcPolicy {
     override fun nextMove(npc: Npc, context: NpcPolicyContext): Direction? {
         if (context.npcsFrozen) return null
-        if (!context.playerVisible) return wanderMove(npc, context.maze, random)
-        val path = context.navigator.bfsPath(npc.position, context.player.position)
-        return nextDirection(npc.position, path)
+        val target = selectEnemyTarget(npc, context)
+            ?: return wanderMove(npc, context.maze, random)
+        return nextDirection(npc.position, target.path)
     }
 }
 
 class PredictiveChasePolicy(private val random: Random = Random.Default) : NpcPolicy {
     override fun nextMove(npc: Npc, context: NpcPolicyContext): Direction? {
         if (context.npcsFrozen) return null
-        if (!context.playerVisible) return wanderMove(npc, context.maze, random)
-        var projected = context.player.position
+        val target = selectEnemyTarget(npc, context)
+            ?: return wanderMove(npc, context.maze, random)
+        var projected = target.runner.position
         repeat(PREDICTION_STEPS) {
-            val next = projected.moved(context.player.facing)
-            if (context.maze.inBounds(next) && context.maze.canMove(projected, context.player.facing)) {
+            val next = projected.moved(target.runner.facing)
+            if (context.maze.inBounds(next) && context.maze.canMove(projected, target.runner.facing)) {
                 projected = next
             }
         }
 
         val path = context.navigator.aStarPath(npc.position, projected)
         return nextDirection(npc.position, path)
-            ?: nextDirection(npc.position, context.navigator.bfsPath(npc.position, context.player.position))
+            ?: nextDirection(npc.position, target.path)
     }
 
     companion object {
@@ -464,11 +466,15 @@ class PredictiveChasePolicy(private val random: Random = Random.Default) : NpcPo
 class PatrolGuardPolicy : NpcPolicy {
     override fun nextMove(npc: Npc, context: NpcPolicyContext): Direction? {
         if (context.npcsFrozen) return null
-        val playerDistance = manhattanDistance(npc.position, context.player.position)
+        val visibleTarget = selectEnemyTarget(
+            npc = npc,
+            context = context,
+            maxManhattanDistance = context.visionRange
+        )
 
-        if (context.playerVisible && playerDistance <= context.visionRange) {
+        if (visibleTarget != null) {
             npc.state = NpcState.CHASE
-            npc.lastKnownPlayerPos = context.player.position
+            npc.lastKnownPlayerPos = visibleTarget.runner.position
             npc.searchTicksRemaining = DEFAULT_SEARCH_TICKS
         }
 
@@ -773,6 +779,68 @@ private fun nextDirection(from: GridPos, path: List<GridPos>): Direction? {
 }
 
 private fun manhattanDistance(a: GridPos, b: GridPos): Int = abs(a.x - b.x) + abs(a.y - b.y)
+
+private data class EnemyTarget(
+    val runner: MazeRunner,
+    val path: List<GridPos>
+)
+
+/**
+ * Selects the nearest visible runner by maze-path distance. The player wins
+ * exact-distance ties; Adventurers then tie-break by id for deterministic
+ * multi-target behaviour.
+ */
+private fun selectEnemyTarget(
+    npc: Npc,
+    context: NpcPolicyContext,
+    maxManhattanDistance: Int? = null
+): EnemyTarget? {
+    val playerEligible = context.playerVisible &&
+        (
+            maxManhattanDistance == null ||
+                manhattanDistance(npc.position, context.player.position) <= maxManhattanDistance
+            )
+    var bestRunner: MazeRunner? = null
+    var bestPath: List<GridPos> = emptyList()
+    var bestDistance = Int.MAX_VALUE
+    var bestAdventurerId = Int.MAX_VALUE
+
+    if (playerEligible) {
+        val path = context.navigator.bfsPath(npc.position, context.player.position)
+        if (path.isNotEmpty()) {
+            bestRunner = context.player
+            bestPath = path
+            bestDistance = path.size - 1
+        }
+    }
+
+    for (adventurer in context.adventurers) {
+        if (
+            maxManhattanDistance != null &&
+            manhattanDistance(npc.position, adventurer.position) > maxManhattanDistance
+        ) {
+            continue
+        }
+        val path = context.navigator.bfsPath(npc.position, adventurer.position)
+        if (path.isEmpty()) continue
+        val distance = path.size - 1
+        val better = distance < bestDistance ||
+            (
+                bestRunner is Adventurer &&
+                    distance == bestDistance &&
+                    adventurer.id < bestAdventurerId
+                )
+        if (bestRunner == null || better) {
+            bestRunner = adventurer
+            bestPath = path
+            bestDistance = distance
+            bestAdventurerId = adventurer.id
+        }
+    }
+
+    return bestRunner?.let { EnemyTarget(it, bestPath) }
+        ?: if (playerEligible) EnemyTarget(context.player, emptyList()) else null
+}
 
 /**
  * Builds a preference-ordered list of walkable directions for an exit-finding

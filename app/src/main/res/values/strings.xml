@@ -36,6 +36,9 @@
     <string name="legend_title">Legend</string>
     <string name="legend_close">Close</string>
     <string name="legend_section_powerups">Power-ups</string>
+    <string name="legend_section_adventurers">Adventurers</string>
+    <string name="legend_adventurer_label">Adventurer</string>
+    <string name="legend_adventurer_description">Heads for the exit and can distract enemies. An Adventurer disappears after escaping or being caught.</string>
     <string name="legend_section_npcs">NPC policies</string>
 
     <!-- Setup screen -->
