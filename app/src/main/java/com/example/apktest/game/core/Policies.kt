@@ -795,18 +795,17 @@ private fun selectEnemyTarget(
     context: NpcPolicyContext,
     maxManhattanDistance: Int? = null
 ): EnemyTarget? {
+    val playerEligible = context.playerVisible &&
+        (
+            maxManhattanDistance == null ||
+                manhattanDistance(npc.position, context.player.position) <= maxManhattanDistance
+            )
     var bestRunner: MazeRunner? = null
     var bestPath: List<GridPos> = emptyList()
     var bestDistance = Int.MAX_VALUE
     var bestAdventurerId = Int.MAX_VALUE
 
-    if (
-        context.playerVisible &&
-        (
-            maxManhattanDistance == null ||
-                manhattanDistance(npc.position, context.player.position) <= maxManhattanDistance
-            )
-    ) {
+    if (playerEligible) {
         val path = context.navigator.bfsPath(npc.position, context.player.position)
         if (path.isNotEmpty()) {
             bestRunner = context.player
@@ -840,6 +839,7 @@ private fun selectEnemyTarget(
     }
 
     return bestRunner?.let { EnemyTarget(it, bestPath) }
+        ?: if (playerEligible) EnemyTarget(context.player, emptyList()) else null
 }
 
 /**
