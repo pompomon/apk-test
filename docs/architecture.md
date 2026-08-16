@@ -54,7 +54,7 @@ SetupActivity  ── Intent extras ──▶  MainActivity  ── Fragment arg
 - `GameEngineSnapshot.fromJson` returns `null` on:
   - schema-version mismatch (`SCHEMA_VERSION` is currently `4`),
   - unknown `difficultyName` (does **not** silently fall back to MEDIUM the way `DifficultyPresets.byName` does),
-  - any persisted coordinate (player, NPCs, spawned power-ups, or `removedWalls` cell) falling outside the maze bounds implied by the preset (rounded up to even, like the generator),
+  - any persisted coordinate (player, NPCs, Adventurers, spawned power-ups, or `removedWalls` cell) falling outside the maze bounds implied by the preset (rounded up to even, like the generator),
   - JSON / enum-value parse errors.
 - The snapshot persists `removedWalls` — walls destroyed during gameplay — so restore re-applies them on the regenerated baseline maze.
 - The snapshot persists surviving Adventurers; shipped presets spawn one in both Classic and Adventure modes.

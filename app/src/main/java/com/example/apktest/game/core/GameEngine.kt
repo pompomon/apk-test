@@ -967,7 +967,7 @@ class GameEngine(
      * Ranks free cells by how closely their shortest-path distance to the exit
      * matches the player's initial distance. Equal-distance candidates retain a
      * deterministic shuffle order from an Adventurer-only RNG stream so adding
-     * Adventurers never perturbs power-up or enemy spawning.
+     * Adventurers does not advance the power-up or enemy RNG state.
      */
     private fun adventurerSpawnCandidates(): List<GridPos> {
         val playerPath = navigator.bfsPath(maze.start, maze.exit)

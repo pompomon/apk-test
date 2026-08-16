@@ -153,6 +153,19 @@ class GameEngineSnapshotTest {
         assertEquals(null, GameEngineSnapshot.fromJson(bad.toJson()))
     }
 
+    @Test
+    fun fromJson_returnsNullForAdventurerIdOutsidePresetCount() {
+        val original = GameEngine(DifficultyPresets.MEDIUM, seed)
+        val snap = original.snapshot()
+        val bad = snap.copy(
+            adventurers = listOf(
+                snap.adventurers.single().copy(id = DifficultyPresets.MEDIUM.adventurerCount)
+            )
+        )
+
+        assertEquals(null, GameEngineSnapshot.fromJson(bad.toJson()))
+    }
+
     /**
      * `removedWalls` entries are persisted coordinates too — a corrupted
      * blob with an out-of-bounds removed-wall cell would later crash

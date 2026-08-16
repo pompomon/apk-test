@@ -102,6 +102,25 @@ class DifficultyPresetTest {
         DifficultyPresets.EASY.copy(adventurerPolicyType = PlayerPolicyType.MANUAL)
     }
 
+    @Test(expected = IllegalArgumentException::class)
+    fun difficultyPreset_rejectsNegativeAdventurerCount() {
+        DifficultyPresets.EASY.copy(adventurerCount = -1)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun difficultyPreset_rejectsAdventurerSpeedRatioBelowMinimum() {
+        DifficultyPresets.EASY.copy(
+            adventurerSpeedRatio = DifficultyPreset.MIN_ADVENTURER_SPEED_RATIO - 0.01f
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun difficultyPreset_rejectsAdventurerSpeedRatioAboveMaximum() {
+        DifficultyPresets.EASY.copy(
+            adventurerSpeedRatio = DifficultyPreset.MAX_ADVENTURER_SPEED_RATIO + 0.01f
+        )
+    }
+
     @Test
     fun mediumPowerUpPolicy_usesFortyFiveSecondLifetimeAndRespawns() {
         assertEquals(45f, DifficultyPresets.MEDIUM.powerUpPickupLifetimeSeconds, 0.0001f)

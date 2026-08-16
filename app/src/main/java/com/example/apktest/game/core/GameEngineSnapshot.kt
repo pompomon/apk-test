@@ -312,6 +312,7 @@ data class GameEngineSnapshot(
                     npcCountOverride = npcCountOverride,
                     npcPolicies = npcPolicies
                 )
+                val preset = snapshot.resolvePreset() ?: return null
                 // Reject snapshots whose NPC metadata is internally
                 // inconsistent or obviously corrupt. Snapshots produced by
                 // snapshot() always carry one per-NPC policy entry for each
@@ -332,7 +333,7 @@ data class GameEngineSnapshot(
                 if (npcIds.any { it < 0 || it >= npcs.size }) return null
                 val adventurerIds = adventurers.map { it.id }
                 if (adventurerIds.toSet().size != adventurerIds.size) return null
-                if (adventurerIds.any { it < 0 }) return null
+                if (adventurerIds.any { it !in 0 until preset.adventurerCount }) return null
                 // Reject snapshots whose difficulty name doesn't match a
                 // known preset exactly (DifficultyPresets.byName silently
                 // falls back to MEDIUM, which would regenerate a
@@ -341,7 +342,6 @@ data class GameEngineSnapshot(
                 // bounds (e.g., corrupted blob) — installing either would
                 // later crash the engine via out-of-bounds Maze.hasWall
                 // calls.
-                val preset = snapshot.resolvePreset() ?: return null
                 if (!snapshot.isWithinBounds(preset)) return null
                 snapshot
             } catch (_: Exception) {
