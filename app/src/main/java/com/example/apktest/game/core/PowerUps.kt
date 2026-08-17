@@ -56,7 +56,7 @@ enum class PowerUpType(
     ),
     FREEZE(
         label = "Freeze",
-        description = "Freezes all NPCs in place; all runners cannot be caught while active.",
+        description = "Freezes all NPCs in place; the player cannot be caught while active.",
         metadata = PowerUpMetadata(
             kind = PowerUpEffectKind.TIMED,
             defaultDurationSeconds = 5f,

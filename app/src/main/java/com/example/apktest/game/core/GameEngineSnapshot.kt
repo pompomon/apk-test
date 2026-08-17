@@ -155,20 +155,20 @@ data class GameEngineSnapshot(
                     put("y", adventurer.y)
                     put("facing", adventurer.facing.name)
                 })
-                put(KEY_ADVENTURER_EFFECTS, JSONArray().apply {
-                    adventurerEffects.forEach { adventurer ->
-                        put(JSONObject().apply {
-                            put("id", adventurer.adventurerId)
-                            put("effects", JSONArray().apply {
-                                adventurer.effects.forEach { effect ->
-                                    put(JSONObject().apply {
-                                        put("type", effect.type.name)
-                                        if (effect.remainingSeconds != null) put("rem", effect.remainingSeconds.toDouble())
-                                    })
-                                }
+            }
+        })
+        put(KEY_ADVENTURER_EFFECTS, JSONArray().apply {
+            adventurerEffects.forEach { owner ->
+                put(JSONObject().apply {
+                    put("id", owner.adventurerId)
+                    put("effects", JSONArray().apply {
+                        owner.effects.forEach { effect ->
+                            put(JSONObject().apply {
+                                put("type", effect.type.name)
+                                if (effect.remainingSeconds != null) put("rem", effect.remainingSeconds.toDouble())
                             })
-                        })
-                    }
+                        }
+                    })
                 })
             }
         })
@@ -267,26 +267,26 @@ data class GameEngineSnapshot(
                             facing = Direction.valueOf(adventurer.getString("facing"))
                         )
                     }
-                    val adventurerEffects = obj.getJSONArray(KEY_ADVENTURER_EFFECTS).let { arr ->
-                        List(arr.length()) { i ->
-                            val adventurer = arr.getJSONObject(i)
-                            AdventurerEffectsSnapshot(
-                                adventurerId = adventurer.getInt("id"),
-                                effects = adventurer.getJSONArray("effects").let { effects ->
-                                    List(effects.length()) { j ->
-                                        val effect = effects.getJSONObject(j)
-                                        ActiveEffectSnapshot(
-                                            type = PowerUpType.valueOf(effect.getString("type")),
-                                            remainingSeconds = if (effect.has("rem")) {
-                                                effect.getDouble("rem").toFloat()
-                                            } else {
-                                                null
-                                            }
-                                        )
-                                    }
+                }
+                val adventurerEffects = obj.getJSONArray(KEY_ADVENTURER_EFFECTS).let { arr ->
+                    List(arr.length()) { i ->
+                        val owner = arr.getJSONObject(i)
+                        AdventurerEffectsSnapshot(
+                            adventurerId = owner.getInt("id"),
+                            effects = owner.getJSONArray("effects").let { effects ->
+                                List(effects.length()) { j ->
+                                    val effect = effects.getJSONObject(j)
+                                    ActiveEffectSnapshot(
+                                        type = PowerUpType.valueOf(effect.getString("type")),
+                                        remainingSeconds = if (effect.has("rem")) {
+                                            effect.getDouble("rem").toFloat()
+                                        } else {
+                                            null
+                                        }
+                                    )
                                 }
-                            )
-                        }
+                            }
+                        )
                     }
                 }
                 val powerUps = obj.getJSONArray(KEY_POWERUPS).let { arr ->
