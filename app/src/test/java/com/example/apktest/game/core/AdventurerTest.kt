@@ -153,11 +153,13 @@ class AdventurerTest {
             SEED
         )
         val before = engine.adventurers.single().position
+        val playerBefore = engine.player.position
 
         engine.simulateNpcArrivalForTest(0, engine.spawnedPowerUps.single().position)
         engine.update(1f)
 
         assertEquals(before, engine.adventurers.single().position)
+        assertEquals(playerBefore, engine.player.position)
     }
 
     @Test
