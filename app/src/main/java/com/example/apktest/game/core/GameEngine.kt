@@ -79,7 +79,16 @@ class GameEngine(
     fun isPlayerPowerUpTintActive(type: PowerUpType): Boolean = isEffectActive(type)
     /** Allocation-free render query for an Adventurer's timed power-up tints. */
     fun isAdventurerPowerUpTintActive(adventurerId: Int, type: PowerUpType): Boolean =
-        isAdventurerEffectActive(adventurerId, type)
+        when (type) {
+            PowerUpType.FREEZE, PowerUpType.SLOW_TIME -> isEffectActive(type)
+            PowerUpType.INVISIBILITY,
+            PowerUpType.TELEPORT,
+            PowerUpType.SPEED_UP,
+            PowerUpType.SHIELD,
+            PowerUpType.MAGNET,
+            PowerUpType.BLAST,
+            PowerUpType.GHOST_MODE -> isAdventurerEffectActive(adventurerId, type)
+        }
     /** Power-up tint applied to the maze background when an NPC pickup affects the player. */
     val npcMazeTintType: PowerUpType?
         get() = if (isPlayerFrozenByNpc()) PowerUpType.FREEZE else null

@@ -453,16 +453,16 @@ class MazeRenderer {
                 activePlayerTintColors[count] = POWER_UP_TINT_COLORS[type.ordinal]
                 count++
             }
+        }
+        return count
+    }
 
-            private fun collectActiveAdventurerTintColors(engine: GameEngine, adventurerId: Int): Int {
-                var count = 0
-                for (type in PLAYER_TINT_TYPES) {
-                    if (engine.isAdventurerPowerUpTintActive(adventurerId, type)) {
-                        activeAdventurerTintColors[count] = POWER_UP_TINT_COLORS[type.ordinal]
-                        count++
-                    }
-                }
-                return count
+    private fun collectActiveAdventurerTintColors(engine: GameEngine, adventurerId: Int): Int {
+        var count = 0
+        for (type in PLAYER_TINT_TYPES) {
+            if (engine.isAdventurerPowerUpTintActive(adventurerId, type)) {
+                activeAdventurerTintColors[count] = POWER_UP_TINT_COLORS[type.ordinal]
+                count++
             }
         }
         return count
