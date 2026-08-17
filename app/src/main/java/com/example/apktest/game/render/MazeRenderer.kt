@@ -63,6 +63,7 @@ class MazeRenderer {
     private var floorHighlightCount: Int = 0
     private var floorPixelSize: Float = 0f
     private val activePlayerTintColors: Array<Color> = Array(TIMED_POWER_UP_COUNT) { Color.WHITE }
+    private val activeAdventurerTintColors: Array<Color> = Array(TIMED_POWER_UP_COUNT) { Color.WHITE }
 
     fun resize(width: Int, height: Int) {
         viewport.update(width, height, true)
@@ -385,6 +386,7 @@ class MazeRenderer {
         shapes.begin(ShapeRenderer.ShapeType.Filled)
 
         engine.adventurers.forEach { adventurer ->
+            val adventurerTintCount = collectActiveAdventurerTintColors(engine, adventurer.id)
             val adventurerPattern = pickFrame(
                 frames = Sprites.adventurerFrames,
                 elapsedSeconds = engine.elapsedSeconds,
@@ -397,7 +399,9 @@ class MazeRenderer {
                 palette = Sprites.adventurerPalette(),
                 centerX = mazeOriginX + adventurer.position.x + 0.5f,
                 centerY = mazeOriginY + adventurer.position.y + 0.5f,
-                size = 0.75f
+                size = 0.75f,
+                tintColors = activeAdventurerTintColors,
+                tintCount = adventurerTintCount
             )
         }
 
@@ -448,6 +452,17 @@ class MazeRenderer {
             if (engine.isPlayerPowerUpTintActive(type)) {
                 activePlayerTintColors[count] = POWER_UP_TINT_COLORS[type.ordinal]
                 count++
+            }
+
+            private fun collectActiveAdventurerTintColors(engine: GameEngine, adventurerId: Int): Int {
+                var count = 0
+                for (type in PLAYER_TINT_TYPES) {
+                    if (engine.isAdventurerPowerUpTintActive(adventurerId, type)) {
+                        activeAdventurerTintColors[count] = POWER_UP_TINT_COLORS[type.ordinal]
+                        count++
+                    }
+                }
+                return count
             }
         }
         return count

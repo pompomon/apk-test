@@ -1,6 +1,7 @@
 package com.example.apktest.game.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -96,6 +97,67 @@ class AdventurerTest {
 
         assertTrue(engine.adventurers.isEmpty())
         assertEquals(GameStatus.RUNNING, engine.status)
+    }
+
+    @Test
+    fun adventurerPickup_personalProtectionEffectsPreventCapture() {
+        for (type in listOf(PowerUpType.SHIELD, PowerUpType.INVISIBILITY)) {
+            val engine = GameEngine(
+                adventurerPreset(
+                    adventurerCount = 1,
+                    npcCount = 1,
+                    initialPowerUpTypes = listOf(type)
+                ),
+                SEED
+            )
+            val pickup = engine.spawnedPowerUps.single()
+
+            engine.simulateAdventurerArrivalForTest(0, pickup.position)
+            engine.simulateNpcArrivalForTest(0, engine.adventurers.single().position)
+
+            assertFalse(engine.spawnedPowerUps.any { it.position == pickup.position })
+            assertTrue(engine.isAdventurerPowerUpTintActive(0, type))
+            assertEquals(1, engine.adventurers.size)
+        }
+    }
+
+    @Test
+    fun adventurerPickup_freezeAndSlowTimeApplyGloballyToNpcs() {
+        for (type in listOf(PowerUpType.FREEZE, PowerUpType.SLOW_TIME)) {
+            val engine = GameEngine(
+                adventurerPreset(
+                    adventurerCount = 1,
+                    npcCount = 1,
+                    initialPowerUpTypes = listOf(type)
+                ),
+                SEED
+            )
+
+            engine.simulateAdventurerArrivalForTest(0, engine.spawnedPowerUps.single().position)
+
+            assertTrue(
+                "$type picked up by an Adventurer must use the global NPC effect pipeline",
+                engine.activePowerUps.any { it.type == type }
+            )
+        }
+    }
+
+    @Test
+    fun npcFreezePickup_stopsAdventurersAsWellAsPlayer() {
+        val engine = GameEngine(
+            adventurerPreset(
+                adventurerCount = 1,
+                npcCount = 1,
+                initialPowerUpTypes = listOf(PowerUpType.FREEZE)
+            ),
+            SEED
+        )
+        val before = engine.adventurers.single().position
+
+        engine.simulateNpcArrivalForTest(0, engine.spawnedPowerUps.single().position)
+        engine.update(1f)
+
+        assertEquals(before, engine.adventurers.single().position)
     }
 
     @Test
@@ -235,7 +297,8 @@ class AdventurerTest {
         adventurerCount: Int,
         npcCount: Int = 0,
         playerMovesPerSecond: Float = 5f,
-        adventurerSpeedRatio: Float = 0.9f
+        adventurerSpeedRatio: Float = 0.9f,
+        initialPowerUpTypes: List<PowerUpType> = emptyList()
     ): DifficultyPreset = DifficultyPreset(
         name = "AdventurerTest",
         mazeWidth = 12,
@@ -244,7 +307,7 @@ class AdventurerTest {
         playerMovesPerSecond = playerMovesPerSecond,
         npcMovesPerSecond = 1f,
         npcVisionRange = 4,
-        initialPowerUpTypes = emptyList(),
+        initialPowerUpTypes = initialPowerUpTypes,
         adventurerCount = adventurerCount,
         adventurerSpeedRatio = adventurerSpeedRatio,
         adventurerPolicyType = PlayerPolicyType.BFS_EXIT

@@ -84,7 +84,8 @@ data class NpcPolicyContext(
     val visionRange: Int,
     val playerVisible: Boolean,
     val npcsFrozen: Boolean,
-    val adventurers: List<Adventurer> = emptyList()
+    val adventurers: List<Adventurer> = emptyList(),
+    val invisibleAdventurerIds: Set<Int> = emptySet()
 )
 
 interface PlayerPolicy {
@@ -815,6 +816,7 @@ private fun selectEnemyTarget(
     }
 
     for (adventurer in context.adventurers) {
+        if (adventurer.id in context.invisibleAdventurerIds) continue
         if (
             maxManhattanDistance != null &&
             manhattanDistance(npc.position, adventurer.position) > maxManhattanDistance

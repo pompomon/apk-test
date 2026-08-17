@@ -28,6 +28,8 @@ data class GameEngineSnapshot(
     val player: PlayerSnapshot,
     val npcs: List<NpcSnapshot>,
     val adventurers: List<AdventurerSnapshot> = emptyList(),
+    /** Timed effects owned by individual surviving Adventurers. */
+    val adventurerEffects: List<AdventurerEffectsSnapshot> = emptyList(),
     val spawnedPowerUps: List<SpawnedPowerUpSnapshot>,
     val activeEffects: List<ActiveEffectSnapshot>,
     /** Remaining seconds on an NPC-induced player freeze, or `null` if none. */
@@ -68,6 +70,10 @@ data class GameEngineSnapshot(
     data class PlayerSnapshot(val x: Int, val y: Int, val facing: Direction)
     data class NpcSnapshot(val id: Int, val x: Int, val y: Int, val facing: Direction)
     data class AdventurerSnapshot(val id: Int, val x: Int, val y: Int, val facing: Direction)
+    data class AdventurerEffectsSnapshot(
+        val adventurerId: Int,
+        val effects: List<ActiveEffectSnapshot>
+    )
     data class RemovedWallSnapshot(val x: Int, val y: Int, val direction: Direction)
     data class SpawnedPowerUpSnapshot(
         val type: PowerUpType,
@@ -149,6 +155,21 @@ data class GameEngineSnapshot(
                     put("y", adventurer.y)
                     put("facing", adventurer.facing.name)
                 })
+                put(KEY_ADVENTURER_EFFECTS, JSONArray().apply {
+                    adventurerEffects.forEach { adventurer ->
+                        put(JSONObject().apply {
+                            put("id", adventurer.adventurerId)
+                            put("effects", JSONArray().apply {
+                                adventurer.effects.forEach { effect ->
+                                    put(JSONObject().apply {
+                                        put("type", effect.type.name)
+                                        if (effect.remainingSeconds != null) put("rem", effect.remainingSeconds.toDouble())
+                                    })
+                                }
+                            })
+                        })
+                    }
+                })
             }
         })
         put(KEY_POWERUPS, JSONArray().apply {
@@ -190,7 +211,7 @@ data class GameEngineSnapshot(
     }.toString()
 
     companion object {
-        const val SCHEMA_VERSION = 4
+        const val SCHEMA_VERSION = 5
 
         private const val KEY_VERSION = "v"
         private const val KEY_DIFFICULTY = "difficulty"
@@ -203,6 +224,7 @@ data class GameEngineSnapshot(
         private const val KEY_PLAYER = "player"
         private const val KEY_NPCS = "npcs"
         private const val KEY_ADVENTURERS = "adventurers"
+        private const val KEY_ADVENTURER_EFFECTS = "adventurerEffects"
         private const val KEY_POWERUPS = "powerups"
         private const val KEY_EFFECTS = "effects"
         private const val KEY_NPC_FREEZE = "npcFreezeRem"
@@ -244,6 +266,27 @@ data class GameEngineSnapshot(
                             y = adventurer.getInt("y"),
                             facing = Direction.valueOf(adventurer.getString("facing"))
                         )
+                    }
+                    val adventurerEffects = obj.getJSONArray(KEY_ADVENTURER_EFFECTS).let { arr ->
+                        List(arr.length()) { i ->
+                            val adventurer = arr.getJSONObject(i)
+                            AdventurerEffectsSnapshot(
+                                adventurerId = adventurer.getInt("id"),
+                                effects = adventurer.getJSONArray("effects").let { effects ->
+                                    List(effects.length()) { j ->
+                                        val effect = effects.getJSONObject(j)
+                                        ActiveEffectSnapshot(
+                                            type = PowerUpType.valueOf(effect.getString("type")),
+                                            remainingSeconds = if (effect.has("rem")) {
+                                                effect.getDouble("rem").toFloat()
+                                            } else {
+                                                null
+                                            }
+                                        )
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
                 val powerUps = obj.getJSONArray(KEY_POWERUPS).let { arr ->
@@ -301,6 +344,7 @@ data class GameEngineSnapshot(
                     player = player,
                     npcs = npcs,
                     adventurers = adventurers,
+                    adventurerEffects = adventurerEffects,
                     spawnedPowerUps = powerUps,
                     activeEffects = effects,
                     npcInducedPlayerFreezeRemainingSeconds = if (obj.has(KEY_NPC_FREEZE)) {
@@ -334,6 +378,8 @@ data class GameEngineSnapshot(
                 val adventurerIds = adventurers.map { it.id }
                 if (adventurerIds.toSet().size != adventurerIds.size) return null
                 if (adventurerIds.any { it !in 0 until preset.adventurerCount }) return null
+                if (adventurerEffects.map { it.adventurerId }.toSet().size != adventurerEffects.size) return null
+                if (adventurerEffects.any { it.adventurerId !in adventurerIds }) return null
                 // Reject snapshots whose difficulty name doesn't match a
                 // known preset exactly (DifficultyPresets.byName silently
                 // falls back to MEDIUM, which would regenerate a
