@@ -77,6 +77,18 @@ class GameEngine(
         get() = activeEffectsByType.values.sortedBy { it.type.ordinal }
     /** Allocation-free render query for player-collected timed power-up tints. */
     fun isPlayerPowerUpTintActive(type: PowerUpType): Boolean = isEffectActive(type)
+    /** Allocation-free render query for an Adventurer's timed power-up tints. */
+    fun isAdventurerPowerUpTintActive(adventurerId: Int, type: PowerUpType): Boolean =
+        when (type) {
+            PowerUpType.FREEZE, PowerUpType.SLOW_TIME -> isEffectActive(type)
+            PowerUpType.INVISIBILITY,
+            PowerUpType.TELEPORT,
+            PowerUpType.SPEED_UP,
+            PowerUpType.SHIELD,
+            PowerUpType.MAGNET,
+            PowerUpType.BLAST,
+            PowerUpType.GHOST_MODE -> isAdventurerEffectActive(adventurerId, type)
+        }
     /** Power-up tint applied to the maze background when an NPC pickup affects the player. */
     val npcMazeTintType: PowerUpType?
         get() = if (isPlayerFrozenByNpc()) PowerUpType.FREEZE else null
@@ -125,7 +137,7 @@ class GameEngine(
         private set
 
     private var playerAccumulator = 0f
-    private var adventurerAccumulator = 0f
+    private val adventurerAccumulatorsById = mutableMapOf<Int, Float>()
     private var npcAccumulator = 0f
     private val manualQueue = ArrayDeque<Direction>()
     /**
@@ -137,6 +149,8 @@ class GameEngine(
 
     private val powerUpsByCell = mutableMapOf<GridPos, SpawnedPowerUp>()
     private val activeEffectsByType = mutableMapOf<PowerUpType, ActivePowerUpEffect>()
+    private val activeEffectsByAdventurerId =
+        mutableMapOf<Int, MutableMap<PowerUpType, ActivePowerUpEffect>>()
     /**
      * Tracks a FREEZE effect inflicted on the *player* by an NPC that picked
      * up a FREEZE power-up. Kept separate from [activeEffectsByType] so it
@@ -172,11 +186,12 @@ class GameEngine(
         goFlashRemainingSeconds = 0f
         manualOverrideUntilSeconds = 0f
         playerAccumulator = 0f
-        adventurerAccumulator = 0f
+        adventurerAccumulatorsById.clear()
         npcAccumulator = 0f
         powerUpRespawnAccumulator = 0f
         powerUpsByCell.clear()
         activeEffectsByType.clear()
+        activeEffectsByAdventurerId.clear()
         npcInducedPlayerFreeze = null
         manualQueue.clear()
         playerPolicy.reset()
@@ -303,6 +318,18 @@ class GameEngine(
         adventurers = adventurers.map {
             GameEngineSnapshot.AdventurerSnapshot(it.id, it.position.x, it.position.y, it.facing)
         },
+        adventurerEffects = activeEffectsByAdventurerId.map { (id, effects) ->
+            GameEngineSnapshot.AdventurerEffectsSnapshot(
+                adventurerId = id,
+                effects = effects.values.map { effect ->
+                    GameEngineSnapshot.ActiveEffectSnapshot(
+                        type = effect.type,
+                        remainingSeconds = effect.endsAtSeconds
+                            ?.let { (it - elapsedSeconds).coerceAtLeast(0f) }
+                    )
+                }
+            )
+        },
         spawnedPowerUps = powerUpsByCell.values.map { p ->
             GameEngineSnapshot.SpawnedPowerUpSnapshot(
                 type = p.type,
@@ -414,6 +441,7 @@ class GameEngine(
         npcPolicy = PolicyFactory.npc(npcPolicyType, npcRandom)
         npcPolicyCache.clear()
         adventurerPoliciesById.clear()
+        activeEffectsByAdventurerId.clear()
         playerPolicy.reset()
         npcPolicy.reset()
 
@@ -470,6 +498,19 @@ class GameEngine(
                 adventurerPoliciesById[it.id] = PolicyFactory.player(difficulty.adventurerPolicyType)
             }
         }.toMutableList()
+        snapshot.adventurerEffects.forEach { adventurer ->
+            val effects = mutableMapOf<PowerUpType, ActivePowerUpEffect>()
+            adventurer.effects.forEach { effect ->
+                effects[effect.type] = ActivePowerUpEffect(
+                        type = effect.type,
+                        startedAtSeconds = elapsedSeconds,
+                        endsAtSeconds = effect.remainingSeconds?.let { elapsedSeconds + it }
+                )
+            }
+            if (effects.isNotEmpty()) {
+                activeEffectsByAdventurerId[adventurer.adventurerId] = effects
+            }
+        }
 
         powerUpsByCell.clear()
         snapshot.spawnedPowerUps.forEach { p ->
@@ -500,7 +541,7 @@ class GameEngine(
         snapshot.manualQueue.forEach { manualQueue.addLast(it) }
         manualOverrideUntilSeconds = elapsedSeconds + snapshot.manualOverrideRemainingSeconds.coerceAtLeast(0f)
         playerAccumulator = 0f
-        adventurerAccumulator = 0f
+        adventurerAccumulatorsById.clear()
         npcAccumulator = 0f
         powerUpRespawnAccumulator = 0f
     }
@@ -610,7 +651,12 @@ class GameEngine(
         if (!isPlayerFrozenByNpc()) {
             playerAccumulator += effectiveDelta
         }
-        adventurerAccumulator += effectiveDelta
+        if (!isPlayerFrozenByNpc()) {
+            adventurers.forEach { adventurer ->
+                adventurerAccumulatorsById[adventurer.id] =
+                    (adventurerAccumulatorsById[adventurer.id] ?: 0f) + effectiveDelta
+            }
+        }
         // Pause NPC time accumulation while FREEZE is active so freezing truly
         // pauses NPC movement. Preserve the existing accumulator value so any
         // partial progress made before FREEZE started is not discarded
@@ -635,13 +681,15 @@ class GameEngine(
             evaluateEndConditions()
         }
 
-        val adventurerInterval = 1f / effectiveAdventurerMovesPerSecond()
         while (
+            !isPlayerFrozenByNpc() &&
             adventurers.isNotEmpty() &&
-            adventurerAccumulator >= adventurerInterval &&
+            adventurers.any { adventurer ->
+                (adventurerAccumulatorsById[adventurer.id] ?: 0f) >=
+                    1f / effectiveAdventurerMovesPerSecond(adventurer)
+            } &&
             status == GameStatus.RUNNING
         ) {
-            adventurerAccumulator -= adventurerInterval
             updateAdventurers()
         }
 
@@ -781,7 +829,11 @@ class GameEngine(
             visionRange = difficulty.npcVisionRange,
             playerVisible = !isEffectActive(PowerUpType.INVISIBILITY),
             npcsFrozen = isEffectActive(PowerUpType.FREEZE),
-            adventurers = adventurers
+            adventurers = adventurers,
+            invisibleAdventurerIds = adventurers.asSequence()
+                .filter { isAdventurerEffectActive(it.id, PowerUpType.INVISIBILITY) }
+                .map { it.id }
+                .toSet()
         )
 
         npcs.forEach { npc ->
@@ -802,6 +854,10 @@ class GameEngine(
         val iterator = adventurers.iterator()
         while (iterator.hasNext()) {
             val adventurer = iterator.next()
+            val interval = 1f / effectiveAdventurerMovesPerSecond(adventurer)
+            val accumulator = adventurerAccumulatorsById[adventurer.id] ?: 0f
+            if (accumulator < interval) continue
+            adventurerAccumulatorsById[adventurer.id] = accumulator - interval
             val policy = adventurerPoliciesById.getOrPut(adventurer.id) {
                 PolicyFactory.player(difficulty.adventurerPolicyType)
             }
@@ -812,23 +868,32 @@ class GameEngine(
                     player = adventurer,
                     exit = maze.exit,
                     npcs = npcs,
-                    // Player power-ups never transfer to Adventurers.
-                    playerInvisibleToNpcs = false,
-                    npcsFrozen = isEffectActive(PowerUpType.FREEZE)
+                    playerInvisibleToNpcs = isAdventurerEffectActive(
+                        adventurer.id,
+                        PowerUpType.INVISIBILITY
+                    ),
+                    npcsFrozen = isEffectActive(PowerUpType.FREEZE),
+                    spawnedPowerUps = spawnedPowerUpsView,
+                    pickupRadius = difficulty.automaticPickupRadius
                 )
             )
-            if (direction != null && maze.canMove(adventurer.position, direction)) {
+            if (direction != null && canAdventurerTraverse(adventurer, direction)) {
                 adventurer.position = adventurer.position.moved(direction)
                 adventurer.facing = direction
                 adventurer.animationFrame = (adventurer.animationFrame + 1) % ANIMATION_FRAMES
                 adventurer.lastMoveAtSeconds = elapsedSeconds
+                collectPowerUpAtAdventurer(adventurer)
+                collectMagnetPowerUps(adventurer)
             }
 
-            val caught = npcs.any { it.position == adventurer.position }
+            val caught = !isAdventurerCollisionImmune(adventurer.id) &&
+                npcs.any { it.position == adventurer.position }
             val escaped = adventurer.position == maze.exit
             if (caught || escaped) {
                 iterator.remove()
                 adventurerPoliciesById.remove(adventurer.id)
+                activeEffectsByAdventurerId.remove(adventurer.id)
+                adventurerAccumulatorsById.remove(adventurer.id)
             }
         }
     }
@@ -838,8 +903,11 @@ class GameEngine(
         while (iterator.hasNext()) {
             val adventurer = iterator.next()
             if (adventurer.position != position) continue
+            if (isAdventurerCollisionImmune(adventurer.id)) continue
             iterator.remove()
             adventurerPoliciesById.remove(adventurer.id)
+            activeEffectsByAdventurerId.remove(adventurer.id)
+            adventurerAccumulatorsById.remove(adventurer.id)
         }
     }
 
@@ -862,8 +930,8 @@ class GameEngine(
 
     /**
      * Power-ups picked up by NPCs. Currently only `FREEZE` is consumed — it
-     * freezes the *player* (mirror image of player-picked FREEZE freezing
-     * NPCs). Other types are intentionally not collected by NPCs.
+     * freezes every non-NPC runner. Other types are intentionally not collected
+     * by NPCs.
      */
     private fun collectPowerUpAtNpc(npc: Npc) {
         val powerUp = powerUpsByCell[npc.position] ?: return
@@ -885,6 +953,15 @@ class GameEngine(
         eliminateAdventurersAt(position)
     }
 
+    /** Test seam for the regular Adventurer pickup branch after a movement step. */
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun simulateAdventurerArrivalForTest(adventurerId: Int, position: GridPos) {
+        val adventurer = adventurers.first { it.id == adventurerId }
+        adventurer.position = position
+        collectPowerUpAtAdventurer(adventurer)
+        collectMagnetPowerUps(adventurer)
+    }
+
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun clearNpcsForTest() {
         npcs.clear()
@@ -894,6 +971,8 @@ class GameEngine(
     internal fun clearAdventurersForTest() {
         adventurers.clear()
         adventurerPoliciesById.clear()
+        activeEffectsByAdventurerId.clear()
+        adventurerAccumulatorsById.clear()
     }
 
     private fun activateNpcInducedPlayerFreeze() {
@@ -1094,6 +1173,14 @@ class GameEngine(
             .filter { it.endsAtSeconds != null && elapsedSeconds >= it.endsAtSeconds }
             .map { it.type }
         expired.forEach { activeEffectsByType.remove(it) }
+        val adventurerIterator = activeEffectsByAdventurerId.iterator()
+        while (adventurerIterator.hasNext()) {
+            val effects = adventurerIterator.next().value
+            effects.entries.removeAll { (_, effect) ->
+                effect.endsAtSeconds != null && elapsedSeconds >= effect.endsAtSeconds
+            }
+            if (effects.isEmpty()) adventurerIterator.remove()
+        }
         npcInducedPlayerFreeze?.let { effect ->
             val endsAt = effect.endsAtSeconds
             if (endsAt != null && elapsedSeconds >= endsAt) {
@@ -1145,6 +1232,11 @@ class GameEngine(
         activatePlayerPowerUp(powerUp.type)
     }
 
+    private fun collectPowerUpAtAdventurer(adventurer: Adventurer) {
+        val powerUp = powerUpsByCell.remove(adventurer.position) ?: return
+        activateAdventurerPowerUp(adventurer, powerUp.type)
+    }
+
     private fun activatePlayerPowerUp(type: PowerUpType) {
         when (type) {
             PowerUpType.INVISIBILITY -> activateTimedEffect(PowerUpType.INVISIBILITY)
@@ -1159,18 +1251,43 @@ class GameEngine(
         }
     }
 
+    private fun activateAdventurerPowerUp(adventurer: Adventurer, type: PowerUpType) {
+        when (type) {
+            PowerUpType.FREEZE, PowerUpType.SLOW_TIME -> activateTimedEffect(type)
+            PowerUpType.INVISIBILITY,
+            PowerUpType.SPEED_UP,
+            PowerUpType.SHIELD,
+            PowerUpType.MAGNET,
+            PowerUpType.GHOST_MODE -> activateAdventurerTimedEffect(adventurer.id, type)
+            PowerUpType.TELEPORT -> applyTeleport(adventurer)
+            PowerUpType.BLAST -> applyBlast(adventurer.position)
+        }
+    }
+
     private fun collectMagnetPowerUps() {
         if (!isEffectActive(PowerUpType.MAGNET)) return
-        val playerPos = player.position
+        collectMagnetPowerUps(player, ::activatePlayerPowerUp)
+    }
+
+    private fun collectMagnetPowerUps(adventurer: Adventurer) {
+        if (!isAdventurerEffectActive(adventurer.id, PowerUpType.MAGNET)) return
+        collectMagnetPowerUps(adventurer) { type -> activateAdventurerPowerUp(adventurer, type) }
+    }
+
+    private fun collectMagnetPowerUps(
+        runner: MazeRunner,
+        activate: (PowerUpType) -> Unit
+    ) {
+        val runnerPos = runner.position
         val nearby = ArrayList<SpawnedPowerUp>()
         for (powerUp in powerUpsByCell.values) {
-            if (chebyshevDistance(playerPos, powerUp.position) <= MAGNET_PICKUP_RADIUS) {
+            if (chebyshevDistance(runnerPos, powerUp.position) <= MAGNET_PICKUP_RADIUS) {
                 nearby.add(powerUp)
             }
         }
         nearby.sortWith(
             compareBy<SpawnedPowerUp>(
-                { chebyshevDistance(playerPos, it.position) },
+                { chebyshevDistance(runnerPos, it.position) },
                 { it.type.ordinal },
                 { it.position.x },
                 { it.position.y }
@@ -1178,11 +1295,11 @@ class GameEngine(
         )
         nearby.forEach { powerUp ->
             if (powerUpsByCell.remove(powerUp.position) != null) {
-                activatePlayerPowerUp(powerUp.type)
+                activate(powerUp.type)
                 // Position-changing effects (e.g. TELEPORT) can relocate the
-                // player mid-iteration; stop so we don't keep collecting
+                // runner mid-iteration; stop so we don't keep collecting
                 // pickups that were only near the old position.
-                if (player.position != playerPos) return
+                if (runner.position != runnerPos) return
             }
         }
     }
@@ -1204,29 +1321,40 @@ class GameEngine(
         )
     }
 
-    private fun applyTeleport() {
+    private fun activateAdventurerTimedEffect(adventurerId: Int, type: PowerUpType) {
+        val duration = type.metadata.defaultDurationSeconds
+        if (duration <= 0f) return
+        val effects = activeEffectsByAdventurerId.getOrPut(adventurerId) { mutableMapOf() }
+        val existing = effects[type]
+        if (existing != null && type.metadata.stackPolicy == PowerUpStackPolicy.IGNORE_IF_ACTIVE) return
+        effects[type] = ActivePowerUpEffect(
+            type = type,
+            startedAtSeconds = elapsedSeconds,
+            endsAtSeconds = elapsedSeconds + duration
+        )
+    }
+
+    private fun applyTeleport(runner: MazeRunner = player) {
         val candidates = mutableListOf<GridPos>()
         for (y in 0 until maze.height) {
             for (x in 0 until maze.width) {
                 val pos = GridPos(x, y)
-                if (pos == maze.exit || pos == player.position) continue
+                if (pos == maze.exit || pos == runner.position) continue
                 if (npcs.any { it.position == pos }) continue
-                if (adventurers.any { it.position == pos }) continue
+                if (player.position == pos || adventurers.any { it.position == pos }) continue
                 if (navigator.bfsPath(pos, maze.exit).isNotEmpty()) {
                     candidates += pos
                 }
             }
         }
         if (candidates.isEmpty()) return
-        player.position = candidates[random.nextInt(candidates.size)]
-        // If the teleport destination contains a spawned power-up, collect it
-        // immediately so the pickup is not left "under" the player (which
-        // otherwise would only collect on the next manual movement step).
-        collectPowerUpAtPlayer()
+        runner.position = candidates[random.nextInt(candidates.size)]
+        if (runner === player) collectPowerUpAtPlayer()
+        if (runner is Adventurer) collectPowerUpAtAdventurer(runner)
     }
 
-    private fun applyBlast() {
-        Direction.entries.forEach { maze.removeWall(player.position, it) }
+    private fun applyBlast(position: GridPos = player.position) {
+        Direction.entries.forEach { maze.removeWall(position, it) }
     }
 
     private fun activePowerUpSnapshots(): List<ActivePowerUpSnapshot> {
@@ -1267,6 +1395,16 @@ class GameEngine(
         return elapsedSeconds < endsAt
     }
 
+    private fun isAdventurerEffectActive(adventurerId: Int, type: PowerUpType): Boolean {
+        val effect = activeEffectsByAdventurerId[adventurerId]?.get(type) ?: return false
+        val endsAt = effect.endsAtSeconds ?: return true
+        return elapsedSeconds < endsAt
+    }
+
+    private fun isAdventurerCollisionImmune(adventurerId: Int): Boolean =
+        isAdventurerEffectActive(adventurerId, PowerUpType.INVISIBILITY) ||
+            isAdventurerEffectActive(adventurerId, PowerUpType.SHIELD)
+
     private fun effectivePlayerMovesPerSecond(): Float {
         val speedMultiplier = if (isEffectActive(PowerUpType.SPEED_UP)) SPEED_UP_MULTIPLIER else 1f
         return difficulty.playerMovesPerSecond * speedMultiplier
@@ -1277,8 +1415,23 @@ class GameEngine(
         return difficulty.npcMovesPerSecond * speedMultiplier
     }
 
-    private fun effectiveAdventurerMovesPerSecond(): Float =
-        difficulty.playerMovesPerSecond * difficulty.adventurerSpeedRatio
+    private fun effectiveAdventurerMovesPerSecond(adventurer: Adventurer): Float {
+        val speedMultiplier = if (isAdventurerEffectActive(adventurer.id, PowerUpType.SPEED_UP)) {
+            SPEED_UP_MULTIPLIER
+        } else {
+            1f
+        }
+        return difficulty.playerMovesPerSecond * difficulty.adventurerSpeedRatio * speedMultiplier
+    }
+
+    private fun canAdventurerTraverse(adventurer: Adventurer, direction: Direction): Boolean {
+        val next = adventurer.position.moved(direction)
+        return if (isAdventurerEffectActive(adventurer.id, PowerUpType.GHOST_MODE)) {
+            maze.inBounds(next)
+        } else {
+            maze.canMove(adventurer.position, direction)
+        }
+    }
 
     companion object {
         private const val MAX_EXTRA_PATROL_WAYPOINTS = 2

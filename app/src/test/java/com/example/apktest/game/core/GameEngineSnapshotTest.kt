@@ -76,6 +76,19 @@ class GameEngineSnapshotTest {
         )
     }
 
+    @Test
+    fun roundTrip_preservesAdventurerOwnedEffects() {
+        val original = GameEngine(DifficultyPresets.MEDIUM, seed)
+        val shield = original.spawnedPowerUps.first { it.type == PowerUpType.SHIELD }
+        original.simulateAdventurerArrivalForTest(0, shield.position)
+        val snapshot = original.snapshot()
+        val restored = GameEngine(DifficultyPresets.MEDIUM, seed + 7)
+
+        restored.restore(snapshot)
+
+        assertEquals(true, restored.isAdventurerPowerUpTintActive(0, PowerUpType.SHIELD))
+    }
+
     /**
      * Restoring a snapshot whose `difficultyName` doesn't match any known
      * preset must be rejected: `DifficultyPresets.byName` falls back to

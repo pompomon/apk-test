@@ -26,7 +26,7 @@ enum class PowerUpType(
 ) {
     INVISIBILITY(
         label = "Invisibility",
-        description = "Hides the player from NPCs and prevents capture while active.",
+        description = "Hides its collector from NPCs and prevents capture while active.",
         metadata = PowerUpMetadata(
             kind = PowerUpEffectKind.TIMED,
             defaultDurationSeconds = 5f,
@@ -36,7 +36,7 @@ enum class PowerUpType(
     ),
     TELEPORT(
         label = "Teleport",
-        description = "Instantly relocates the player to a random walkable cell that still has a path to the exit.",
+        description = "Instantly relocates its collector to a random walkable cell that still has a path to the exit.",
         metadata = PowerUpMetadata(
             kind = PowerUpEffectKind.INSTANT,
             defaultDurationSeconds = 0f,
@@ -46,7 +46,7 @@ enum class PowerUpType(
     ),
     SPEED_UP(
         label = "Speed-up",
-        description = "Doubles the player's movement speed for a short duration.",
+        description = "Doubles its collector's movement speed for a short duration.",
         metadata = PowerUpMetadata(
             kind = PowerUpEffectKind.TIMED,
             defaultDurationSeconds = 10f,
@@ -66,7 +66,7 @@ enum class PowerUpType(
     ),
     SHIELD(
         label = "Shield",
-        description = "Prevents capture while active; NPCs still move, see, and chase the player.",
+        description = "Prevents its collector's capture while active; NPCs still move and chase others.",
         metadata = PowerUpMetadata(
             kind = PowerUpEffectKind.TIMED,
             defaultDurationSeconds = 5f,
@@ -86,7 +86,7 @@ enum class PowerUpType(
     ),
     MAGNET(
         label = "Magnet",
-        description = "Automatically collects nearby power-up pickups for a short time.",
+        description = "Lets its collector automatically collect nearby power-up pickups for a short time.",
         metadata = PowerUpMetadata(
             kind = PowerUpEffectKind.TIMED,
             defaultDurationSeconds = 8f,
@@ -96,7 +96,7 @@ enum class PowerUpType(
     ),
     BLAST(
         label = "Blast",
-        description = "Instantly removes the walls around the player's current cell.",
+        description = "Instantly removes the walls around its collector's current cell.",
         metadata = PowerUpMetadata(
             kind = PowerUpEffectKind.INSTANT,
             defaultDurationSeconds = 0f,
@@ -106,7 +106,7 @@ enum class PowerUpType(
     ),
     GHOST_MODE(
         label = "Ghost Mode",
-        description = "Lets the player walk through walls for 3 seconds. Does not prevent capture.",
+        description = "Lets its collector walk through walls for 3 seconds. Does not prevent capture.",
         metadata = PowerUpMetadata(
             kind = PowerUpEffectKind.TIMED,
             defaultDurationSeconds = 3f,

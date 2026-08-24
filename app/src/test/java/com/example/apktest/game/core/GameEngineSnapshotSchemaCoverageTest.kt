@@ -139,6 +139,14 @@ class GameEngineSnapshotSchemaCoverageTest {
         adventurers = listOf(
             GameEngineSnapshot.AdventurerSnapshot(id = 0, x = 4, y = 5, facing = Direction.EAST)
         ),
+        adventurerEffects = listOf(
+            GameEngineSnapshot.AdventurerEffectsSnapshot(
+                adventurerId = 0,
+                effects = listOf(
+                    GameEngineSnapshot.ActiveEffectSnapshot(PowerUpType.SHIELD, 3.5f)
+                )
+            )
+        ),
         spawnedPowerUps = listOf(
             GameEngineSnapshot.SpawnedPowerUpSnapshot(
                 type = PowerUpType.INVISIBILITY,
@@ -184,6 +192,14 @@ class GameEngineSnapshotSchemaCoverageTest {
         ),
         adventurers = listOf(
             GameEngineSnapshot.AdventurerSnapshot(id = 0, x = 3, y = 4, facing = Direction.SOUTH)
+        ),
+        adventurerEffects = listOf(
+            GameEngineSnapshot.AdventurerEffectsSnapshot(
+                adventurerId = 0,
+                effects = listOf(
+                    GameEngineSnapshot.ActiveEffectSnapshot(PowerUpType.GHOST_MODE, 1.25f)
+                )
+            )
         ),
         spawnedPowerUps = listOf(
             GameEngineSnapshot.SpawnedPowerUpSnapshot(
