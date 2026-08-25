@@ -1043,10 +1043,11 @@ class GameEngine(
     }
 
     /**
-     * Ranks free cells by how closely their shortest-path distance to the exit
-     * matches the player's initial distance. Equal-distance candidates retain a
-     * deterministic shuffle order from an Adventurer-only RNG stream so adding
-     * Adventurers does not advance the power-up or enemy RNG state.
+     * Ranks free cells outside the configured player-start buffer by how closely
+     * their shortest-path distance to the exit matches the player's initial
+     * distance. Equal-distance candidates retain a deterministic shuffle order
+     * from an Adventurer-only RNG stream so adding Adventurers does not advance
+     * the power-up or enemy RNG state.
      */
     private fun adventurerSpawnCandidates(): List<GridPos> {
         val playerPath = navigator.bfsPath(maze.start, maze.exit)
@@ -1062,6 +1063,9 @@ class GameEngine(
             for (x in 0 until maze.width) {
                 val pos = GridPos(x, y)
                 if (pos in reserved) continue
+                if (chebyshevDistance(pos, maze.start) < difficulty.adventurerPlayerSpawnBuffer) {
+                    continue
+                }
                 val path = navigator.bfsPath(pos, maze.exit)
                 if (path.isNotEmpty()) {
                     candidates += pos to (path.size - 1)

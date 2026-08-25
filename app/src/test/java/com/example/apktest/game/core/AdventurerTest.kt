@@ -25,7 +25,7 @@ class AdventurerTest {
     }
 
     @Test
-    fun multipleAdventurersSpawnDeterministicallyAtClosestAvailableExitDistances() {
+    fun multipleAdventurersSpawnDeterministicallyAtClosestEligibleExitDistances() {
         val preset = adventurerPreset(adventurerCount = 3)
         val first = GameEngine(preset, SEED)
         val second = GameEngine(preset, SEED)
@@ -42,7 +42,11 @@ class AdventurerTest {
 
         val playerDistance = pathDistance(first, first.maze.start)
         val availableErrors = allCells(first.maze)
-            .filter { it != first.maze.start && it != first.maze.exit }
+            .filter {
+                it != first.maze.start &&
+                    it != first.maze.exit &&
+                    chebyshevDistance(it, first.maze.start) >= preset.adventurerPlayerSpawnBuffer
+            }
             .map { abs(pathDistance(first, it) - playerDistance) }
             .sorted()
         val largestSelectedError = positions.maxOf {
@@ -51,6 +55,17 @@ class AdventurerTest {
         assertTrue(
             "Spawned Adventurers should use the closest available exit-distance tier",
             largestSelectedError <= availableErrors[preset.adventurerCount - 1]
+        )
+    }
+
+    @Test
+    fun adventurerSpawn_respectsConfiguredPlayerChebyshevBuffer() {
+        val preset = adventurerPreset(adventurerCount = 1, adventurerPlayerSpawnBuffer = 3)
+        val engine = GameEngine(preset, SEED)
+
+        assertTrue(
+            chebyshevDistance(engine.maze.start, engine.adventurers.single().position) >=
+                preset.adventurerPlayerSpawnBuffer
         )
     }
 
@@ -300,6 +315,7 @@ class AdventurerTest {
         npcCount: Int = 0,
         playerMovesPerSecond: Float = 5f,
         adventurerSpeedRatio: Float = 0.9f,
+        adventurerPlayerSpawnBuffer: Int = 2,
         initialPowerUpTypes: List<PowerUpType> = emptyList()
     ): DifficultyPreset = DifficultyPreset(
         name = "AdventurerTest",
@@ -312,7 +328,8 @@ class AdventurerTest {
         initialPowerUpTypes = initialPowerUpTypes,
         adventurerCount = adventurerCount,
         adventurerSpeedRatio = adventurerSpeedRatio,
-        adventurerPolicyType = PlayerPolicyType.BFS_EXIT
+        adventurerPolicyType = PlayerPolicyType.BFS_EXIT,
+        adventurerPlayerSpawnBuffer = adventurerPlayerSpawnBuffer
     )
 
     private fun pathDistance(engine: GameEngine, from: GridPos): Int {
@@ -325,6 +342,9 @@ class AdventurerTest {
         for (y in 0 until maze.height) {
             for (x in 0 until maze.width) add(GridPos(x, y))
         }
+
+        private fun chebyshevDistance(a: GridPos, b: GridPos): Int =
+            maxOf(abs(a.x - b.x), abs(a.y - b.y))
     }
 
     private companion object {

@@ -86,6 +86,7 @@ class DifficultyPresetTest {
     fun defaultPresets_haveExpectedAdventurerConfiguration() {
         DifficultyPresets.all.forEach { preset ->
             assertEquals(1, preset.adventurerCount)
+            assertEquals(2, preset.adventurerPlayerSpawnBuffer)
             assertTrue(
                 preset.adventurerSpeedRatio in
                     DifficultyPreset.MIN_ADVENTURER_SPEED_RATIO..DifficultyPreset.MAX_ADVENTURER_SPEED_RATIO
@@ -105,6 +106,11 @@ class DifficultyPresetTest {
     @Test(expected = IllegalArgumentException::class)
     fun difficultyPreset_rejectsNegativeAdventurerCount() {
         DifficultyPresets.EASY.copy(adventurerCount = -1)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun difficultyPreset_rejectsNegativeAdventurerPlayerSpawnBuffer() {
+        DifficultyPresets.EASY.copy(adventurerPlayerSpawnBuffer = -1)
     }
 
     @Test(expected = IllegalArgumentException::class)

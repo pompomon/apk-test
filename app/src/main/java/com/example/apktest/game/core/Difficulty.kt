@@ -31,6 +31,12 @@ data class DifficultyPreset(
     /** Fixed exit-seeking strategy used by every Adventurer in this preset. */
     val adventurerPolicyType: PlayerPolicyType = PlayerPolicyType.BFS_EXIT,
     /**
+     * Minimum Chebyshev-cell distance between the player start and an Adventurer
+     * spawn. This prevents an automated runner from appearing immediately beside
+     * the player.
+     */
+    val adventurerPlayerSpawnBuffer: Int = 2,
+    /**
      * Preferred minimum Chebyshev-cell buffer around the direct start-to-exit
      * path for initial NPC placement. Candidates outside this buffer are ranked
      * first, with fallback to inside-buffer cells when needed to satisfy NPC
@@ -72,6 +78,9 @@ data class DifficultyPreset(
         }
         require(adventurerPolicyType != PlayerPolicyType.MANUAL) {
             "adventurerPolicyType must be automated for $name."
+        }
+        require(adventurerPlayerSpawnBuffer >= 0) {
+            "adventurerPlayerSpawnBuffer ($adventurerPlayerSpawnBuffer) must be >= 0 for $name."
         }
     }
 
