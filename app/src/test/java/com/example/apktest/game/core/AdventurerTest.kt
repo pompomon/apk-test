@@ -342,10 +342,10 @@ class AdventurerTest {
         for (y in 0 until maze.height) {
             for (x in 0 until maze.width) add(GridPos(x, y))
         }
-
-        private fun chebyshevDistance(a: GridPos, b: GridPos): Int =
-            maxOf(abs(a.x - b.x), abs(a.y - b.y))
     }
+
+    private fun chebyshevDistance(a: GridPos, b: GridPos): Int =
+        maxOf(abs(a.x - b.x), abs(a.y - b.y))
 
     private companion object {
         const val SEED = 73L
