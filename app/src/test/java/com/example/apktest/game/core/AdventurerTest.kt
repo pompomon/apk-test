@@ -125,16 +125,32 @@ class AdventurerTest {
     }
 
     @Test
-    fun adventurerDisappearsAfterReachingExitWithoutEndingPlayerRun() {
+    fun adventurerReachingExitCausesPlayerLoss() {
         val engine = GameEngine(adventurerPreset(adventurerCount = 1), SEED)
         val path = engine.navigator.bfsPath(engine.maze.start, engine.maze.exit)
         assertTrue(path.size >= 2)
-        engine.adventurers.single().position = path[path.lastIndex - 1]
+        val adventurer = engine.adventurers.single()
+        adventurer.position = path[path.lastIndex - 1]
 
         engine.update(1f)
 
-        assertTrue(engine.adventurers.isEmpty())
-        assertEquals(GameStatus.RUNNING, engine.status)
+        assertEquals(engine.maze.exit, adventurer.position)
+        assertEquals(GameStatus.LOSE, engine.status)
+    }
+
+    @Test
+    fun adventurerReachingExitTakesPrecedenceOverNpcCapture() {
+        val engine = GameEngine(adventurerPreset(adventurerCount = 1), SEED)
+        val path = engine.navigator.bfsPath(engine.maze.start, engine.maze.exit)
+        assertTrue(path.size >= 2)
+        val adventurer = engine.adventurers.single()
+        adventurer.position = path[path.lastIndex - 1]
+        engine.npcs += Npc(id = 0, position = engine.maze.exit)
+
+        engine.update(1f)
+
+        assertEquals(engine.maze.exit, adventurer.position)
+        assertEquals(GameStatus.LOSE, engine.status)
     }
 
     @Test
