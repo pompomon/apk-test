@@ -135,11 +135,12 @@ class AdventurerTest {
         engine.update(1f)
 
         assertEquals(engine.maze.exit, adventurer.position)
+        assertTrue(engine.adventurers.isEmpty())
         assertEquals(GameStatus.LOSE, engine.status)
     }
 
     @Test
-    fun adventurerReachingExitTakesPrecedenceOverNpcCapture() {
+    fun adventurerExitWithNpcPresentStillCausesPlayerLoss() {
         val engine = GameEngine(adventurerPreset(adventurerCount = 1), SEED)
         val path = engine.navigator.bfsPath(engine.maze.start, engine.maze.exit)
         assertTrue(path.size >= 2)
@@ -150,6 +151,7 @@ class AdventurerTest {
         engine.update(1f)
 
         assertEquals(engine.maze.exit, adventurer.position)
+        assertTrue(engine.adventurers.isEmpty())
         assertEquals(GameStatus.LOSE, engine.status)
     }
 

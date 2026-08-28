@@ -887,6 +887,10 @@ class GameEngine(
             }
 
             if (adventurer.position == maze.exit) {
+                iterator.remove()
+                adventurerPoliciesById.remove(adventurer.id)
+                activeEffectsByAdventurerId.remove(adventurer.id)
+                adventurerAccumulatorsById.remove(adventurer.id)
                 status = GameStatus.LOSE
                 return
             }
