@@ -25,7 +25,7 @@ class AdventurerTest {
     }
 
     @Test
-    fun multipleAdventurersSpawnDeterministicallyAtClosestEligibleExitDistances() {
+    fun multipleAdventurersSpawnDeterministicallyFromFarthestChebyshevShortlist() {
         val preset = adventurerPreset(adventurerCount = 3)
         val first = GameEngine(preset, SEED)
         val second = GameEngine(preset, SEED)
@@ -35,26 +35,63 @@ class AdventurerTest {
             first.adventurers.map { it.position },
             second.adventurers.map { it.position }
         )
-        val positions = first.adventurers.map { it.position }
+        val positions = first.adventurers.sortedBy { it.id }.map { it.position }
         assertEquals(positions.size, positions.toSet().size)
         assertTrue(first.maze.start !in positions)
         assertTrue(first.maze.exit !in positions)
 
-        val playerDistance = pathDistance(first, first.maze.start)
-        val availableErrors = allCells(first.maze)
-            .filter {
-                it != first.maze.start &&
-                    it != first.maze.exit &&
-                    chebyshevDistance(it, first.maze.start) >= preset.adventurerPlayerSpawnBuffer
-            }
-            .map { abs(pathDistance(first, it) - playerDistance) }
-            .sorted()
-        val largestSelectedError = positions.maxOf {
-            abs(pathDistance(first, it) - playerDistance)
+        // Each Adventurer is placed independently: it must land within the 5
+        // farthest-by-Chebyshev-distance eligible cells remaining at the time
+        // it was chosen (earlier Adventurers' cells already removed from the
+        // pool).
+        val eligible = allCells(first.maze).filter {
+            it != first.maze.start &&
+                it != first.maze.exit &&
+                chebyshevDistance(it, first.maze.start) >= preset.adventurerPlayerSpawnBuffer &&
+                first.navigator.bfsPath(it, first.maze.exit).isNotEmpty()
         }
+        val chosenSoFar = mutableSetOf<GridPos>()
+        for (position in positions) {
+            val shortlist = eligible
+                .filterNot { it in chosenSoFar }
+                .sortedWith(
+                    compareByDescending<GridPos> { chebyshevDistance(it, first.maze.start) }
+                        .thenBy { it.x }
+                        .thenBy { it.y }
+                )
+                .take(5)
+            assertTrue(
+                "Adventurer spawn $position should be among the 5 farthest eligible " +
+                    "cells from the player start at the time it was placed",
+                position in shortlist
+            )
+            chosenSoFar += position
+        }
+    }
+
+    @Test
+    fun singleAdventurerSpawnsAmongTheFiveFarthestEligibleCells() {
+        val preset = adventurerPreset(adventurerCount = 1)
+        val engine = GameEngine(preset, SEED)
+
+        val eligible = allCells(engine.maze).filter {
+            it != engine.maze.start &&
+                it != engine.maze.exit &&
+                chebyshevDistance(it, engine.maze.start) >= preset.adventurerPlayerSpawnBuffer &&
+                engine.navigator.bfsPath(it, engine.maze.exit).isNotEmpty()
+        }
+        val shortlist = eligible
+            .sortedWith(
+                compareByDescending<GridPos> { chebyshevDistance(it, engine.maze.start) }
+                    .thenBy { it.x }
+                    .thenBy { it.y }
+            )
+            .take(5)
+
         assertTrue(
-            "Spawned Adventurers should use the closest available exit-distance tier",
-            largestSelectedError <= availableErrors[preset.adventurerCount - 1]
+            "Adventurer spawn ${engine.adventurers.single().position} should be among the " +
+                "5 farthest eligible cells from the player start",
+            engine.adventurers.single().position in shortlist
         )
     }
 
@@ -331,12 +368,6 @@ class AdventurerTest {
         adventurerPolicyType = PlayerPolicyType.BFS_EXIT,
         adventurerPlayerSpawnBuffer = adventurerPlayerSpawnBuffer
     )
-
-    private fun pathDistance(engine: GameEngine, from: GridPos): Int {
-        val path = engine.navigator.bfsPath(from, engine.maze.exit)
-        assertTrue("Expected $from to reach the exit", path.isNotEmpty())
-        return path.size - 1
-    }
 
     private fun allCells(maze: Maze): List<GridPos> = buildList {
         for (y in 0 until maze.height) {
