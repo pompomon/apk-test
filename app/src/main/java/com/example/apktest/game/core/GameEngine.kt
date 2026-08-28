@@ -1033,32 +1033,56 @@ class GameEngine(
         val requestedCount = difficulty.adventurerCount
         if (requestedCount <= 0) return
 
-        val candidates = adventurerSpawnCandidates()
-        val spawnCount = requestedCount.coerceAtMost(candidates.size)
-        repeat(spawnCount) { id ->
-            val adventurer = Adventurer(id = id, position = candidates[id])
+        val available = adventurerSpawnCandidates().toMutableList()
+        var id = 0
+        while (id < requestedCount && available.isNotEmpty()) {
+            val chosen = pickAdventurerSpawn(available)
+            available.remove(chosen)
+            val adventurer = Adventurer(id = id, position = chosen)
             adventurers += adventurer
             adventurerPoliciesById[id] = PolicyFactory.player(difficulty.adventurerPolicyType)
+            id++
         }
     }
 
     /**
-     * Ranks free cells outside the configured player-start buffer by how closely
-     * their shortest-path distance to the exit matches the player's initial
-     * distance. Equal-distance candidates retain a deterministic shuffle order
-     * from an Adventurer-only RNG stream so adding Adventurers does not advance
-     * the power-up or enemy RNG state.
+     * Picks one spawn cell from [available] for a single Adventurer. Cells are
+     * ranked by Chebyshev distance from the player start, farthest first, with
+     * ties broken deterministically by position so the shortlist is stable for
+     * a given maze. The [ADVENTURER_SPAWN_SHORTLIST_SIZE] farthest cells (or all
+     * of [available] if fewer remain) form a shortlist, and one entry is chosen
+     * uniformly at random from it using the seeded Adventurer-only RNG stream.
+     * Each Adventurer is selected independently via this method - one at a
+     * time, with its chosen cell removed from [available] by the caller
+     * afterward - so multiple Adventurers never compete over the same
+     * shortlist or land on the same cell.
+     */
+    private fun pickAdventurerSpawn(available: List<GridPos>): GridPos {
+        val shortlist = available
+            .sortedWith(
+                compareByDescending<GridPos> { chebyshevDistance(it, maze.start) }
+                    .thenBy { it.x }
+                    .thenBy { it.y }
+            )
+            .take(ADVENTURER_SPAWN_SHORTLIST_SIZE)
+        return shortlist[adventurerRandom.nextInt(shortlist.size)]
+    }
+
+    /**
+     * Free cells eligible for Adventurer spawning: excludes the player start,
+     * the exit, and any already-placed NPC positions, and requires each cell to
+     * sit outside [DifficultyPreset.adventurerPlayerSpawnBuffer] Chebyshev cells
+     * from the player start and to have a valid path to the exit. Ranking
+     * within this eligible set (farthest-Chebyshev shortlist + random pick) is
+     * performed per-Adventurer by [pickAdventurerSpawn].
      */
     private fun adventurerSpawnCandidates(): List<GridPos> {
-        val playerPath = navigator.bfsPath(maze.start, maze.exit)
-        if (playerPath.isEmpty()) return emptyList()
-        val targetDistance = playerPath.size - 1
         val reserved = HashSet<GridPos>(npcs.size + 2).apply {
             add(maze.start)
             add(maze.exit)
             npcs.forEach { add(it.position) }
         }
-        val candidates = mutableListOf<Pair<GridPos, Int>>()
+        val candidates = mutableListOf<GridPos>()
         for (y in 0 until maze.height) {
             for (x in 0 until maze.width) {
                 val pos = GridPos(x, y)
@@ -1068,13 +1092,11 @@ class GameEngine(
                 }
                 val path = navigator.bfsPath(pos, maze.exit)
                 if (path.isNotEmpty()) {
-                    candidates += pos to (path.size - 1)
+                    candidates += pos
                 }
             }
         }
-        candidates.shuffle(adventurerRandom)
-        candidates.sortBy { (_, distance) -> abs(distance - targetDistance) }
-        return candidates.map { it.first }
+        return candidates
     }
 
     private fun npcSpawnCandidates(): List<GridPos> {
@@ -1443,6 +1465,11 @@ class GameEngine(
         private const val SPEED_UP_MULTIPLIER = 2f
         private const val SLOW_TIME_NPC_MULTIPLIER = 0.5f
         private const val MAGNET_PICKUP_RADIUS = 2
+        /**
+         * Size of the farthest-Chebyshev-distance shortlist each Adventurer is
+         * randomly spawned from (see [pickAdventurerSpawn]).
+         */
+        private const val ADVENTURER_SPAWN_SHORTLIST_SIZE = 5
         /** Default duration of the manual-input override (see [queueManualMove]). */
         const val MANUAL_OVERRIDE_DURATION_SECONDS = 3f
         /** Default duration of the pre-game countdown (see [startCountdown]). */
