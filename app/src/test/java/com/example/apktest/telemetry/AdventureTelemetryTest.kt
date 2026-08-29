@@ -12,6 +12,7 @@ class AdventureTelemetryTest {
         val names = AdventureTelemetryEventNames.all
         assertEquals(names.size, names.distinct().size)
         assertTrue(names.all { it.matches(LOWER_SNAKE_CASE) })
+        assertTrue(names.all { it.startsWith("adventure_") })
     }
 
     @Test

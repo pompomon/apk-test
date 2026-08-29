@@ -84,7 +84,7 @@ Suggested metrics should be anonymous, aggregate, and optional until a telemetry
 | Maze-to-maze continuation rate | Shows whether reward/event screens encourage “one more maze” | `adventure_maze_completed`, `adventure_maze_started` |
 | Retry rate after death | Measures frustration versus motivation | `adventure_maze_failed`, `adventure_maze_retried`, `adventure_run_abandoned` |
 | Median session length and run elapsed time | Confirms target run length remains around the documented 10-20 minute range | `adventure_session_ended`, `adventure_run_completed` |
-| Choice distribution and win rate by choice | Identifies dominant or trap choices | `route_event_chosen`, `perk_chosen`, `elite_modifier_spawned` |
+| Choice distribution and win rate by choice | Identifies dominant or trap choices | `adventure_route_event_chosen`, `adventure_perk_chosen`, `adventure_elite_modifier_spawned` |
 | Death causes near modifiers/events | Highlights unfair modifier or route combinations | `adventure_death_context` |
 
 ## Assumptions

@@ -152,11 +152,11 @@ If a perk adds active in-maze runtime state, persist it in `GameEngineSnapshot` 
 
 | Event | Properties |
 | --- | --- |
-| `perk_offer_shown` | `difficulty`, `maze_index`, `offered_perk_ids`, `current_stacks` |
-| `perk_chosen` | `perk_id`, `stack_after_choice`, `offered_perk_ids`, `lives_remaining` |
-| `perk_effect_applied` | `perk_id`, `maze_index`, `affected_system`, `amount` |
-| `perk_consumed` | `perk_id`, `trigger`, `maze_index` |
-| `perk_run_outcome` | `perk_ids`, `current_stacks`, `completed`, `total_elapsed_seconds`, `deaths_this_run` |
+| `adventure_perk_offer_shown` | `difficulty`, `maze_index`, `offered_perk_ids`, `current_stacks` |
+| `adventure_perk_chosen` | `perk_id`, `stack_after_choice`, `offered_perk_ids`, `lives_remaining` |
+| `adventure_perk_effect_applied` | `perk_id`, `maze_index`, `affected_system`, `amount` |
+| `adventure_perk_consumed` | `perk_id`, `trigger`, `maze_index` |
+| `adventure_perk_run_outcome` | `perk_ids`, `current_stacks`, `completed`, `total_elapsed_seconds`, `deaths_this_run` |
 
 These names come from the shared telemetry allowlists. Do not add raw or hashed
 seeds, positions, snapshot data, free-form text, or user/device identifiers.

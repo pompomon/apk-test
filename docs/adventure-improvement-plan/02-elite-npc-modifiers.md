@@ -117,8 +117,8 @@ Canonical placeholder events:
 
 | Event | Properties |
 | --- | --- |
-| `elite_modifier_spawned` | `difficulty`, `maze_index`, `modifier_id`, `npc_count`, `elite_count`, `player_policy` |
-| `elite_modifier_outcome` | `difficulty`, `maze_index`, `modifier_id`, `completed`, `elapsed_seconds`, `steps`, `deaths_this_run` |
+| `adventure_elite_modifier_spawned` | `difficulty`, `maze_index`, `modifier_id`, `npc_count`, `elite_count`, `player_policy` |
+| `adventure_elite_modifier_outcome` | `difficulty`, `maze_index`, `modifier_id`, `completed`, `elapsed_seconds`, `steps`, `deaths_this_run` |
 | `adventure_death_context` | `difficulty`, `maze_index`, `modifier_id`, `death_cause`, `active_power_up` |
 
 Only aggregate values and stable catalogue IDs are allowed. Do not include raw

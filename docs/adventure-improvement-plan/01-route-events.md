@@ -146,10 +146,10 @@ Copy rules:
 
 | Event | Properties |
 | --- | --- |
-| `route_event_offered` | `difficulty`, `maze_index`, `offered_choice_ids`, `offered_categories` |
-| `route_event_chosen` | `difficulty`, `maze_index`, `choice_id`, `category`, `lives_remaining`, `deaths_this_run` |
-| `route_event_applied` | `next_maze_index`, `choice_id`, `npc_count_delta`, `reward_option_delta`, `elite_requested` |
-| `route_event_outcome` | `choice_id`, `next_maze_won`, `elapsed_seconds`, `steps`, `death_count_delta` |
+| `adventure_route_event_offered` | `difficulty`, `maze_index`, `offered_choice_ids`, `offered_categories` |
+| `adventure_route_event_chosen` | `difficulty`, `maze_index`, `choice_id`, `category`, `lives_remaining`, `deaths_this_run` |
+| `adventure_route_event_applied` | `next_maze_index`, `choice_id`, `npc_count_delta`, `reward_option_delta`, `elite_requested` |
+| `adventure_route_event_outcome` | `choice_id`, `next_maze_won`, `elapsed_seconds`, `steps`, `death_count_delta` |
 
 These names come from `AdventureTelemetryEventNames` and
 `AdventureTelemetryPropertyNames`. Do not add raw or hashed seeds, positions,

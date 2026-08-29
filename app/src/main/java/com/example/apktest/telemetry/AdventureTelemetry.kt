@@ -22,19 +22,19 @@ object AdventureTelemetryEventNames {
     const val REWARD_OFFERED = "adventure_reward_offered"
     const val REWARD_CHOSEN = "adventure_reward_chosen"
 
-    const val ROUTE_EVENT_OFFERED = "route_event_offered"
-    const val ROUTE_EVENT_CHOSEN = "route_event_chosen"
-    const val ROUTE_EVENT_APPLIED = "route_event_applied"
-    const val ROUTE_EVENT_OUTCOME = "route_event_outcome"
+    const val ROUTE_EVENT_OFFERED = "adventure_route_event_offered"
+    const val ROUTE_EVENT_CHOSEN = "adventure_route_event_chosen"
+    const val ROUTE_EVENT_APPLIED = "adventure_route_event_applied"
+    const val ROUTE_EVENT_OUTCOME = "adventure_route_event_outcome"
 
-    const val ELITE_MODIFIER_SPAWNED = "elite_modifier_spawned"
-    const val ELITE_MODIFIER_OUTCOME = "elite_modifier_outcome"
+    const val ELITE_MODIFIER_SPAWNED = "adventure_elite_modifier_spawned"
+    const val ELITE_MODIFIER_OUTCOME = "adventure_elite_modifier_outcome"
 
-    const val PERK_OFFER_SHOWN = "perk_offer_shown"
-    const val PERK_CHOSEN = "perk_chosen"
-    const val PERK_EFFECT_APPLIED = "perk_effect_applied"
-    const val PERK_CONSUMED = "perk_consumed"
-    const val PERK_RUN_OUTCOME = "perk_run_outcome"
+    const val PERK_OFFER_SHOWN = "adventure_perk_offer_shown"
+    const val PERK_CHOSEN = "adventure_perk_chosen"
+    const val PERK_EFFECT_APPLIED = "adventure_perk_effect_applied"
+    const val PERK_CONSUMED = "adventure_perk_consumed"
+    const val PERK_RUN_OUTCOME = "adventure_perk_run_outcome"
 
     val all: List<String> = listOf(
         RUN_STARTED,
