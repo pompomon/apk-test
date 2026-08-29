@@ -134,7 +134,7 @@ data class DeathOutcome(
 /**
  * Pure-Kotlin controller for an Adventure run. Owns an [AdventureRunState]
  * and exposes deterministic transitions for maze entry, win, death, and
- * policy unlocks. No Android imports — fully JVM-testable.
+ * reward selection. No Android imports — fully JVM-testable.
  *
  * The controller is **not** thread-safe; callers should invoke it from a
  * single thread (the Android host's main/UI thread).

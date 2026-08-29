@@ -28,8 +28,9 @@ A lightweight Android 2D top-down maze game using libGDX rendering.
 Adventure is one of the two top-level game modes (alongside Classic). It
 runs the player through a series of mazes with a shared pool of lives,
 losing a life when caught by an NPC or when an Adventurer reaches the
-exit first, and rewarding progress with strategy unlocks, power-up
-choices, and bonus lives. A completed run reports total time, steps, and
+exit first. Completing the first maze enables every automated player
+strategy, while each non-final win offers a starting power-up choice;
+win streaks can also award bonus lives. A completed run reports total time, steps, and
 deaths, tracking a best time across attempts.
 
 ![Adventure mode screenshot](docs/images/adventure-mode-screenshot.jpg)

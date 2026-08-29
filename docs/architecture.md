@@ -62,7 +62,7 @@ SetupActivity  ── Intent extras ──▶  MainActivity  ── Fragment arg
 
 ## Adventure mode
 
-Adventure mode is a thin "run controller" layered above the single-maze engine. The engine handles one maze at a time; the controller chains mazes and tracks run-level state (lives, win streak, unlocks).
+Adventure mode is a thin "run controller" layered above the single-maze engine. The engine handles one maze at a time; the controller chains mazes and tracks run-level state (lives, win streak, automation availability, and starting rewards).
 
 ```
 SetupActivity ──▶ AdventureSetupActivity ──▶ AdventureActivity ──▶ GameFragment ──▶ MazeGame ──▶ GameEngine
@@ -75,10 +75,10 @@ SetupActivity ──▶ AdventureSetupActivity ──▶ AdventureActivity ─�
 ```
 
 - **`AdventureConfig`** (`game/core/AdventureConfig.kt`): per-difficulty rules — Easy 5 lives / 5 mazes / base 1 NPC, Medium 3 / 7 / base 1, Hard 1 / 9 / base 2. `npcCountForMaze(mazeIndex1Based)` = `baseNpcsPerMaze + ((mazeIndex1Based - 1) / 3)` plus +1 on the final maze. Unknown presets fall back to Medium rules.
-- **`AdventureRunController`** (`game/core/AdventureRunController.kt`): pure-Kotlin state transitions (no Android imports → fully JVM-testable). Locks `currentMazeSeed` + `currentMazeNpcPolicies` on first `prepareCurrentMaze()` per maze so a death replay returns the *same* spec; clears them on win; awards +1 life every 3 consecutive wins (resets streak on death OR on bonus); manages the unlocked-policies pool starting with only `MANUAL`.
+- **`AdventureRunController`** (`game/core/AdventureRunController.kt`): pure-Kotlin state transitions (no Android imports → fully JVM-testable). Locks `currentMazeSeed` + `currentMazeNpcPolicies` on first `prepareCurrentMaze()` per maze so a death replay returns the *same* spec; clears them on win; awards +1 life every 3 consecutive wins (resets streak on death OR on bonus); starts with only `MANUAL`, enables every automated player policy after maze 1, and offers three deterministic non-`GHOST_MODE` starting power-ups after every non-final win.
 - **`AdventureRunStateSnapshot`** (`game/core/AdventureRunStateSnapshot.kt`): JSON, schema-versioned, validates the MANUAL-always-unlocked invariant. Embeds a `GameEngineSnapshot` for paused-mid-maze resume.
 - **`AdventureStateStore`** (`AdventureStateStore.kt`): sibling of `GameStateStore` but in its own SharedPreferences file (`adventure_state`) so a saved adventure never appears as a single-maze Resume on the main start menu, and vice versa.
-- **`AdventureActivity`** mirrors `MainActivity`'s lifecycle / popover / swipe handling, polls engine status every 200ms to detect `WIN`/`LOSE`, runs the win/lose/unlock-chooser overlays, and persists via a per-activity single-thread autosave executor (guarded against `RejectedExecutionException` per Hard rule #8).
+- **`AdventureActivity`** mirrors `MainActivity`'s lifecycle / popover / swipe handling, polls engine status every 200ms to detect `WIN`/`LOSE`, runs the win/lose/power-up chooser overlays, and persists via a per-activity single-thread autosave executor (guarded against `RejectedExecutionException` per Hard rule #8).
 - **`GameEngine.configureAdventureMaze(npcCount, policies)`** sets `npcCountOverride` + `npcPolicies`. Per-NPC `policyType` is resolved through a per-type policy cache with deterministic seeded RNG (`NPC_POLICY_TYPE_SEED_STRIDE`) — single-maze runs still go through the long-lived `npcPolicy` instance so behaviour is byte-for-byte unchanged.
 
 **Hard rule (Adventure):** every per-maze NPC policy assignment is locked into `AdventureRunState.currentMazeNpcPolicies` on first entry so death replays use the same set; reloading an in-progress run preserves the locked list verbatim regardless of any future change to the derivation function.

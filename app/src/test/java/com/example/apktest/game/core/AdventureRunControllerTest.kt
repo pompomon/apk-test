@@ -205,11 +205,11 @@ class AdventureRunControllerTest {
     fun everySubsequentNonFinalMazeWinOffersThreeNonGhostPowerUps() {
         val c = easyController()
         c.prepareCurrentMaze()
-        val first = c.onMazeWon()
-        c.prepareCurrentMaze()
-        val second = c.onMazeWon()
+        c.onMazeWon()
 
-        listOf(first, second).forEach { outcome ->
+        repeat(c.config.totalMazes - 2) {
+            c.prepareCurrentMaze()
+            val outcome = c.onMazeWon()
             assertTrue(outcome.startingPowerUpAvailable)
             assertEquals(
                 AdventureRunController.REWARD_SAMPLE_SIZE,
