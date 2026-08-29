@@ -45,8 +45,8 @@ data class PlayerPolicyAggregateResult(
 )
 
 /**
- * JVM-only development harness for producing the checked-in Adventure award
- * policy ranking. It is intentionally test-source code, not runtime app code.
+ * JVM-only development harness for comparing automated player policies.
+ * It is intentionally test-source code, not runtime app code.
  */
 object PlayerPolicyRankingHarness {
     fun benchmark(config: PlayerPolicyBenchmarkConfig = PlayerPolicyBenchmarkConfig()): List<PlayerPolicyRunResult> =

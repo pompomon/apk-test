@@ -55,8 +55,8 @@ data class AdventureRunState(
     var currentMazeSnapshot: GameEngineSnapshot? = null,
     var status: AdventureStatus = AdventureStatus.IN_PROGRESS,
     /**
-     * Power-up the player chose to start the next maze with (granted as an
-     * even-numbered-maze-win reward). Treated as locked per-maze state:
+     * Power-up the player chose to start the next maze with (granted after a
+     * non-final maze win). Treated as locked per-maze state:
      * carried into every [AdventureRunController.prepareCurrentMaze] call
      * (so death replays of the same maze re-apply the same reward) and
      * cleared only when the host advances past the maze via
@@ -99,21 +99,15 @@ data class MazeStartupSpec(
  * Returned from [AdventureRunController.onMazeWon] to communicate what
  * the host should surface on the win overlay:
  * - the new lives count and whether a bonus life was just awarded,
- * - either a list of [unlockCandidates] (up to 3 locked
- *   [PlayerPolicyType]s from the checked-in Adventure ranking on
- *   odd-numbered maze wins), or
- * - a list of [startingPowerUpCandidates] (3 random non-GHOST
- *   [PowerUpType]s on even-numbered maze wins),
+ * - a list of [startingPowerUpCandidates] (3 deterministic non-GHOST
+ *   [PowerUpType]s on every non-final maze win),
  * - the maze index just completed and total mazes for messaging.
  *
- * Exactly one of [unlockCandidates] / [startingPowerUpCandidates] will
- * be populated on a non-terminal win (and both are empty on the final
- * run-complete win or when there are no locked policies left to offer).
+ * [startingPowerUpCandidates] is empty only on the final run-complete win.
  */
 data class WinOutcome(
     val livesRemaining: Int,
     val bonusLifeAwarded: Boolean,
-    val unlockCandidates: List<PlayerPolicyType>,
     val startingPowerUpCandidates: List<PowerUpType>,
     val mazeIndexCompleted: Int,
     val totalMazes: Int,
@@ -125,7 +119,6 @@ data class WinOutcome(
     /** Number of player deaths so far this run. */
     val deathsThisRun: Int
 ) {
-    val unlockAvailable: Boolean get() = unlockCandidates.isNotEmpty() && !runComplete
     val startingPowerUpAvailable: Boolean
         get() = startingPowerUpCandidates.isNotEmpty() && !runComplete
 }
@@ -141,7 +134,7 @@ data class DeathOutcome(
 /**
  * Pure-Kotlin controller for an Adventure run. Owns an [AdventureRunState]
  * and exposes deterministic transitions for maze entry, win, death, and
- * policy unlocks. No Android imports — fully JVM-testable.
+ * reward selection. No Android imports — fully JVM-testable.
  *
  * The controller is **not** thread-safe; callers should invoke it from a
  * single thread (the Android host's main/UI thread).
@@ -159,6 +152,9 @@ class AdventureRunController(
     init {
         require(state.difficultyName == config.difficulty.name) {
             "State difficulty (${state.difficultyName}) does not match config (${config.difficulty.name})"
+        }
+        if (state.currentMazeIndex > 0) {
+            unlockAllAutomatedPlayerPolicies()
         }
     }
 
@@ -229,6 +225,9 @@ class AdventureRunController(
         state.totalSteps += steps.coerceAtLeast(0)
         val newIndex = state.currentMazeIndex + 1
         state.currentMazeIndex = newIndex
+        if (newIndex == 1) {
+            unlockAllAutomatedPlayerPolicies()
+        }
         state.winStreakSinceLastBonus += 1
         val bonus = state.winStreakSinceLastBonus >= AdventureConfig.STREAK_BONUS_THRESHOLD
         if (bonus) {
@@ -246,19 +245,12 @@ class AdventureRunController(
         val runComplete = newIndex >= config.totalMazes
         if (runComplete) state.status = AdventureStatus.WON
 
-        // Per-parity reward: odd-numbered maze wins (1, 3, 5…) unlock a
-        // new player policy; even-numbered maze wins (2, 4, 6…) grant a
-        // starting power-up for the next maze.
-        val isOdd = newIndex % 2 == 1
-        val unlockCandidates = if (runComplete || !isOdd) emptyList()
-        else selectTopLockedPlayerPolicies(REWARD_SAMPLE_SIZE)
-        val powerUpCandidates = if (runComplete || isOdd) emptyList()
+        val powerUpCandidates = if (runComplete) emptyList()
         else sampleStartingPowerUps(REWARD_SAMPLE_SIZE, newIndex)
 
         return WinOutcome(
             livesRemaining = state.livesRemaining,
             bonusLifeAwarded = bonus,
-            unlockCandidates = unlockCandidates,
             startingPowerUpCandidates = powerUpCandidates,
             mazeIndexCompleted = newIndex,
             totalMazes = config.totalMazes,
@@ -268,18 +260,6 @@ class AdventureRunController(
             deathsThisRun = state.deathsThisRun
         )
     }
-
-    /**
-     * Returns up to [count] still-locked [PlayerPolicyType]s from the
-     * checked-in Adventure award ranking. Policy rewards intentionally do not
-     * use [runSeed]: every run offers the fastest successful locked policies
-     * first, according to the offline JVM ranking harness.
-     */
-    internal fun selectTopLockedPlayerPolicies(count: Int): List<PlayerPolicyType> =
-        if (count <= 0) emptyList()
-        else adventureAwardPlayerPolicyRanking()
-            .filter { it !in state.unlockedPlayerPolicies }
-            .take(count)
 
     /**
      * Deterministically samples up to [count] [PowerUpType]s (excluding
@@ -293,21 +273,6 @@ class AdventureRunController(
         val rng = Random(derivePowerUpRewardSeed(mazeIndex1Based))
         if (pool.size <= count) return pool.shuffled(rng)
         return pool.shuffled(rng).take(count)
-    }
-
-    /** PlayerPolicyTypes not yet unlocked, in declaration order. */
-    fun lockedPlayerPolicies(): List<PlayerPolicyType> =
-        PlayerPolicyType.entries.filter { it !in state.unlockedPlayerPolicies }
-
-    /**
-     * Add [choice] to the unlocked policy set. No-op if [choice] is
-     * already unlocked. Returns `true` if the unlock was applied,
-     * `false` otherwise.
-     */
-    fun applyPolicyUnlock(choice: PlayerPolicyType): Boolean {
-        if (choice in state.unlockedPlayerPolicies) return false
-        state.unlockedPlayerPolicies.add(choice)
-        return true
     }
 
     /**
@@ -403,6 +368,14 @@ class AdventureRunController(
         val previous = state.pendingStartingPowerUp
         state.pendingStartingPowerUp = type
         return previous
+    }
+
+    private fun unlockAllAutomatedPlayerPolicies() {
+        automatedPlayerPolicies().forEach { policy ->
+            if (policy !in state.unlockedPlayerPolicies) {
+                state.unlockedPlayerPolicies.add(policy)
+            }
+        }
     }
 
     private fun deriveMazeSeed(mazeIndex1Based: Int): Long =

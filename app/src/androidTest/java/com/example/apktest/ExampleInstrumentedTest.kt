@@ -457,14 +457,17 @@ class ExampleInstrumentedTest {
     }
 
     @Test
-    fun adventureAutoToggleEnabledAfterAutomatedUnlock() {
+    fun adventureAutoToggleEnabledAfterFirstMazeCompletion() {
         ActivityScenario.launch(AdventureActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
-                activity.controllerForTesting().applyPolicyUnlock(PlayerPolicyType.BFS_EXIT)
+                activity.controllerForTesting().run {
+                    prepareCurrentMaze()
+                    onMazeWon()
+                }
                 activity.refreshAutoToggleForTesting()
                 val toggle = activity.findViewById<android.widget.ToggleButton>(R.id.buttonAuto)
                 assertUsesSharedToggleStyle(toggle)
-                assertTrue("Auto toggle should enable after an automated policy unlock", toggle.isEnabled)
+                assertTrue("Auto toggle should enable after maze 1 is completed", toggle.isEnabled)
                 assertFalse("Auto toggle should remain unchecked until selected", toggle.isChecked)
             }
         }

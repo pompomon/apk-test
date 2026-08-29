@@ -621,11 +621,11 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         // Intentionally do NOT persist controller state here. The controller
         // has advanced (mazeIndex / lives / streak), but if the run is
         // continuing the player still has to confirm the win dialog and,
-        // when applicable, pick an unlock. Persisting now would mean a
-        // process death while the dialogs are visible drops the unlock
+        // when applicable, pick a starting power-up. Persisting now would mean a
+        // process death while the dialogs are visible drops the power-up
         // choice while keeping the advanced state. Instead we persist
         // only after the user-driven follow-ups commit: [advanceToNextMaze]
-        // (no-unlock continue) or [showUnlockChooser]'s positive button.
+        // or [showStartingPowerUpChooser]'s positive button.
         // If the process dies before either fires, on resume the persisted
         // state is still at the previous maze and the player simply replays it.
 
@@ -668,14 +668,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 outcome.deathsThisRun,
                 bestMsg
             ) + bonusMsg
-        } else {
-            val rewardPrompt = when {
-                outcome.unlockAvailable -> getString(R.string.adventure_unlock_prompt)
-                outcome.startingPowerUpAvailable -> getString(R.string.adventure_powerup_prompt)
-                else -> getString(R.string.adventure_no_unlock_available)
-            }
-            rewardPrompt + bonusMsg
-        }
+        } else getString(R.string.adventure_powerup_prompt) + bonusMsg
 
         val builder = AlertDialog.Builder(this).setTitle(title).setMessage(body).setCancelable(false)
         if (outcome.runComplete) {
@@ -694,38 +687,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             return
         }
 
-        if (outcome.unlockAvailable) {
-            // Present the unlock chooser as a follow-up dialog.
-            builder.setPositiveButton(R.string.adventure_continue) { _, _ ->
-                showUnlockChooser(outcome.unlockCandidates)
-            }
-        } else if (outcome.startingPowerUpAvailable) {
-            builder.setPositiveButton(R.string.adventure_continue) { _, _ ->
-                showStartingPowerUpChooser(outcome.startingPowerUpCandidates)
-            }
-        } else {
-            builder.setPositiveButton(R.string.adventure_continue) { _, _ ->
-                advanceToNextMaze()
-            }
+        builder.setPositiveButton(R.string.adventure_continue) { _, _ ->
+            showStartingPowerUpChooser(outcome.startingPowerUpCandidates)
         }
         builder.show()
-    }
-
-    private fun showUnlockChooser(candidates: List<PlayerPolicyType>) {
-        val items = candidates.map { it.label }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(R.string.adventure_unlock_prompt)
-            .setCancelable(false)
-            .setSingleChoiceItems(items, 0, null)
-            .setPositiveButton(R.string.adventure_continue) { dialog, _ ->
-                val listView = (dialog as AlertDialog).listView
-                val picked = listView.checkedItemPosition.coerceAtLeast(0)
-                controller.applyPolicyUnlock(candidates[picked])
-                refreshAutoToggle()
-                persistAdventureStateAsync()
-                advanceToNextMaze()
-            }
-            .show()
     }
 
     private fun showStartingPowerUpChooser(candidates: List<PowerUpType>) {

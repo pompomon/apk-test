@@ -22,13 +22,12 @@ class PlayerPolicyRankingHarnessTest {
     }
 
     @Ignore(
-        "Development harness: run manually after policy changes, then copy the printed order " +
-            "to adventureAwardPlayerPolicyRanking() in AutomatedPlayerPolicies.kt."
+        "Development harness: run manually after policy changes to inspect the printed ranking."
     )
     @Test
-    fun printAdventureAwardPolicyRanking() {
+    fun printAutomatedPlayerPolicyRanking() {
         val ranking = PlayerPolicyRankingHarness.rank()
-        println("Adventure award policy ranking:")
+        println("Automated player policy ranking:")
         ranking.forEachIndexed { index, result ->
             println(
                 "${index + 1}. ${result.policyType.name}: " +

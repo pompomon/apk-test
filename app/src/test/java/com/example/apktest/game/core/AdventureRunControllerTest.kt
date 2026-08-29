@@ -133,46 +133,45 @@ class AdventureRunControllerTest {
     }
 
     @Test
-    fun applyPolicyUnlock_addsPolicyOncePool() {
-        val c = easyController()
-        assertTrue(c.applyPolicyUnlock(PlayerPolicyType.BFS_EXIT))
-        assertTrue(PlayerPolicyType.BFS_EXIT in c.state.unlockedPlayerPolicies)
-        // Idempotent
-        assertFalse(c.applyPolicyUnlock(PlayerPolicyType.BFS_EXIT))
-        assertEquals(2, c.state.unlockedPlayerPolicies.size)
-    }
-
-    @Test
-    fun lockedPlayerPolicies_excludesUnlocked() {
-        val c = easyController()
-        c.applyPolicyUnlock(PlayerPolicyType.BFS_EXIT)
-        val locked = c.lockedPlayerPolicies()
-        assertFalse(PlayerPolicyType.MANUAL in locked)
-        assertFalse(PlayerPolicyType.BFS_EXIT in locked)
-        assertTrue(PlayerPolicyType.ASTAR_EXIT in locked)
-    }
-
-    @Test
     fun setCurrentPlayerPolicy_onlyAllowedIfUnlocked() {
         val c = easyController()
         assertFalse(c.setCurrentPlayerPolicy(PlayerPolicyType.BFS_EXIT))
         assertEquals(PlayerPolicyType.MANUAL, c.state.currentPlayerPolicy)
-        c.applyPolicyUnlock(PlayerPolicyType.BFS_EXIT)
+        c.prepareCurrentMaze()
+        c.onMazeWon()
         assertTrue(c.setCurrentPlayerPolicy(PlayerPolicyType.BFS_EXIT))
         assertEquals(PlayerPolicyType.BFS_EXIT, c.state.currentPlayerPolicy)
     }
 
     @Test
-    fun winOutcomeUnlockCandidatesEmptyWhenAllUnlocked() {
-        val c = easyController()
-        // Unlock everything except MANUAL (already)
-        PlayerPolicyType.entries.filter { it != PlayerPolicyType.MANUAL }.forEach {
-            c.applyPolicyUnlock(it)
-        }
-        c.prepareCurrentMaze()
-        val w = c.onMazeWon()
-        assertTrue(w.unlockCandidates.isEmpty())
-        assertFalse(w.unlockAvailable)
+    fun restoredProgressedRunUnlocksAllAutomatedPoliciesAndPreservesSelectionState() {
+        val legacyState = AdventureRunState(
+            difficultyName = DifficultyPresets.EASY.name,
+            currentMazeIndex = 1,
+            livesRemaining = 4,
+            unlockedPlayerPolicies = mutableListOf(
+                PlayerPolicyType.MANUAL,
+                PlayerPolicyType.BFS_EXIT
+            ),
+            currentPlayerPolicy = PlayerPolicyType.BFS_EXIT,
+            lastAutomatedPlayerPolicy = PlayerPolicyType.BFS_EXIT,
+            automatedPolicyPromptShown = true
+        )
+        val snapshot = AdventureRunStateSnapshot.fromState(legacyState, runSeed = 99L)
+        val restoredState = requireNotNull(
+            AdventureRunStateSnapshot.fromJson(snapshot.toJson())
+        ).toState()
+
+        val c = AdventureRunController(
+            config = AdventureConfig.forDifficulty(DifficultyPresets.EASY),
+            initialState = restoredState,
+            runSeed = snapshot.runSeed
+        )
+
+        assertEquals(PlayerPolicyType.entries.toSet(), c.state.unlockedPlayerPolicies.toSet())
+        assertEquals(PlayerPolicyType.BFS_EXIT, c.state.currentPlayerPolicy)
+        assertEquals(PlayerPolicyType.BFS_EXIT, c.state.lastAutomatedPlayerPolicy)
+        assertTrue(c.state.automatedPolicyPromptShown)
     }
 
     @Test
@@ -186,56 +185,45 @@ class AdventureRunControllerTest {
         val w = c.onMazeWon()
         assertTrue(w.runComplete)
         assertEquals(9, w.mazeIndexCompleted)
-        assertTrue(w.unlockCandidates.isEmpty()) // no unlock after final win
         assertTrue(w.startingPowerUpCandidates.isEmpty())
     }
 
     @Test
-    fun oddMazeWinOffersUpToThreeLockedPolicies() {
+    fun firstMazeWinUnlocksAllAutomatedPoliciesAndOffersThreeNonGhostPowerUps() {
         val c = easyController()
-        c.prepareCurrentMaze()
-        val w = c.onMazeWon() // maze 1 → odd
-        assertTrue(w.unlockAvailable)
-        assertTrue(w.startingPowerUpCandidates.isEmpty())
-        assertEquals(
-            adventureAwardPlayerPolicyRanking().take(AdventureRunController.REWARD_SAMPLE_SIZE),
-            w.unlockCandidates
-        )
-        w.unlockCandidates.forEach { assertFalse(it in c.state.unlockedPlayerPolicies) }
-    }
-
-    @Test
-    fun oddMazeWinSkipsUnlockedPoliciesAndPreservesRankingOrder() {
-        val c = easyController()
-        val ranking = adventureAwardPlayerPolicyRanking()
-        c.applyPolicyUnlock(ranking.first())
-
         c.prepareCurrentMaze()
         val w = c.onMazeWon()
 
-        assertEquals(
-            ranking.drop(1).take(AdventureRunController.REWARD_SAMPLE_SIZE),
-            w.unlockCandidates
-        )
-    }
-
-    @Test
-    fun evenMazeWinOffersThreeNonGhostPowerUps() {
-        val c = easyController()
-        c.prepareCurrentMaze(); c.onMazeWon() // 1 → odd
-        c.prepareCurrentMaze()
-        val w = c.onMazeWon() // maze 2 → even
+        assertEquals(PlayerPolicyType.entries.toSet(), c.state.unlockedPlayerPolicies.toSet())
+        assertEquals(PlayerPolicyType.MANUAL, c.state.currentPlayerPolicy)
         assertTrue(w.startingPowerUpAvailable)
-        assertTrue(w.unlockCandidates.isEmpty())
         assertEquals(AdventureRunController.REWARD_SAMPLE_SIZE, w.startingPowerUpCandidates.size)
         assertFalse(PowerUpType.GHOST_MODE in w.startingPowerUpCandidates)
     }
 
     @Test
+    fun everySubsequentNonFinalMazeWinOffersThreeNonGhostPowerUps() {
+        val c = easyController()
+        c.prepareCurrentMaze()
+        c.onMazeWon()
+
+        repeat(c.config.totalMazes - 2) {
+            c.prepareCurrentMaze()
+            val outcome = c.onMazeWon()
+            assertTrue(outcome.startingPowerUpAvailable)
+            assertEquals(
+                AdventureRunController.REWARD_SAMPLE_SIZE,
+                outcome.startingPowerUpCandidates.size
+            )
+            assertFalse(PowerUpType.GHOST_MODE in outcome.startingPowerUpCandidates)
+        }
+    }
+
+    @Test
     fun applyStartingPowerUpFlowsThroughPrepareCurrentMaze() {
         val c = easyController()
-        c.prepareCurrentMaze(); c.onMazeWon() // odd
-        c.prepareCurrentMaze(); c.onMazeWon() // even
+        c.prepareCurrentMaze()
+        c.onMazeWon()
         c.applyStartingPowerUp(PowerUpType.TELEPORT)
         val spec = c.prepareCurrentMaze()!!
         assertEquals(PowerUpType.TELEPORT, spec.startingPowerUp)
@@ -255,8 +243,8 @@ class AdventureRunControllerTest {
     @Test
     fun startingPowerUpSurvivesDeathReplayUntilMazeWon() {
         val c = easyController()
-        c.prepareCurrentMaze(); c.onMazeWon() // odd
-        c.prepareCurrentMaze(); c.onMazeWon() // even
+        c.prepareCurrentMaze()
+        c.onMazeWon()
         c.applyStartingPowerUp(PowerUpType.TELEPORT)
         val spec = c.prepareCurrentMaze()!!
         assertEquals(PowerUpType.TELEPORT, spec.startingPowerUp)
@@ -269,22 +257,13 @@ class AdventureRunControllerTest {
     }
 
     @Test
-    fun unlockCandidatesIgnoreRunSeed() {
+    fun powerUpCandidatesAreDeterministicForRunSeedAndMaze() {
         val c1 = easyController(runSeed = 1234L)
-        val c2 = easyController(runSeed = 5678L)
+        val c2 = easyController(runSeed = 1234L)
         c1.prepareCurrentMaze(); c2.prepareCurrentMaze()
         val w1 = c1.onMazeWon()
         val w2 = c2.onMazeWon()
-        assertEquals(w1.unlockCandidates, w2.unlockCandidates)
-    }
-
-    @Test
-    fun adventureAwardRankingContainsEveryAutomatedPolicyOnceAndExcludesManual() {
-        val ranking = adventureAwardPlayerPolicyRanking()
-
-        assertFalse(PlayerPolicyType.MANUAL in ranking)
-        assertEquals(automatedPlayerPolicies().size, ranking.size)
-        assertEquals(automatedPlayerPolicies().toSet(), ranking.toSet())
+        assertEquals(w1.startingPowerUpCandidates, w2.startingPowerUpCandidates)
     }
 
     @Test
