@@ -35,7 +35,7 @@ Adventure mode currently advances through a mostly fixed sequence: win a maze, c
 | Safe | Scout Map | Reveal upcoming route-event category and next-maze NPC count before choosing reward. | Planning |
 | Risky | Ambush Shortcut | Next maze adds +1 NPC or one elite modifier; completing it grants an extra reward reroll. | Tension, greed |
 | Risky | Cursed Gate | Next maze starts with shorter power-up pickup lifetime; completing it grants +1 life progress toward streak bonus. | High stakes |
-| Utility | Supply Cache | Choose one starting power-up immediately; suppresses the normal even-maze power-up offer if both would occur. | Preparation |
+| Utility | Supply Cache | Choose one starting power-up immediately; suppresses the normal non-final-win power-up offer. | Preparation |
 | Utility (deferred) | Training Room | Temporarily unlock one automated player policy for the next maze only. Exclude it from the initial offer pool because current runs already unlock every automated policy after maze 1. | Experimentation |
 
 ## Balancing rules and guardrails

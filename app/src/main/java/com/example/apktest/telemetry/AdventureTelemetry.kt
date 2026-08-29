@@ -160,10 +160,12 @@ object AdventureTelemetryPropertyNames {
     internal val allSet: Set<String> = all.toSet()
 }
 
-data class AdventureTelemetryEvent(
+class AdventureTelemetryEvent(
     val name: String,
-    val properties: Map<String, String> = emptyMap()
+    properties: Map<String, String> = emptyMap()
 ) {
+    val properties: Map<String, String> = properties.toMap()
+
     init {
         require(name in AdventureTelemetryEventNames.allSet) {
             "Unknown Adventure telemetry event: $name"
@@ -173,6 +175,16 @@ data class AdventureTelemetryEvent(
             "Unknown Adventure telemetry properties: ${unknownProperties.sorted()}"
         }
     }
+
+    override fun equals(other: Any?): Boolean =
+        other is AdventureTelemetryEvent &&
+            name == other.name &&
+            properties == other.properties
+
+    override fun hashCode(): Int = 31 * name.hashCode() + properties.hashCode()
+
+    override fun toString(): String =
+        "AdventureTelemetryEvent(name=$name, properties=$properties)"
 }
 
 fun interface AdventureTelemetrySink {

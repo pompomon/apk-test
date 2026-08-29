@@ -49,6 +49,25 @@ class AdventureTelemetryTest {
     }
 
     @Test
+    fun event_copiesPropertiesBeforeValidationAndExposure() {
+        val source = mutableMapOf(
+            AdventureTelemetryPropertyNames.DIFFICULTY to "Medium"
+        )
+        val event = AdventureTelemetryEvent(
+            name = AdventureTelemetryEventNames.RUN_STARTED,
+            properties = source
+        )
+
+        source[AdventureTelemetryPropertyNames.DIFFICULTY] = "Hard"
+        source["run_seed"] = "123"
+
+        assertEquals(
+            mapOf(AdventureTelemetryPropertyNames.DIFFICULTY to "Medium"),
+            event.properties
+        )
+    }
+
+    @Test
     fun noOpAndRecordingSinks_shareTheSameContract() {
         val event = AdventureTelemetryEvent(
             name = AdventureTelemetryEventNames.REWARD_CHOSEN,
