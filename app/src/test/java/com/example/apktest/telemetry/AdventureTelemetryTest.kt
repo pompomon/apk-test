@@ -90,6 +90,42 @@ class AdventureTelemetryTest {
     }
 
     @Test
+    fun routeEventApplied_acceptsDocumentedSchemaAndEmptyOfferLists() {
+        val applied = AdventureTelemetryEvent(
+            name = AdventureTelemetryEventNames.ROUTE_EVENT_APPLIED,
+            properties = mapOf(
+                AdventureTelemetryPropertyNames.NEXT_MAZE_INDEX to "3",
+                AdventureTelemetryPropertyNames.CHOICE_ID to "quiet_corridor",
+                AdventureTelemetryPropertyNames.NPC_COUNT_DELTA to "-1",
+                AdventureTelemetryPropertyNames.REWARD_OPTION_DELTA to "-1",
+                AdventureTelemetryPropertyNames.ELITE_REQUESTED to "false"
+            )
+        )
+        val offers = AdventureTelemetryEvent(
+            name = AdventureTelemetryEventNames.REWARD_OFFERED,
+            properties = mapOf(
+                AdventureTelemetryPropertyNames.DIFFICULTY to "Medium",
+                AdventureTelemetryPropertyNames.MAZE_INDEX to "2",
+                AdventureTelemetryPropertyNames.OFFERED_REWARD_IDS to "",
+                AdventureTelemetryPropertyNames.OFFERED_CHOICE_IDS to "",
+                AdventureTelemetryPropertyNames.OFFERED_CATEGORIES to ""
+            )
+        )
+
+        assertEquals(
+            mapOf(
+                AdventureTelemetryPropertyNames.NEXT_MAZE_INDEX to "3",
+                AdventureTelemetryPropertyNames.CHOICE_ID to "quiet_corridor",
+                AdventureTelemetryPropertyNames.NPC_COUNT_DELTA to "-1",
+                AdventureTelemetryPropertyNames.REWARD_OPTION_DELTA to "-1",
+                AdventureTelemetryPropertyNames.ELITE_REQUESTED to "false"
+            ),
+            applied.properties
+        )
+        assertEquals("", offers.properties[AdventureTelemetryPropertyNames.OFFERED_REWARD_IDS])
+    }
+
+    @Test
     fun event_copiesPropertiesBeforeValidationAndExposure() {
         val source = mutableMapOf(
             AdventureTelemetryPropertyNames.DIFFICULTY to "Medium"

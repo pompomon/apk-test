@@ -166,6 +166,7 @@ private const val HARD_DIFFICULTY = "Hard"
 
 private val CATALOGUE_ID = Regex("^[a-z][a-z0-9_]*$")
 private val CATALOGUE_ID_LIST = Regex("^(?:[a-z][a-z0-9_]*)(?:,[a-z][a-z0-9_]*)*$")
+private val EMPTY_OR_CATALOGUE_ID_LIST = Regex("^(?:|(?:[a-z][a-z0-9_]*)(?:,[a-z][a-z0-9_]*)*)$")
 
 private enum class AdventureTelemetryPropertyType {
     BOOLEAN,
@@ -313,19 +314,18 @@ private val allowedPropertiesByEvent: Map<String, Set<String>> = mapOf(
         AdventureTelemetryPropertyNames.CATEGORY
     ),
     AdventureTelemetryEventNames.ROUTE_EVENT_APPLIED to setOf(
-        AdventureTelemetryPropertyNames.DIFFICULTY,
-        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.NEXT_MAZE_INDEX,
         AdventureTelemetryPropertyNames.CHOICE_ID,
-        AdventureTelemetryPropertyNames.CATEGORY,
-        AdventureTelemetryPropertyNames.AMOUNT
+        AdventureTelemetryPropertyNames.NPC_COUNT_DELTA,
+        AdventureTelemetryPropertyNames.REWARD_OPTION_DELTA,
+        AdventureTelemetryPropertyNames.ELITE_REQUESTED
     ),
     AdventureTelemetryEventNames.ROUTE_EVENT_OUTCOME to setOf(
-        AdventureTelemetryPropertyNames.DIFFICULTY,
-        AdventureTelemetryPropertyNames.MAZE_INDEX,
         AdventureTelemetryPropertyNames.CHOICE_ID,
-        AdventureTelemetryPropertyNames.CATEGORY,
         AdventureTelemetryPropertyNames.NEXT_MAZE_WON,
-        AdventureTelemetryPropertyNames.AMOUNT
+        AdventureTelemetryPropertyNames.ELAPSED_SECONDS,
+        AdventureTelemetryPropertyNames.STEPS,
+        AdventureTelemetryPropertyNames.DEATH_COUNT_DELTA
     ),
     AdventureTelemetryEventNames.ELITE_MODIFIER_SPAWNED to setOf(
         AdventureTelemetryPropertyNames.DIFFICULTY,
@@ -468,10 +468,6 @@ private fun validatePropertyValue(key: String, value: String): String {
             trimmed
         }
         AdventureTelemetryPropertyType.INTEGER -> {
-            require(trimmed.all { it.isDigit() || it == '-' }) {
-                "Property '$key' must be an integer"
-            }
-            // Reject values like "2.0" or leading + sign while keeping the canonical negative/positive range.
             require(trimmed.toIntOrNull() != null) {
                 "Property '$key' must parse as an integer"
             }
@@ -484,8 +480,8 @@ private fun validatePropertyValue(key: String, value: String): String {
             trimmed
         }
         AdventureTelemetryPropertyType.CATALOGUE_ID_LIST -> {
-            require(trimmed.matches(CATALOGUE_ID_LIST)) {
-                "Property '$key' must be a comma-separated list of stable catalogue IDs"
+            require(trimmed.matches(EMPTY_OR_CATALOGUE_ID_LIST)) {
+                "Property '$key' must be an empty string or a comma-separated list of stable catalogue IDs"
             }
             trimmed
         }
