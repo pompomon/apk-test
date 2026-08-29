@@ -80,9 +80,7 @@
     <string name="adventure_status_default">Adventure: —</string>
     <string name="adventure_maze_won_title">Maze %1$d of %2$d cleared!</string>
     <string name="adventure_bonus_life">Bonus life awarded! Lives: %1$d</string>
-    <string name="adventure_unlock_prompt">Choose a new player strategy to unlock:</string>
     <string name="adventure_powerup_prompt">Choose a power-up to start the next maze with:</string>
-    <string name="adventure_no_unlock_available">All strategies already unlocked.</string>
     <string name="adventure_continue">Continue</string>
     <string name="adventure_caught_title">Caught! Lives remaining: %1$d</string>
     <string name="adventure_run_complete_title">Adventure complete!</string>
