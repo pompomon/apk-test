@@ -46,6 +46,47 @@ class AdventureTelemetryTest {
                 properties = mapOf("run_seed" to "123")
             )
         }
+        assertIllegalArgument {
+            AdventureTelemetryEvent(
+                name = AdventureTelemetryEventNames.RUN_STARTED,
+                properties = mapOf(
+                    AdventureTelemetryPropertyNames.DIFFICULTY to "medium",
+                    AdventureTelemetryPropertyNames.MAZE_INDEX to "2"
+                )
+            )
+        }
+    }
+
+    @Test
+    fun event_rejectsUnsafeCatalogValuesAndBadEventPropertyPairs() {
+        assertIllegalArgument {
+            AdventureTelemetryEvent(
+                name = AdventureTelemetryEventNames.REWARD_CHOSEN,
+                properties = mapOf(
+                    AdventureTelemetryPropertyNames.DIFFICULTY to "Medium",
+                    AdventureTelemetryPropertyNames.MAZE_INDEX to "2",
+                    AdventureTelemetryPropertyNames.REWARD_ID to "shield;drop table"
+                )
+            )
+        }
+        assertIllegalArgument {
+            AdventureTelemetryEvent(
+                name = AdventureTelemetryEventNames.RUN_STARTED,
+                properties = mapOf(
+                    AdventureTelemetryPropertyNames.DIFFICULTY to "Medium",
+                    AdventureTelemetryPropertyNames.REWARD_ID to "shield"
+                )
+            )
+        }
+        assertIllegalArgument {
+            AdventureTelemetryEvent(
+                name = AdventureTelemetryEventNames.RUN_STARTED,
+                properties = mapOf(
+                    AdventureTelemetryPropertyNames.DIFFICULTY to "Medium",
+                    AdventureTelemetryPropertyNames.COMPLETED to "yes"
+                )
+            )
+        }
     }
 
     @Test

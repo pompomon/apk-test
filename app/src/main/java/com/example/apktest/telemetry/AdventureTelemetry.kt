@@ -160,19 +160,266 @@ object AdventureTelemetryPropertyNames {
     internal val allSet: Set<String> = all.toSet()
 }
 
+private const val EASY_DIFFICULTY = "Easy"
+private const val MEDIUM_DIFFICULTY = "Medium"
+private const val HARD_DIFFICULTY = "Hard"
+
+private val CATALOGUE_ID = Regex("^[a-z][a-z0-9_]*$")
+private val CATALOGUE_ID_LIST = Regex("^(?:[a-z][a-z0-9_]*)(?:,[a-z][a-z0-9_]*)*$")
+
+private enum class AdventureTelemetryPropertyType {
+    BOOLEAN,
+    INTEGER,
+    CATALOGUE_ID,
+    CATALOGUE_ID_LIST,
+    DIFFICULTY
+}
+
+private val propertyTypeByKey: Map<String, AdventureTelemetryPropertyType> = mapOf(
+    AdventureTelemetryPropertyNames.DIFFICULTY to AdventureTelemetryPropertyType.DIFFICULTY,
+    AdventureTelemetryPropertyNames.MAZE_INDEX to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.NEXT_MAZE_INDEX to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.TOTAL_MAZES to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.ELAPSED_SECONDS to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.TOTAL_ELAPSED_SECONDS to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.STEPS to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.TOTAL_STEPS to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.DEATHS_THIS_RUN to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.DEATH_COUNT_DELTA to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.LIVES_REMAINING to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.RETRY_NUMBER to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.COMPLETED to AdventureTelemetryPropertyType.BOOLEAN,
+    AdventureTelemetryPropertyNames.REWARD_TYPE to AdventureTelemetryPropertyType.CATALOGUE_ID,
+    AdventureTelemetryPropertyNames.REWARD_ID to AdventureTelemetryPropertyType.CATALOGUE_ID,
+    AdventureTelemetryPropertyNames.OFFERED_REWARD_IDS to AdventureTelemetryPropertyType.CATALOGUE_ID_LIST,
+    AdventureTelemetryPropertyNames.CHOICE_ID to AdventureTelemetryPropertyType.CATALOGUE_ID,
+    AdventureTelemetryPropertyNames.OFFERED_CHOICE_IDS to AdventureTelemetryPropertyType.CATALOGUE_ID_LIST,
+    AdventureTelemetryPropertyNames.CATEGORY to AdventureTelemetryPropertyType.CATALOGUE_ID,
+    AdventureTelemetryPropertyNames.OFFERED_CATEGORIES to AdventureTelemetryPropertyType.CATALOGUE_ID_LIST,
+    AdventureTelemetryPropertyNames.NPC_COUNT to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.NPC_COUNT_DELTA to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.REWARD_OPTION_DELTA to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.ELITE_REQUESTED to AdventureTelemetryPropertyType.BOOLEAN,
+    AdventureTelemetryPropertyNames.NEXT_MAZE_WON to AdventureTelemetryPropertyType.BOOLEAN,
+    AdventureTelemetryPropertyNames.MODIFIER_ID to AdventureTelemetryPropertyType.CATALOGUE_ID,
+    AdventureTelemetryPropertyNames.ELITE_COUNT to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.PLAYER_POLICY to AdventureTelemetryPropertyType.CATALOGUE_ID,
+    AdventureTelemetryPropertyNames.ACTIVE_POWER_UP to AdventureTelemetryPropertyType.CATALOGUE_ID,
+    AdventureTelemetryPropertyNames.DEATH_CAUSE to AdventureTelemetryPropertyType.CATALOGUE_ID,
+    AdventureTelemetryPropertyNames.PERK_ID to AdventureTelemetryPropertyType.CATALOGUE_ID,
+    AdventureTelemetryPropertyNames.PERK_IDS to AdventureTelemetryPropertyType.CATALOGUE_ID_LIST,
+    AdventureTelemetryPropertyNames.OFFERED_PERK_IDS to AdventureTelemetryPropertyType.CATALOGUE_ID_LIST,
+    AdventureTelemetryPropertyNames.CURRENT_STACKS to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.STACK_AFTER_CHOICE to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.AFFECTED_SYSTEM to AdventureTelemetryPropertyType.CATALOGUE_ID,
+    AdventureTelemetryPropertyNames.AMOUNT to AdventureTelemetryPropertyType.INTEGER,
+    AdventureTelemetryPropertyNames.TRIGGER to AdventureTelemetryPropertyType.CATALOGUE_ID
+)
+
+private val allowedPropertiesByEvent: Map<String, Set<String>> = mapOf(
+    AdventureTelemetryEventNames.RUN_STARTED to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.TOTAL_MAZES,
+        AdventureTelemetryPropertyNames.PLAYER_POLICY,
+        AdventureTelemetryPropertyNames.RETRY_NUMBER
+    ),
+    AdventureTelemetryEventNames.RUN_COMPLETED to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.TOTAL_MAZES,
+        AdventureTelemetryPropertyNames.TOTAL_ELAPSED_SECONDS,
+        AdventureTelemetryPropertyNames.TOTAL_STEPS,
+        AdventureTelemetryPropertyNames.COMPLETED
+    ),
+    AdventureTelemetryEventNames.RUN_LOST to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.LIVES_REMAINING,
+        AdventureTelemetryPropertyNames.DEATH_CAUSE,
+        AdventureTelemetryPropertyNames.DEATHS_THIS_RUN
+    ),
+    AdventureTelemetryEventNames.RUN_ABANDONED to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.ELAPSED_SECONDS,
+        AdventureTelemetryPropertyNames.STEPS,
+        AdventureTelemetryPropertyNames.RETRY_NUMBER
+    ),
+    AdventureTelemetryEventNames.SESSION_ENDED to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.TOTAL_ELAPSED_SECONDS,
+        AdventureTelemetryPropertyNames.TOTAL_STEPS,
+        AdventureTelemetryPropertyNames.COMPLETED
+    ),
+    AdventureTelemetryEventNames.MAZE_STARTED to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.TOTAL_MAZES,
+        AdventureTelemetryPropertyNames.RETRY_NUMBER,
+        AdventureTelemetryPropertyNames.NPC_COUNT
+    ),
+    AdventureTelemetryEventNames.MAZE_COMPLETED to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.TOTAL_STEPS,
+        AdventureTelemetryPropertyNames.ELAPSED_SECONDS,
+        AdventureTelemetryPropertyNames.COMPLETED
+    ),
+    AdventureTelemetryEventNames.MAZE_FAILED to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.DEATH_CAUSE,
+        AdventureTelemetryPropertyNames.LIVES_REMAINING,
+        AdventureTelemetryPropertyNames.RETRY_NUMBER
+    ),
+    AdventureTelemetryEventNames.MAZE_RETRIED to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.RETRY_NUMBER,
+        AdventureTelemetryPropertyNames.NEXT_MAZE_WON
+    ),
+    AdventureTelemetryEventNames.DEATH_CONTEXT to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.DEATH_CAUSE,
+        AdventureTelemetryPropertyNames.LIVES_REMAINING,
+        AdventureTelemetryPropertyNames.STEPS
+    ),
+    AdventureTelemetryEventNames.REWARD_OFFERED to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.OFFERED_REWARD_IDS,
+        AdventureTelemetryPropertyNames.OFFERED_CHOICE_IDS,
+        AdventureTelemetryPropertyNames.OFFERED_CATEGORIES
+    ),
+    AdventureTelemetryEventNames.REWARD_CHOSEN to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.REWARD_ID,
+        AdventureTelemetryPropertyNames.REWARD_TYPE,
+        AdventureTelemetryPropertyNames.CHOICE_ID,
+        AdventureTelemetryPropertyNames.CATEGORY
+    ),
+    AdventureTelemetryEventNames.ROUTE_EVENT_OFFERED to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.OFFERED_CATEGORIES,
+        AdventureTelemetryPropertyNames.OFFERED_CHOICE_IDS
+    ),
+    AdventureTelemetryEventNames.ROUTE_EVENT_CHOSEN to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.CHOICE_ID,
+        AdventureTelemetryPropertyNames.CATEGORY
+    ),
+    AdventureTelemetryEventNames.ROUTE_EVENT_APPLIED to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.CHOICE_ID,
+        AdventureTelemetryPropertyNames.CATEGORY,
+        AdventureTelemetryPropertyNames.AMOUNT
+    ),
+    AdventureTelemetryEventNames.ROUTE_EVENT_OUTCOME to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.CHOICE_ID,
+        AdventureTelemetryPropertyNames.CATEGORY,
+        AdventureTelemetryPropertyNames.NEXT_MAZE_WON,
+        AdventureTelemetryPropertyNames.AMOUNT
+    ),
+    AdventureTelemetryEventNames.ELITE_MODIFIER_SPAWNED to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.MODIFIER_ID,
+        AdventureTelemetryPropertyNames.NPC_COUNT,
+        AdventureTelemetryPropertyNames.ELITE_COUNT
+    ),
+    AdventureTelemetryEventNames.ELITE_MODIFIER_OUTCOME to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.MODIFIER_ID,
+        AdventureTelemetryPropertyNames.ACTIVE_POWER_UP,
+        AdventureTelemetryPropertyNames.PLAYER_POLICY,
+        AdventureTelemetryPropertyNames.DEATH_CAUSE
+    ),
+    AdventureTelemetryEventNames.PERK_OFFER_SHOWN to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.OFFERED_PERK_IDS
+    ),
+    AdventureTelemetryEventNames.PERK_CHOSEN to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.PERK_ID,
+        AdventureTelemetryPropertyNames.CURRENT_STACKS,
+        AdventureTelemetryPropertyNames.STACK_AFTER_CHOICE
+    ),
+    AdventureTelemetryEventNames.PERK_EFFECT_APPLIED to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.PERK_ID,
+        AdventureTelemetryPropertyNames.AFFECTED_SYSTEM,
+        AdventureTelemetryPropertyNames.AMOUNT,
+        AdventureTelemetryPropertyNames.TRIGGER
+    ),
+    AdventureTelemetryEventNames.PERK_CONSUMED to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.PERK_ID,
+        AdventureTelemetryPropertyNames.CURRENT_STACKS,
+        AdventureTelemetryPropertyNames.TRIGGER
+    ),
+    AdventureTelemetryEventNames.PERK_RUN_OUTCOME to setOf(
+        AdventureTelemetryPropertyNames.DIFFICULTY,
+        AdventureTelemetryPropertyNames.TOTAL_MAZES,
+        AdventureTelemetryPropertyNames.PERK_IDS,
+        AdventureTelemetryPropertyNames.CURRENT_STACKS
+    )
+)
+
 class AdventureTelemetryEvent(
     val name: String,
     properties: Map<String, String> = emptyMap()
 ) {
-    val properties: Map<String, String> = properties.toMap()
+    val properties: Map<String, String> = validateEvent(name, properties)
 
-    init {
-        require(name in AdventureTelemetryEventNames.allSet) {
-            "Unknown Adventure telemetry event: $name"
+    companion object {
+        fun runStarted(
+            difficulty: String,
+            mazeIndex: Int? = null,
+            retryNumber: Int? = null,
+            playerPolicy: String? = null
+        ): AdventureTelemetryEvent {
+            val props = linkedMapOf<String, String>()
+            props[AdventureTelemetryPropertyNames.DIFFICULTY] = difficulty
+            mazeIndex?.let { props[AdventureTelemetryPropertyNames.MAZE_INDEX] = it.toString() }
+            retryNumber?.let { props[AdventureTelemetryPropertyNames.RETRY_NUMBER] = it.toString() }
+            playerPolicy?.let { props[AdventureTelemetryPropertyNames.PLAYER_POLICY] = it }
+            return AdventureTelemetryEvent(
+                name = AdventureTelemetryEventNames.RUN_STARTED,
+                properties = props
+            )
         }
-        val unknownProperties = properties.keys - AdventureTelemetryPropertyNames.allSet
-        require(unknownProperties.isEmpty()) {
-            "Unknown Adventure telemetry properties: ${unknownProperties.sorted()}"
+
+        fun rewardChosen(
+            difficulty: String,
+            mazeIndex: Int,
+            rewardId: String,
+            rewardType: String? = null,
+            choiceId: String? = null,
+            category: String? = null
+        ): AdventureTelemetryEvent {
+            val props = linkedMapOf<String, String>()
+            props[AdventureTelemetryPropertyNames.DIFFICULTY] = difficulty
+            props[AdventureTelemetryPropertyNames.MAZE_INDEX] = mazeIndex.toString()
+            props[AdventureTelemetryPropertyNames.REWARD_ID] = rewardId
+            rewardType?.let { props[AdventureTelemetryPropertyNames.REWARD_TYPE] = it }
+            choiceId?.let { props[AdventureTelemetryPropertyNames.CHOICE_ID] = it }
+            category?.let { props[AdventureTelemetryPropertyNames.CATEGORY] = it }
+            return AdventureTelemetryEvent(
+                name = AdventureTelemetryEventNames.REWARD_CHOSEN,
+                properties = props
+            )
         }
     }
 
@@ -185,6 +432,70 @@ class AdventureTelemetryEvent(
 
     override fun toString(): String =
         "AdventureTelemetryEvent(name=$name, properties=$properties)"
+}
+
+private fun validateEvent(
+    name: String,
+    properties: Map<String, String>
+): Map<String, String> {
+    require(name in AdventureTelemetryEventNames.allSet) {
+        "Unknown Adventure telemetry event: $name"
+    }
+
+    val sanitizedProperties = linkedMapOf<String, String>()
+    for ((key, value) in properties) {
+        require(key in AdventureTelemetryPropertyNames.allSet) {
+            "Unknown Adventure telemetry property: $key"
+        }
+        require(key in allowedPropertiesByEvent.getValue(name)) {
+            "Adventure event '$name' does not allow property '$key'"
+        }
+        val typedValue = validatePropertyValue(key, value)
+        sanitizedProperties[key] = typedValue
+    }
+
+    return sanitizedProperties.toMap()
+}
+
+private fun validatePropertyValue(key: String, value: String): String {
+    val trimmed = value.trim()
+    val expectedType = propertyTypeByKey.getValue(key)
+    return when (expectedType) {
+        AdventureTelemetryPropertyType.BOOLEAN -> {
+            require(trimmed in setOf("true", "false")) {
+                "Property '$key' must be a boolean string ('true' or 'false')"
+            }
+            trimmed
+        }
+        AdventureTelemetryPropertyType.INTEGER -> {
+            require(trimmed.all { it.isDigit() || it == '-' }) {
+                "Property '$key' must be an integer"
+            }
+            // Reject values like "2.0" or leading + sign while keeping the canonical negative/positive range.
+            require(trimmed.toIntOrNull() != null) {
+                "Property '$key' must parse as an integer"
+            }
+            trimmed
+        }
+        AdventureTelemetryPropertyType.CATALOGUE_ID -> {
+            require(trimmed.matches(CATALOGUE_ID)) {
+                "Property '$key' must use a stable catalogue ID (lower_snake_case)"
+            }
+            trimmed
+        }
+        AdventureTelemetryPropertyType.CATALOGUE_ID_LIST -> {
+            require(trimmed.matches(CATALOGUE_ID_LIST)) {
+                "Property '$key' must be a comma-separated list of stable catalogue IDs"
+            }
+            trimmed
+        }
+        AdventureTelemetryPropertyType.DIFFICULTY -> {
+            require(trimmed in setOf(EASY_DIFFICULTY, MEDIUM_DIFFICULTY, HARD_DIFFICULTY)) {
+                "Property '$key' must be one of: Easy, Medium, Hard"
+            }
+            trimmed
+        }
+    }
 }
 
 fun interface AdventureTelemetrySink {
