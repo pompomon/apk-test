@@ -80,6 +80,8 @@ data class PendingRouteEvent(
 )
 ```
 
+`ELITE_MODIFIER_HINT` is reserved for risky Ambush-style route choices that request one elite threat on the next maze while still deferring the concrete modifier assignment to the Elite NPC system's seeded selection rules.
+
 Persistence changes:
 
 - Add route history and pending route effect fields to `AdventureRunState` and `AdventureRunStateSnapshot`.
