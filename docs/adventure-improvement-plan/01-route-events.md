@@ -13,7 +13,7 @@ Adventure mode currently advances through a mostly fixed sequence: win a maze, r
 
 ## Functional design
 
-- Trigger a route-event offer after maze wins on mazes 2, 4, 6, ... by default, with seeded jitter allowing a 2-3 maze cadence.
+- Schedule the first route-event offer after maze 2. After each offer, deterministically add 2 or 3 to the completed-maze index using an independent RNG derived from the run seed and route-event ordinal, and persist that result as `nextRouteEventMazeIndex`. Eligibility is therefore defined only by the persisted next index, not by a separate even-maze rule.
 - Do not trigger on the final maze win.
 - Present 2-3 route choices before the existing reward chooser:
   1. Player wins maze.
@@ -55,7 +55,9 @@ enum class RouteEventEffectType {
     STARTING_POWER_UP_CHOICE,
     TEMPORARY_POLICY_UNLOCK,
     POWER_UP_LIFETIME_DELTA,
-    REWARD_REROLL
+    REWARD_REROLL,
+    REWARD_OPTION_COUNT_DELTA,
+    STREAK_PROGRESS_DELTA
 }
 
 data class RouteEventChoice(
@@ -85,6 +87,7 @@ data class PendingRouteEvent(
 Persistence changes:
 
 - Add route history and pending route effect fields to `AdventureRunState` and `AdventureRunStateSnapshot`.
+- Persist `nextRouteEventMazeIndex` so resume and death replay do not recompute cadence.
 - Keep generated offers out of persistence unless a process can die while the offer dialog is visible. If so, persist the exact offered IDs plus selected index state.
 - If route effects alter `GameEngine` runtime state beyond existing `configureAdventureMaze(...)` inputs, add those fields to `GameEngineSnapshot` and bump its schema.
 
@@ -96,7 +99,7 @@ Persistence changes:
   - Include selected route effects when building `MazeStartupSpec`.
 - `AdventureRunStateSnapshot`
   - Persist selected route effects and route history.
-  - Validate unknown IDs by dropping pending effects only on schema-compatible migrations; otherwise bump schema.
+  - Reject snapshots containing an unknown pending choice or effect because dropping gameplay state could change the next maze. Unknown IDs may be discarded only from history-only records that cannot affect future behavior; otherwise bump the schema.
 - `AdventureActivity`
   - Insert route-event dialog before `showUnlockChooser(...)` / `showStartingPowerUpChooser(...)`.
   - Persist only after player commits all required choices, matching the current reward-dialog safety pattern.
@@ -146,6 +149,7 @@ A/B test:
 
 - Unit
   - Same run seed and maze index generate identical route offers.
+  - The persisted next-event index advances by a deterministic interval of 2 or 3 and survives snapshot round-trip.
   - Death replay preserves the selected pending route effect.
   - Route effects respect NPC-count floors and reward-option caps.
   - Snapshot round-trip preserves pending route effect and history.
@@ -160,7 +164,7 @@ A/B test:
 
 - Ship behind an internal feature flag or constant defaulting off until tests and copy are stable.
 - Enable only on Medium for first dogfood pass; then Easy/Hard after balance review.
-- Roll back by disabling offer generation and ignoring stored pending route effects on load; if stored state shape changed incompatibly, bump `AdventureRunStateSnapshot` schema to clear in-progress runs safely.
+- Roll back by disabling new offer generation while continuing to apply compatible stored pending effects; if pending effects can no longer be applied, bump `AdventureRunStateSnapshot` schema to clear in-progress runs safely.
 
 ## Open questions
 

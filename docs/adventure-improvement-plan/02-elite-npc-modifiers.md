@@ -15,7 +15,7 @@ Adventure difficulty currently increases mostly by adding NPCs. More enemies can
 
 | Modifier | Mechanics | Counterplay | Notes |
 | --- | --- | --- | --- |
-| Tracker | +2 effective vision range and prefers the player over Adventurers in equal-distance target ties. | Break line/path distance with maze turns, use invisibility/freeze. | Good first modifier; builds on existing target selection. |
+| Tracker | +2 effective vision range and targets the visible player before any Adventurer, even when an Adventurer is closer. | Leave its effective vision, use invisibility/freeze, or let it chase you away from Adventurers. | Good first modifier; deliberately overrides the baseline nearest-target ranking. |
 | Sprinter | Every N NPC moves, takes one extra move if still on a valid path; capped to avoid chain captures in one frame. | Watch cadence, use slow/freeze, route through chokepoints. | Needs careful timing tests. |
 | Jammer | Power-ups within a small radius expire faster or cannot be magnet-pulled while the Jammer is nearby. | Lure away before collecting, prioritize Jammer avoidance. | Requires clear UI; defer if unclear. |
 | Guardian | Prefers patrolling near the exit until the player is close, then chases. | Plan an approach, use blast/teleport. | Can reuse patrol/guard policy ideas. |
@@ -128,7 +128,7 @@ Dashboard guardrails:
 | Determinism | Same run seed/maze index produces same policy and modifier list; death replay preserves it; snapshot round-trip preserves it. |
 | Regression | Existing direct/predictive/patrol behavior remains unchanged when modifier is `null`. |
 | Edge cases | Zero NPCs, fewer NPCs than elite cap, final maze, unknown/removed modifier in saved data. |
-| Mechanics | Tracker range changes target acquisition; Guardian patrols near exit; Sprinter extra move respects cap and cannot move after terminal status. |
+| Mechanics | Tracker range changes target acquisition and prioritizes a visible player over a closer Adventurer; Guardian patrols near exit; Sprinter extra move respects cap and cannot move after terminal status. |
 | Rendering | Legend includes every modifier; renderer lookup handles every enum exhaustively without per-frame allocation. |
 
 ## Rollout, rollback, and risk mitigation

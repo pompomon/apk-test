@@ -17,7 +17,7 @@ Adventure currently grants player-policy unlocks and one-maze starting power-ups
 | Perk | Tier | Effect | Stack cap | Notes |
 | --- | --- | --- | --- | --- |
 | Quick Feet | Common | +5% player movement speed. | 3 | Cap at +15%; avoid trivializing NPC speed balance. |
-| Longer Charge | Common | +1s timed power-up duration. | 3 | Applies to SPEED_UP, FREEZE, SHIELD, SLOW_TIME, MAGNET, INVISIBILITY, GHOST_MODE unless excluded. |
+| Longer Charge | Common | +1s timed power-up duration. | 3 | Applies only to beneficial effects activated from player-collected SPEED_UP, FREEZE, SHIELD, SLOW_TIME, MAGNET, INVISIBILITY, and GHOST_MODE; it never extends hostile NPC-collected FREEZE applied to the player. |
 | Pocket Magnet | Common | +1 cell magnet pickup radius while MAGNET is active. | 2 | No effect without MAGNET; label clearly. |
 | First Shield | Uncommon | Start each maze with a short SHIELD if no other starting power-up is pending. | 1 | Avoid stacking with selected starting SHIELD reward. |
 | Scout Sense | Uncommon | Show next maze's NPC count and elite count before reward choice. | 1 | Best paired with Route Events/Elites. |
@@ -42,7 +42,7 @@ Tier guidance:
 - Anti-duplication:
   - Do not show a perk already chosen at cap.
   - Avoid showing the same perk in consecutive perk offers unless fewer than 3 alternatives exist.
-  - Prefer category diversity: at most two pure stat perks in one offer.
+  - Prefer category diversity: at most two pure stat/quality-of-life perks in one offer. If that cap would leave fewer than 3 choices, fill the remaining slots from otherwise eligible perks in deterministic draw order, relaxing the diversity cap before the consecutive-offer rule.
 - Persist the exact offer while the chooser is visible if process death could otherwise reroll choices.
 
 Pseudocode:
@@ -56,6 +56,9 @@ while choices.size < 3 and eligible remains:
   if candidate not duplicate and category cap ok:
     choices += candidate
   remove candidate from weightedPool for this offer
+if choices.size < min(3, eligible.size):
+  add skipped candidates in deterministic draw order, relaxing category cap first
+  then relax consecutive-offer avoidance until the target size is reached
 persist offer ids until player chooses or replay intentionally returns to previous maze
 ```
 
@@ -64,7 +67,7 @@ persist offer ids until player chooses or replay intentionally returns to previo
 | Existing system | Perk interaction |
 | --- | --- |
 | Starting power-up reward | Perks that grant start-of-maze effects should not overwrite `pendingStartingPowerUp`; define precedence and show copy. |
-| Timed effects | Duration perks adjust activation duration once, when the effect is applied, not every tick. |
+| Timed effects | Duration perks adjust activation duration once, when a beneficial player-collected effect is applied, not every tick. Collector/source context must reach this shared activation path so hostile effects such as NPC-collected FREEZE remain unmodified. |
 | Instant effects | TELEPORT and BLAST usually should not receive duration bonuses. |
 | MAGNET | Radius perks should use the same safety/reachability checks as current magnet collection. |
 | SHIELD/FREEZE/INVISIBILITY | Avoid perk combinations that grant permanent safety; use duration caps and per-maze limits. |
@@ -101,7 +104,7 @@ data class PendingPerkOffer(
 
 - `runPerks: List<RunPerkStack>`
 - `pendingPerkOffer: PendingPerkOffer?` when a chooser can survive process death
-- optional `perkOfferHistory: List<List<RunPerkId>>` or a compact recent-offer list for anti-duplication
+- `previousPerkOffer: List<RunPerkId>` (empty before the first offer) so consecutive-offer anti-duplication survives process death
 
 If a perk adds active in-maze runtime state, persist it in `GameEngineSnapshot` too.
 
@@ -112,13 +115,15 @@ If a perk adds active in-maze runtime state, persist it in `GameEngineSnapshot` 
   - Apply selected stacks and expose derived effects in `MazeStartupSpec`.
 - `GameEngine.configureAdventureMaze(...)`
   - Accept derived gameplay knobs such as player speed multiplier, power-up duration bonus, or start-of-maze shield request.
+- `GameEngine` / `GameFragment`
+  - Report `Second Wind` consumption through an explicit callback to `AdventureActivity`; the activity must synchronously call `AdventureRunController.consumePerk(SECOND_WIND)` before gameplay continues so the next adventure snapshot persists `consumed = true`.
 - `AdventureActivity`
   - Add perk chooser dialog.
   - Add active-perk summary to completion and pause/menu popovers.
 - HUD/popover summaries
   - Show compact active perks: `Quick Feet x2`, `Longer Charge x1`, `Second Wind ready/used`.
 - `PowerUps.kt` / power-up activation path
-  - Apply duration/radius modifiers in one place so all collectors and tests share semantics.
+  - Carry collector/source context into shared activation logic, and apply duration/radius modifiers in one place with explicit player-beneficial versus hostile-effect handling.
 
 ## UX copy guidance
 
@@ -151,6 +156,8 @@ Guardrails:
   - Rarity and anti-duplication rules produce valid offers under small pools.
   - Stack caps are enforced and persisted.
   - Duration and movement modifiers apply once in the intended path.
+  - NPC-collected FREEZE duration is unchanged by Longer Charge.
+  - Second Wind consumption is reported to and persisted by the run controller.
 - Integration
   - Perk chooser appears at configured reward milestones.
   - Pause/resume during chooser does not reroll choices or lose committed stacks.
