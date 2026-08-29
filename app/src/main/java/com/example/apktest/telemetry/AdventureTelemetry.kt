@@ -282,9 +282,11 @@ private val allowedPropertiesByEvent: Map<String, Set<String>> = mapOf(
     AdventureTelemetryEventNames.DEATH_CONTEXT to setOf(
         AdventureTelemetryPropertyNames.DIFFICULTY,
         AdventureTelemetryPropertyNames.MAZE_INDEX,
+        AdventureTelemetryPropertyNames.MODIFIER_ID,
         AdventureTelemetryPropertyNames.DEATH_CAUSE,
         AdventureTelemetryPropertyNames.LIVES_REMAINING,
-        AdventureTelemetryPropertyNames.STEPS
+        AdventureTelemetryPropertyNames.STEPS,
+        AdventureTelemetryPropertyNames.ACTIVE_POWER_UP
     ),
     AdventureTelemetryEventNames.REWARD_OFFERED to setOf(
         AdventureTelemetryPropertyNames.DIFFICULTY,
@@ -311,7 +313,9 @@ private val allowedPropertiesByEvent: Map<String, Set<String>> = mapOf(
         AdventureTelemetryPropertyNames.DIFFICULTY,
         AdventureTelemetryPropertyNames.MAZE_INDEX,
         AdventureTelemetryPropertyNames.CHOICE_ID,
-        AdventureTelemetryPropertyNames.CATEGORY
+        AdventureTelemetryPropertyNames.CATEGORY,
+        AdventureTelemetryPropertyNames.LIVES_REMAINING,
+        AdventureTelemetryPropertyNames.DEATHS_THIS_RUN
     ),
     AdventureTelemetryEventNames.ROUTE_EVENT_APPLIED to setOf(
         AdventureTelemetryPropertyNames.NEXT_MAZE_INDEX,
@@ -332,7 +336,8 @@ private val allowedPropertiesByEvent: Map<String, Set<String>> = mapOf(
         AdventureTelemetryPropertyNames.MAZE_INDEX,
         AdventureTelemetryPropertyNames.MODIFIER_ID,
         AdventureTelemetryPropertyNames.NPC_COUNT,
-        AdventureTelemetryPropertyNames.ELITE_COUNT
+        AdventureTelemetryPropertyNames.ELITE_COUNT,
+        AdventureTelemetryPropertyNames.PLAYER_POLICY
     ),
     AdventureTelemetryEventNames.ELITE_MODIFIER_OUTCOME to setOf(
         AdventureTelemetryPropertyNames.DIFFICULTY,
@@ -340,17 +345,24 @@ private val allowedPropertiesByEvent: Map<String, Set<String>> = mapOf(
         AdventureTelemetryPropertyNames.MODIFIER_ID,
         AdventureTelemetryPropertyNames.ACTIVE_POWER_UP,
         AdventureTelemetryPropertyNames.PLAYER_POLICY,
-        AdventureTelemetryPropertyNames.DEATH_CAUSE
+        AdventureTelemetryPropertyNames.DEATH_CAUSE,
+        AdventureTelemetryPropertyNames.COMPLETED,
+        AdventureTelemetryPropertyNames.ELAPSED_SECONDS,
+        AdventureTelemetryPropertyNames.STEPS,
+        AdventureTelemetryPropertyNames.DEATHS_THIS_RUN
     ),
     AdventureTelemetryEventNames.PERK_OFFER_SHOWN to setOf(
         AdventureTelemetryPropertyNames.DIFFICULTY,
         AdventureTelemetryPropertyNames.MAZE_INDEX,
-        AdventureTelemetryPropertyNames.OFFERED_PERK_IDS
+        AdventureTelemetryPropertyNames.OFFERED_PERK_IDS,
+        AdventureTelemetryPropertyNames.CURRENT_STACKS
     ),
     AdventureTelemetryEventNames.PERK_CHOSEN to setOf(
         AdventureTelemetryPropertyNames.DIFFICULTY,
         AdventureTelemetryPropertyNames.MAZE_INDEX,
         AdventureTelemetryPropertyNames.PERK_ID,
+        AdventureTelemetryPropertyNames.OFFERED_PERK_IDS,
+        AdventureTelemetryPropertyNames.LIVES_REMAINING,
         AdventureTelemetryPropertyNames.CURRENT_STACKS,
         AdventureTelemetryPropertyNames.STACK_AFTER_CHOICE
     ),
@@ -373,7 +385,10 @@ private val allowedPropertiesByEvent: Map<String, Set<String>> = mapOf(
         AdventureTelemetryPropertyNames.DIFFICULTY,
         AdventureTelemetryPropertyNames.TOTAL_MAZES,
         AdventureTelemetryPropertyNames.PERK_IDS,
-        AdventureTelemetryPropertyNames.CURRENT_STACKS
+        AdventureTelemetryPropertyNames.CURRENT_STACKS,
+        AdventureTelemetryPropertyNames.COMPLETED,
+        AdventureTelemetryPropertyNames.TOTAL_ELAPSED_SECONDS,
+        AdventureTelemetryPropertyNames.DEATHS_THIS_RUN
     )
 )
 

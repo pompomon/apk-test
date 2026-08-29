@@ -126,6 +126,90 @@ class AdventureTelemetryTest {
     }
 
     @Test
+    fun eliteEvents_acceptDocumentedSchemas() {
+        AdventureTelemetryEvent(
+            name = AdventureTelemetryEventNames.ELITE_MODIFIER_SPAWNED,
+            properties = mapOf(
+                AdventureTelemetryPropertyNames.DIFFICULTY to "Hard",
+                AdventureTelemetryPropertyNames.MAZE_INDEX to "4",
+                AdventureTelemetryPropertyNames.MODIFIER_ID to "swift",
+                AdventureTelemetryPropertyNames.NPC_COUNT to "3",
+                AdventureTelemetryPropertyNames.ELITE_COUNT to "1",
+                AdventureTelemetryPropertyNames.PLAYER_POLICY to "a_star"
+            )
+        )
+        AdventureTelemetryEvent(
+            name = AdventureTelemetryEventNames.ELITE_MODIFIER_OUTCOME,
+            properties = mapOf(
+                AdventureTelemetryPropertyNames.DIFFICULTY to "Hard",
+                AdventureTelemetryPropertyNames.MAZE_INDEX to "4",
+                AdventureTelemetryPropertyNames.MODIFIER_ID to "swift",
+                AdventureTelemetryPropertyNames.COMPLETED to "false",
+                AdventureTelemetryPropertyNames.ELAPSED_SECONDS to "42",
+                AdventureTelemetryPropertyNames.STEPS to "18",
+                AdventureTelemetryPropertyNames.DEATHS_THIS_RUN to "2"
+            )
+        )
+        AdventureTelemetryEvent(
+            name = AdventureTelemetryEventNames.DEATH_CONTEXT,
+            properties = mapOf(
+                AdventureTelemetryPropertyNames.DIFFICULTY to "Hard",
+                AdventureTelemetryPropertyNames.MAZE_INDEX to "4",
+                AdventureTelemetryPropertyNames.MODIFIER_ID to "swift",
+                AdventureTelemetryPropertyNames.DEATH_CAUSE to "npc_collision",
+                AdventureTelemetryPropertyNames.ACTIVE_POWER_UP to "invisibility"
+            )
+        )
+    }
+
+    @Test
+    fun routeAndPerkChoices_acceptDocumentedSchemas() {
+        AdventureTelemetryEvent(
+            name = AdventureTelemetryEventNames.ROUTE_EVENT_CHOSEN,
+            properties = mapOf(
+                AdventureTelemetryPropertyNames.DIFFICULTY to "Medium",
+                AdventureTelemetryPropertyNames.MAZE_INDEX to "2",
+                AdventureTelemetryPropertyNames.CHOICE_ID to "quiet_corridor",
+                AdventureTelemetryPropertyNames.CATEGORY to "safe",
+                AdventureTelemetryPropertyNames.LIVES_REMAINING to "2",
+                AdventureTelemetryPropertyNames.DEATHS_THIS_RUN to "1"
+            )
+        )
+        AdventureTelemetryEvent(
+            name = AdventureTelemetryEventNames.PERK_CHOSEN,
+            properties = mapOf(
+                AdventureTelemetryPropertyNames.PERK_ID to "steady_hands",
+                AdventureTelemetryPropertyNames.STACK_AFTER_CHOICE to "2",
+                AdventureTelemetryPropertyNames.OFFERED_PERK_IDS to "steady_hands,quick_step",
+                AdventureTelemetryPropertyNames.LIVES_REMAINING to "2"
+            )
+        )
+    }
+
+    @Test
+    fun perkOfferAndOutcome_acceptDocumentedSchemas() {
+        AdventureTelemetryEvent(
+            name = AdventureTelemetryEventNames.PERK_OFFER_SHOWN,
+            properties = mapOf(
+                AdventureTelemetryPropertyNames.DIFFICULTY to "Easy",
+                AdventureTelemetryPropertyNames.MAZE_INDEX to "2",
+                AdventureTelemetryPropertyNames.OFFERED_PERK_IDS to "steady_hands,quick_step",
+                AdventureTelemetryPropertyNames.CURRENT_STACKS to "1"
+            )
+        )
+        AdventureTelemetryEvent(
+            name = AdventureTelemetryEventNames.PERK_RUN_OUTCOME,
+            properties = mapOf(
+                AdventureTelemetryPropertyNames.PERK_IDS to "steady_hands,quick_step",
+                AdventureTelemetryPropertyNames.CURRENT_STACKS to "2",
+                AdventureTelemetryPropertyNames.COMPLETED to "true",
+                AdventureTelemetryPropertyNames.TOTAL_ELAPSED_SECONDS to "600",
+                AdventureTelemetryPropertyNames.DEATHS_THIS_RUN to "1"
+            )
+        )
+    }
+
+    @Test
     fun event_copiesPropertiesBeforeValidationAndExposure() {
         val source = mutableMapOf(
             AdventureTelemetryPropertyNames.DIFFICULTY to "Medium"
