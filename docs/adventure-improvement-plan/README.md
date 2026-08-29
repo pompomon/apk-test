@@ -24,13 +24,13 @@ The current entertainment loop is solid but mostly linear: maze count advances, 
 
 ## Prioritized backlog
 
-| Priority | Feature | Impact | Effort | Risk | Dependencies | Owner | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| P0 | Route Events | High: adds agency and run-to-run variety quickly | Medium | Medium: reward/difficulty balance | Adventure controller reward phase, overlays, snapshot schema | TBD | [ ] |
-| P1 | Elite NPC Modifiers | High: improves moment-to-moment novelty and readable threats | Medium-High | Medium-High: fairness, renderer clarity, determinism | NPC metadata/policy hooks, `GameEngine` snapshots, legend | TBD | [ ] |
-| P2 | Run Build Perks | High: adds long-term run identity and replay goals | High | High: stacking, persistence, balance interactions | Route/reward infrastructure, HUD/popover summaries, power-up metadata | TBD | [ ] |
-| P0 | Instrumentation scaffolding | Medium: supports tuning and safe rollout | Low-Medium | Low: avoid collecting personally identifiable data | Event naming, optional analytics sink | TBD | [ ] |
-| P0 | Balance test harness | Medium: keeps additions deterministic and bounded | Low | Low | JVM tests, seed fixtures | TBD | [ ] |
+| Seq. | Priority | Feature | Impact | Effort | Risk | Dependencies | Owner | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | P0 | Instrumentation scaffolding | Medium: supports tuning and safe rollout | Low-Medium | Low: avoid collecting personally identifiable data | Event naming, optional analytics sink | TBD | [ ] |
+| 2 | P0 | Balance test harness | Medium: keeps additions deterministic and bounded | Low | Low | JVM tests, seed fixtures | TBD | [ ] |
+| 3 | P0 | Route Events | High: adds agency and run-to-run variety quickly | Medium | Medium: reward/difficulty balance | Adventure controller reward phase, overlays, snapshot schema | TBD | [ ] |
+| 4 | P1 | Elite NPC Modifiers | High: improves moment-to-moment novelty and readable threats | Medium-High | Medium-High: fairness, renderer clarity, determinism | NPC metadata/policy hooks, `GameEngine` snapshots, legend | TBD | [ ] |
+| 5 | P2 | Run Build Perks | High: adds long-term run identity and replay goals | High | High: stacking, persistence, balance interactions | Route/reward infrastructure, HUD/popover summaries, power-up metadata | TBD | [ ] |
 
 ## Milestone plan
 
