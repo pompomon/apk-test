@@ -886,10 +886,17 @@ class GameEngine(
                 collectMagnetPowerUps(adventurer)
             }
 
+            if (adventurer.position == maze.exit) {
+                iterator.remove()
+                adventurerPoliciesById.remove(adventurer.id)
+                activeEffectsByAdventurerId.remove(adventurer.id)
+                adventurerAccumulatorsById.remove(adventurer.id)
+                status = GameStatus.LOSE
+                return
+            }
             val caught = !isAdventurerCollisionImmune(adventurer.id) &&
                 npcs.any { it.position == adventurer.position }
-            val escaped = adventurer.position == maze.exit
-            if (caught || escaped) {
+            if (caught) {
                 iterator.remove()
                 adventurerPoliciesById.remove(adventurer.id)
                 activeEffectsByAdventurerId.remove(adventurer.id)
