@@ -20,7 +20,12 @@ Adventure mode currently advances through a mostly fixed sequence: win a maze, r
   2. `AdventureActivity` shows route-event dialog if eligible.
   3. Player chooses one route.
   4. Controller records and applies the route modifier.
-  5. Existing unlock or starting-power-up chooser proceeds.
+  5. The existing parity reward proceeds: odd-numbered maze wins offer a
+     player-policy unlock and even-numbered maze wins offer a starting power-up.
+     A Supply Cache replaces the even-maze starting-power-up chooser with its
+     immediate choice; on an odd win it precedes, but does not replace, the
+     policy-unlock chooser. Quiet Corridor reduces only the following parity
+     chooser from three options to two.
   6. Next maze starts with the chosen modifier applied.
 - Each event affects either the next maze only or a clearly bounded run-level counter.
 
@@ -57,7 +62,8 @@ enum class RouteEventEffectType {
     POWER_UP_LIFETIME_DELTA,
     REWARD_REROLL,
     REWARD_OPTION_COUNT_DELTA,
-    STREAK_PROGRESS_DELTA
+    STREAK_PROGRESS_DELTA,
+    NEXT_ROUTE_PREVIEW
 }
 
 data class RouteEventChoice(
@@ -84,6 +90,12 @@ data class PendingRouteEvent(
 
 `ELITE_MODIFIER_HINT` is reserved for risky Ambush-style route choices that request one elite threat on the next maze while still deferring the concrete modifier assignment to the Elite NPC system's seeded selection rules.
 
+`NEXT_ROUTE_PREVIEW` is the persisted Scout Map effect. When the choice commits,
+the controller resolves the already-seeded next route-event category and the
+locked next-maze NPC count, stores that preview in run state, and exposes it to
+the reward UI. Its handler consumes the effect after that reward phase; resume
+must display the stored preview rather than regenerate it.
+
 Persistence changes:
 
 - Add route history and pending route effect fields to `AdventureRunState` and `AdventureRunStateSnapshot`.
@@ -97,6 +109,8 @@ Persistence changes:
   - Add `routeEventOfferForCompletedMaze(outcome)` or fold into `onMazeWon` result.
   - Add `applyRouteEventChoice(choice)` before reward selection commits.
   - Include selected route effects when building `MazeStartupSpec`.
+  - Resolve `NEXT_ROUTE_PREVIEW` into persisted preview data and include it in
+    the following parity reward result.
 - `AdventureRunStateSnapshot`
   - Persist selected route effects and route history.
   - Reject snapshots containing an unknown pending choice or effect because dropping gameplay state could change the next maze. Unknown IDs may be discarded only from history-only records that cannot affect future behavior; otherwise bump the schema.
@@ -168,7 +182,6 @@ A/B test:
 
 ## Open questions
 
-- Should route events replace some existing reward offers or always precede them?
 - Should risky routes guarantee stronger rewards or only improve reward odds?
 - Is there a future map screen, or should all route selection stay dialog-based for now?
 - What telemetry sink, if any, should production builds use?

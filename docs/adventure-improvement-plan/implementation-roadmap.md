@@ -81,7 +81,8 @@
 - [ ] Define `EliteNpcModifier` metadata and initial `Tracker` modifier.
 - [ ] Replace or supplement per-maze `List<NpcPolicyType>` with spawn specs carrying modifier metadata.
 - [ ] Lock modifier assignments in `AdventureRunController` and persist in `AdventureRunStateSnapshot`.
-- [ ] Persist in `GameEngineSnapshot` if modifiers affect paused active NPC state.
+- [ ] Persist every NPC modifier assignment in `GameEngineSnapshot.NpcSnapshot`
+      and bump `GameEngineSnapshot.SCHEMA_VERSION`.
 - [ ] Add modifier hooks in NPC target selection/movement logic.
 - [ ] Add renderer accent and legend rows using precomputed lookup data.
 - [ ] Add tests for null-modifier regression, deterministic assignment, snapshot round-trip, and mechanics.

@@ -116,9 +116,22 @@ If a perk adds active in-maze runtime state, persist it in `GameEngineSnapshot` 
 - `GameEngine.configureAdventureMaze(...)`
   - Accept derived gameplay knobs such as player speed multiplier, power-up duration bonus, or start-of-maze shield request.
 - `GameEngine` / `GameFragment`
-  - Report `Second Wind` consumption through an explicit callback to `AdventureActivity`; the activity must synchronously call `AdventureRunController.consumePerk(SECOND_WIND)` before gameplay continues so the next adventure snapshot persists `consumed = true`.
+  - When Second Wind triggers on the GL thread, atomically set a
+    `pendingConsumedRunPerk` engine field (also persisted in
+    `GameEngineSnapshot`, with a schema bump) and enter a gameplay barrier that
+    still renders and drains commands but performs no further gameplay steps.
+    Post the notification through `GameFragment` to the main thread; never call
+    the controller from the GL thread.
 - `AdventureActivity`
   - Add perk chooser dialog.
+  - On the main-thread notification, idempotently call
+    `AdventureRunController.consumePerk(SECOND_WIND)`, capture the engine
+    snapshot containing the pending marker, and durably save both pieces in one
+    `AdventureRunStateSnapshot`. Acknowledge the engine on the GL thread only
+    after that save succeeds; the acknowledgement clears the barrier. On
+    restore, a consumed controller perk plus the pending engine marker is
+    treated as an already-committed consumption and acknowledged without
+    granting the perk again.
   - Add active-perk summary to completion and pause/menu popovers.
 - HUD/popover summaries
   - Show compact active perks: `Quick Feet x2`, `Longer Charge x1`, `Second Wind ready/used`.
@@ -158,6 +171,9 @@ Guardrails:
   - Duration and movement modifiers apply once in the intended path.
   - NPC-collected FREEZE duration is unchanged by Longer Charge.
   - Second Wind consumption is reported to and persisted by the run controller.
+  - Second Wind's gameplay barrier remains active until the main-thread save is
+    acknowledged, and restore reconciles every process-death point before and
+    after that save without reusing or losing the perk.
 - Integration
   - Perk chooser appears at configured reward milestones.
   - Pause/resume during chooser does not reroll choices or lose committed stacks.

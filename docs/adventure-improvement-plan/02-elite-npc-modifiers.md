@@ -15,7 +15,7 @@ Adventure difficulty currently increases mostly by adding NPCs. More enemies can
 
 | Modifier | Mechanics | Counterplay | Notes |
 | --- | --- | --- | --- |
-| Tracker | +2 effective vision range and targets the visible player before any Adventurer, even when an Adventurer is closer. | Leave its effective vision, use invisibility/freeze, or let it chase you away from Adventurers. | Good first modifier; deliberately overrides the baseline nearest-target ranking. |
+| Tracker | On range-aware policies, +2 effective vision range and targets the visible player before any Adventurer, even when an Adventurer is closer. | Leave its effective vision, use invisibility/freeze, or let it chase you away from Adventurers. | Initially restricted to Patrol Guard, the current policy that uses `npcVisionRange`; Direct and Predictive have unlimited acquisition range and are ineligible. |
 | Sprinter | Every N NPC moves, takes one extra move if still on a valid path; capped to avoid chain captures in one frame. | Watch cadence, use slow/freeze, route through chokepoints. | Needs careful timing tests. |
 | Jammer | Power-ups within a small radius expire faster or cannot be magnet-pulled while the Jammer is nearby. | Lure away before collecting, prioritize Jammer avoidance. | Requires clear UI; defer if unclear. |
 | Guardian | Prefers patrolling near the exit until the player is close, then chases. | Plan an approach, use blast/teleport. | Can reuse patrol/guard policy ideas. |
@@ -27,6 +27,8 @@ Initial implementation recommendation: ship `Tracker`, then `Guardian`, then `Sp
 
 - Elite generation must be deterministic from the Adventure run seed and maze index, using an independent seed mix.
 - Lock each NPC's modifier assignment with the existing per-maze NPC policy lock so death replays preserve the same threats.
+- Filter modifier candidates by policy compatibility before seeded selection;
+  initially, assign Tracker only to `PATROL_GUARD`.
 - Suggested baseline caps:
   - Easy: no elites before maze 3; max 1 elite.
   - Medium: max 1 elite until final maze; final may have 2 if NPC count allows.
@@ -67,7 +69,9 @@ Possible implementation paths:
 
 1. Minimal path: extend Adventure per-maze state from `List<NpcPolicyType>` to `List<NpcSpawnSpec>`.
 2. Engine path: add `eliteModifier` metadata to `Npc` and teach policy execution to consult modifier hooks.
-3. Snapshot path: persist modifier metadata in `GameEngineSnapshot.NpcSnapshot` if modifiers affect active in-maze behavior or must survive paused-mid-maze resume.
+3. Snapshot path: add modifier metadata to `GameEngineSnapshot.NpcSnapshot` and
+   bump `GameEngineSnapshot.SCHEMA_VERSION`; every listed modifier affects active
+   in-maze behavior, so this is required for paused-mid-maze resume.
 
 Policy/modifier hooks:
 
@@ -99,7 +103,7 @@ Keep hooks narrow and explicit; avoid a generic event bus until at least two mod
 - `Policies.kt`
   - Apply modifier hooks around target selection, vision range, movement cadence, or patrol behavior.
 - `GameEngineSnapshot`
-  - Persist active NPC modifiers if paused-mid-maze resume needs them.
+  - Persist every active NPC modifier in `NpcSnapshot` and bump the schema.
 - `AdventureRunStateSnapshot`
   - Persist per-maze locked modifier list and any route-requested elite pressure.
 - `MazeRenderer`, `NpcIcons`, `LegendDialog`
@@ -128,7 +132,7 @@ Dashboard guardrails:
 | Determinism | Same run seed/maze index produces same policy and modifier list; death replay preserves it; snapshot round-trip preserves it. |
 | Regression | Existing direct/predictive/patrol behavior remains unchanged when modifier is `null`. |
 | Edge cases | Zero NPCs, fewer NPCs than elite cap, final maze, unknown/removed modifier in saved data. |
-| Mechanics | Tracker range changes target acquisition and prioritizes a visible player over a closer Adventurer; Guardian patrols near exit; Sprinter extra move respects cap and cannot move after terminal status. |
+| Mechanics | Tracker is assigned only to range-aware policies, extends Patrol Guard acquisition range, and prioritizes a visible player over a closer Adventurer; Guardian patrols near exit; Sprinter extra move respects cap and cannot move after terminal status. |
 | Rendering | Legend includes every modifier; renderer lookup handles every enum exhaustively without per-frame allocation. |
 
 ## Rollout, rollback, and risk mitigation
