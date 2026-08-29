@@ -50,8 +50,6 @@ Initial implementation recommendation: ship `Tracker`, then `Guardian`, then `Sp
 
 ```kotlin
 enum class EliteNpcModifier(
-    val label: String,
-    val description: String,
     val colorAccentRgb: Triple<Float, Float, Float>
 ) {
     TRACKER(...),
@@ -84,6 +82,10 @@ interface NpcModifierBehavior {
 }
 ```
 
+The enum owns stable IDs and rendering metadata only. Android UI maps each ID
+to the provisional `adventure_elite_*` string resources so labels and
+descriptions remain localizable.
+
 Keep hooks narrow and explicit; avoid a generic event bus until at least two modifiers need the same extension point.
 
 ## Rendering and legend updates
@@ -111,6 +113,18 @@ Keep hooks narrow and explicit; avoid a generic event bus until at least two mod
 
 ## Telemetry and balancing dashboard suggestions
 
+Canonical placeholder events:
+
+| Event | Properties |
+| --- | --- |
+| `elite_modifier_spawned` | `difficulty`, `maze_index`, `modifier_id`, `npc_count`, `elite_count`, `player_policy` |
+| `elite_modifier_outcome` | `difficulty`, `maze_index`, `modifier_id`, `completed`, `elapsed_seconds`, `steps`, `deaths_this_run` |
+| `adventure_death_context` | `difficulty`, `maze_index`, `modifier_id`, `death_cause`, `active_power_up` |
+
+Only aggregate values and stable catalogue IDs are allowed. Do not include raw
+or hashed seeds, positions, snapshot data, free-form text, or user/device
+identifiers.
+
 | Signal | Segment by |
 | --- | --- |
 | Win/loss rate on elite mazes | difficulty, maze index, modifier, NPC count |
@@ -137,7 +151,7 @@ Dashboard guardrails:
 
 ## Rollout, rollback, and risk mitigation
 
-- Roll out one modifier at a time behind a constant or remote-config placeholder.
+- Roll out one modifier at a time behind `AdventureFeatureFlags.ELITE_NPC_MODIFIERS_ENABLED`, which defaults off.
 - Start with low-risk `Tracker` on Medium/Hard only.
 - Keep all modifier assignment data additive and schema-versioned.
 - Roll back by setting elite cap to 0 and ignoring future generated modifiers; if persisted shape changes incompatibly, bump relevant snapshot schema to clear stale runs safely.

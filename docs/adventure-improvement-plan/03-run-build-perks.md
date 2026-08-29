@@ -82,10 +82,8 @@ enum class RunPerkTier { COMMON, UNCOMMON, RARE }
 
 data class RunPerkDefinition(
     val id: RunPerkId,
-    val label: String,
     val tier: RunPerkTier,
-    val maxStacks: Int,
-    val description: String
+    val maxStacks: Int
 )
 
 data class RunPerkStack(
@@ -99,6 +97,10 @@ data class PendingPerkOffer(
     val offeredPerks: List<RunPerkId>
 )
 ```
+
+Core definitions carry stable IDs and mechanics only. Android UI maps IDs to
+the provisional `adventure_perk_*` string resources so player-facing labels
+and descriptions remain localizable.
 
 `AdventureRunStateSnapshot` should add:
 
@@ -150,11 +152,14 @@ If a perk adds active in-maze runtime state, persist it in `GameEngineSnapshot` 
 
 | Event | Properties |
 | --- | --- |
-| `perk_offer_shown` | difficulty, mazeIndex, offeredPerkIds, currentStacks |
-| `perk_chosen` | perkId, stackAfterChoice, alternatives, livesRemaining |
-| `perk_effect_applied` | perkId, mazeIndex, affectedSystem, amount |
-| `perk_consumed` | perkId, trigger, mazeIndex |
-| `perk_run_outcome` | perkIds, stacks, completed, elapsedSeconds, deathsThisRun |
+| `perk_offer_shown` | `difficulty`, `maze_index`, `offered_perk_ids`, `current_stacks` |
+| `perk_chosen` | `perk_id`, `stack_after_choice`, `offered_perk_ids`, `lives_remaining` |
+| `perk_effect_applied` | `perk_id`, `maze_index`, `affected_system`, `amount` |
+| `perk_consumed` | `perk_id`, `trigger`, `maze_index` |
+| `perk_run_outcome` | `perk_ids`, `current_stacks`, `completed`, `total_elapsed_seconds`, `deaths_this_run` |
+
+These names come from the shared telemetry allowlists. Do not add raw or hashed
+seeds, positions, snapshot data, free-form text, or user/device identifiers.
 
 Guardrails:
 
@@ -185,7 +190,8 @@ Guardrails:
 
 ## Staged rollout
 
-1. Add perk data definitions and tests with no offers enabled.
+1. Add perk data definitions and tests with no offers enabled; keep
+   `AdventureFeatureFlags.RUN_BUILD_PERKS_ENABLED` at its default `false`.
 2. Enable common-only perks on Medium internal builds.
 3. Add uncommon perks after HUD summary exists.
 4. Add rare perks only after telemetry or manual balance confirms common/uncommon caps.

@@ -2,7 +2,7 @@
 
 ## Problem statement
 
-Adventure mode currently advances through a mostly fixed sequence: win a maze, receive either a player-policy unlock or a starting power-up choice, then enter the next maze. NPC count ramps, but the player has limited agency over the shape of the run. Route Events add lightweight branching decisions every 2-3 mazes so the player can choose safety, risk, or utility tradeoffs.
+Adventure mode currently advances through a mostly fixed sequence: win a maze, choose a starting power-up for the next maze, then continue. Every automated player policy unlocks after maze 1 and every non-final win offers a power-up. NPC count ramps, but the player has limited agency over the shape of the run. Route Events add lightweight branching decisions every 2-3 mazes so the player can choose safety, risk, or utility tradeoffs without silently changing that baseline reward cadence.
 
 ## Player experience goals
 
@@ -20,12 +20,10 @@ Adventure mode currently advances through a mostly fixed sequence: win a maze, r
   2. `AdventureActivity` shows route-event dialog if eligible.
   3. Player chooses one route.
   4. Controller records and applies the route modifier.
-  5. The existing parity reward proceeds: odd-numbered maze wins offer a
-     player-policy unlock and even-numbered maze wins offer a starting power-up.
-     A Supply Cache replaces the even-maze starting-power-up chooser with its
-     immediate choice; on an odd win it precedes, but does not replace, the
-     policy-unlock chooser. Quiet Corridor reduces only the following parity
-     chooser from three options to two.
+  5. The existing starting-power-up reward proceeds after every non-final win.
+     A Supply Cache replaces that chooser with its immediate power-up choice so
+     the player never sees duplicate power-up dialogs. Quiet Corridor reduces
+     only that following chooser from three options to two.
   6. Next maze starts with the chosen modifier applied.
 - Each event affects either the next maze only or a clearly bounded run-level counter.
 
@@ -38,7 +36,7 @@ Adventure mode currently advances through a mostly fixed sequence: win a maze, r
 | Risky | Ambush Shortcut | Next maze adds +1 NPC or one elite modifier; completing it grants an extra reward reroll. | Tension, greed |
 | Risky | Cursed Gate | Next maze starts with shorter power-up pickup lifetime; completing it grants +1 life progress toward streak bonus. | High stakes |
 | Utility | Supply Cache | Choose one starting power-up immediately; suppresses the normal even-maze power-up offer if both would occur. | Preparation |
-| Utility | Training Room | Temporarily unlock one automated player policy for the next maze only. | Experimentation |
+| Utility (deferred) | Training Room | Temporarily unlock one automated player policy for the next maze only. Exclude it from the initial offer pool because current runs already unlock every automated policy after maze 1. | Experimentation |
 
 ## Balancing rules and guardrails
 
@@ -68,9 +66,7 @@ enum class RouteEventEffectType {
 
 data class RouteEventChoice(
     val id: String,
-    val title: String,
     val category: RouteEventCategory,
-    val description: String,
     val effects: List<RouteEventEffect>
 )
 
@@ -87,6 +83,10 @@ data class PendingRouteEvent(
     val effects: List<RouteEventEffect>
 )
 ```
+
+Core models carry stable IDs and mechanics only. `AdventureActivity` maps IDs to
+the provisional `adventure_route_*` string resources; player-facing text does
+not live in pure-Kotlin state or snapshots.
 
 `ELITE_MODIFIER_HINT` is reserved for risky Ambush-style route choices that request one elite threat on the next maze while still deferring the concrete modifier assignment to the Elite NPC system's seeded selection rules.
 
@@ -110,12 +110,12 @@ Persistence changes:
   - Add `applyRouteEventChoice(choice)` before reward selection commits.
   - Include selected route effects when building `MazeStartupSpec`.
   - Resolve `NEXT_ROUTE_PREVIEW` into persisted preview data and include it in
-    the following parity reward result.
+    the following starting-power-up reward result.
 - `AdventureRunStateSnapshot`
   - Persist selected route effects and route history.
   - Reject snapshots containing an unknown pending choice or effect because dropping gameplay state could change the next maze. Unknown IDs may be discarded only from history-only records that cannot affect future behavior; otherwise bump the schema.
 - `AdventureActivity`
-  - Insert route-event dialog before `showUnlockChooser(...)` / `showStartingPowerUpChooser(...)`.
+  - Insert the route-event dialog before `showStartingPowerUpChooser(...)`.
   - Persist only after player commits all required choices, matching the current reward-dialog safety pattern.
 - `GameFragment` / `GameEngine`
   - Prefer extending `MazeStartupSpec` first; only add engine APIs for effects that cannot be represented as NPC count, policy list, or starting power-up.
@@ -133,7 +133,7 @@ Choose your route:
 [Supply Cache]
   Pick a starting power-up before the next maze.
 
-Continue -> existing reward chooser -> countdown -> next maze
+Continue -> existing starting-power-up chooser -> countdown -> next maze
 ```
 
 Copy rules:
@@ -146,10 +146,14 @@ Copy rules:
 
 | Event | Properties |
 | --- | --- |
-| `route_event_offered` | difficulty, runSeedHash, mazeIndex, offeredChoiceIds, categories |
-| `route_event_chosen` | difficulty, mazeIndex, choiceId, category, livesRemaining, deathsThisRun |
-| `route_event_applied` | nextMazeIndex, choiceId, npcCountDelta, rewardDelta, eliteHint |
-| `route_event_outcome` | choiceId, nextMazeWon, elapsedSeconds, steps, deathCountDelta |
+| `route_event_offered` | `difficulty`, `maze_index`, `offered_choice_ids`, `offered_categories` |
+| `route_event_chosen` | `difficulty`, `maze_index`, `choice_id`, `category`, `lives_remaining`, `deaths_this_run` |
+| `route_event_applied` | `next_maze_index`, `choice_id`, `npc_count_delta`, `reward_option_delta`, `elite_requested` |
+| `route_event_outcome` | `choice_id`, `next_maze_won`, `elapsed_seconds`, `steps`, `death_count_delta` |
+
+These names come from `AdventureTelemetryEventNames` and
+`AdventureTelemetryPropertyNames`. Do not add raw or hashed seeds, positions,
+snapshot data, free-form text, or user/device identifiers.
 
 A/B test:
 
@@ -176,7 +180,7 @@ A/B test:
 
 ## Rollout strategy and rollback plan
 
-- Ship behind an internal feature flag or constant defaulting off until tests and copy are stable.
+- Ship behind `AdventureFeatureFlags.ROUTE_EVENTS_ENABLED`, which defaults off until tests and copy are stable.
 - Enable only on Medium for first dogfood pass; then Easy/Hard after balance review.
 - Roll back by disabling new offer generation while continuing to apply compatible stored pending effects; if pending effects can no longer be applied, bump `AdventureRunStateSnapshot` schema to clear in-progress runs safely.
 
@@ -184,4 +188,4 @@ A/B test:
 
 - Should risky routes guarantee stronger rewards or only improve reward odds?
 - Is there a future map screen, or should all route selection stay dialog-based for now?
-- What telemetry sink, if any, should production builds use?
+- Which reviewed telemetry sink, if any, should production builds use after the no-op scaffolding?
