@@ -23,6 +23,17 @@ A lightweight Android 2D top-down maze game using libGDX rendering.
 - Unit tests for maze generation/pathfinding/policies
 - Instrumented UI smoke test for game host and controls
 
+## Adventure mode
+
+Adventure is one of the two top-level game modes (alongside Classic). It
+runs the player through a series of mazes with a shared pool of lives,
+losing a life when caught by an NPC or when an Adventurer reaches the
+exit first, and rewarding progress with strategy unlocks, power-up
+choices, and bonus lives. A completed run reports total time, steps, and
+deaths, tracking a best time across attempts.
+
+![Adventure mode screenshot](docs/images/adventure-mode-screenshot.jpg)
+
 ## Prerequisites
 
 - JDK 17
