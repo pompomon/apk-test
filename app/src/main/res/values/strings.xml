@@ -96,4 +96,67 @@
     <string name="adventure_lives_plural">lives</string>
     <string name="adventure_pick_player_strategy">Switch active player strategy</string>
     <string name="adventure_menu_title">Menu</string>
+
+    <!-- Adventure route events (provisional; unused while the feature is disabled) -->
+    <string name="adventure_route_chooser_title">Choose your route</string>
+    <string name="adventure_route_summary_title">Upcoming route</string>
+    <string name="adventure_route_category_safe">Safe</string>
+    <string name="adventure_route_category_risky">Risky</string>
+    <string name="adventure_route_category_utility">Utility</string>
+    <string name="adventure_route_scope_next_maze">Next maze</string>
+    <string name="adventure_route_scope_this_run">This run</string>
+    <string name="adventure_route_scope_once">Once</string>
+    <string name="adventure_route_quiet_corridor_name">Quiet Corridor</string>
+    <string name="adventure_route_quiet_corridor_description">Next maze: -1 NPC, subject to the difficulty minimum. Next reward: -1 choice.</string>
+    <string name="adventure_route_scout_map_name">Scout Map</string>
+    <string name="adventure_route_scout_map_description">Reveal the next maze NPC count and upcoming route category.</string>
+    <string name="adventure_route_ambush_shortcut_name">Ambush Shortcut</string>
+    <string name="adventure_route_ambush_shortcut_description">Next maze: +1 NPC or 1 elite. Win it to gain 1 reward reroll.</string>
+    <string name="adventure_route_cursed_gate_name">Cursed Gate</string>
+    <string name="adventure_route_cursed_gate_description">Next maze: power-up pickups expire sooner. Win it to gain +1 streak progress.</string>
+    <string name="adventure_route_supply_cache_name">Supply Cache</string>
+    <string name="adventure_route_supply_cache_description">Choose 1 starting power-up now instead of the normal next-maze reward.</string>
+    <string name="adventure_route_training_room_name">Training Room</string>
+    <string name="adventure_route_training_room_description">Temporarily unlock 1 automated strategy for the next maze.</string>
+    <string name="adventure_route_choice_accessibility">%1$s, %2$s route. %3$s</string>
+
+    <!-- Adventure elite NPC modifiers (provisional; unused while the feature is disabled) -->
+    <string name="adventure_elite_summary_title">Elite modifiers</string>
+    <string name="adventure_elite_tracker_name">Tracker</string>
+    <string name="adventure_elite_tracker_description">Patrol Guard gains +2 vision range and targets a visible player before an Adventurer.</string>
+    <string name="adventure_elite_guardian_name">Guardian</string>
+    <string name="adventure_elite_guardian_description">Stays near the exit until the player comes within its chase range.</string>
+    <string name="adventure_elite_sprinter_name">Sprinter</string>
+    <string name="adventure_elite_sprinter_description">Takes 1 extra valid move after every %1$d normal moves.</string>
+    <string name="adventure_elite_jammer_name">Jammer</string>
+    <string name="adventure_elite_jammer_description">Power-up pickups within %1$d cells expire faster and cannot be pulled by Magnet.</string>
+    <string name="adventure_elite_sentinel_name">Sentinel</string>
+    <string name="adventure_elite_sentinel_description">Moves slower, but Freeze lasts only %1$.1f seconds against it.</string>
+    <string name="adventure_elite_indicator_accessibility">%1$s elite modifier: %2$s</string>
+
+    <!-- Adventure run-build perks (provisional; unused while the feature is disabled) -->
+    <string name="adventure_perk_chooser_title">Choose a run perk</string>
+    <string name="adventure_perk_summary_title">Active run perks</string>
+    <string name="adventure_perk_tier_common">Common</string>
+    <string name="adventure_perk_tier_uncommon">Uncommon</string>
+    <string name="adventure_perk_tier_rare">Rare</string>
+    <string name="adventure_perk_scope_this_run">This run</string>
+    <string name="adventure_perk_scope_each_maze">Each maze</string>
+    <string name="adventure_perk_scope_once_per_run">Once per run</string>
+    <string name="adventure_perk_stack_summary">%1$s · Stack %2$d/%3$d</string>
+    <string name="adventure_perk_quick_feet_name">Quick Feet</string>
+    <string name="adventure_perk_quick_feet_description">Move 5 percent faster per stack, up to 3 stacks.</string>
+    <string name="adventure_perk_longer_charge_name">Longer Charge</string>
+    <string name="adventure_perk_longer_charge_description">Beneficial timed power-ups last +1 second per stack, up to 3 stacks.</string>
+    <string name="adventure_perk_pocket_magnet_name">Pocket Magnet</string>
+    <string name="adventure_perk_pocket_magnet_description">Magnet reaches +1 cell farther per stack, up to 2 stacks.</string>
+    <string name="adventure_perk_first_shield_name">First Shield</string>
+    <string name="adventure_perk_first_shield_description">Start each maze with a short Shield when no starting power-up is pending.</string>
+    <string name="adventure_perk_scout_sense_name">Scout Sense</string>
+    <string name="adventure_perk_scout_sense_description">Reveal the next maze NPC and elite counts before choosing a reward.</string>
+    <string name="adventure_perk_second_wind_name">Second Wind</string>
+    <string name="adventure_perk_second_wind_description">Once per run, survive 1 capture and trigger a 1-second Freeze pulse.</string>
+    <string name="adventure_perk_risk_dividend_name">Risk Dividend</string>
+    <string name="adventure_perk_risk_dividend_description">Completing a risky route adds 1 choice to the next reward.</string>
+    <string name="adventure_perk_accessibility">%1$s, %2$s perk, stack %3$d of %4$d. %5$s</string>
 </resources>

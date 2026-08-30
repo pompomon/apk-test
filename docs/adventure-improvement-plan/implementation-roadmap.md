@@ -20,15 +20,24 @@
 
 ### Tasks
 
-- [ ] Add Adventure analytics event constants/placeholders and no-op sink interfaces if a telemetry layer is not present.
-- [ ] Add seed-fixture tests around `AdventureRunController.prepareCurrentMaze()` and reward sequencing.
-- [ ] Add string resources for route, elite, and perk terminology behind unused keys.
-- [ ] Add internal feature flags/constants defaulting off for each feature.
+- [x] Add Adventure analytics event constants/placeholders and a no-op sink interface.
+- [x] Add seed-fixture tests around `AdventureRunController.prepareCurrentMaze()` and reward sequencing.
+- [x] Add string resources for route, elite, and perk terminology behind unused keys.
+- [x] Add internal feature flags/constants defaulting off for each feature.
+
+### Landed contracts
+
+- `telemetry/AdventureTelemetry.kt` owns the canonical event/property allowlists, validated event envelope, sink interface, and no-op sink. No analytics SDK, network permission, or runtime hook is installed.
+- Allowed properties are aggregate gameplay values and stable catalogue IDs. Raw or hashed run seeds, coordinates, snapshot JSON, free-form text, and user/device identifiers are prohibited.
+- `AdventureFeatureFlags.ROUTE_EVENTS_ENABLED`, `ELITE_NPC_MODIFIERS_ENABLED`, and `RUN_BUILD_PERKS_ENABLED` are the three rollout gates; all default to `false`.
+- `AdventureRunGoldenFixtureTest` pins Easy/Medium/Hard maze seeds, NPC assignments, rewards, unlocks, bonus lives, terminal outcomes, retries, and snapshot rehydration.
+- `adventure_route_*`, `adventure_elite_*`, and `adventure_perk_*` resources reserve localization-ready copy. The wording remains provisional until product/design approval and the keys stay unused while flags are off.
+- The fixtures lock the current reward contract: all automated policies unlock after maze 1 and every non-final win offers a starting power-up. Any parity-based reward redesign must be proposed and tested separately.
 
 ### Dependencies
 
-- Agreement on event names and privacy policy for any telemetry.
-- Product/design sign-off on terminology.
+- Privacy review and sink selection before any production telemetry is enabled.
+- Product/design sign-off before provisional terminology is shown to players.
 
 ### Risks and mitigations
 
@@ -42,6 +51,7 @@
 - New constants compile and are covered by simple tests where useful.
 - No gameplay behavior changes while flags are off.
 - Existing JVM tests pass.
+- Neither Adventure nor engine snapshot schema changes.
 
 ## Phase 1 — Route Events
 
@@ -150,7 +160,7 @@
 
 ## Suggested PR slicing strategy
 
-1. **Docs and scaffolding PR** — add this plan, event-name constants, flags defaulting off, and no gameplay changes.
+1. **Docs and scaffolding PR** — add this plan, event-name constants, flags defaulting off, golden fixtures, and no gameplay changes.
 2. **Route model PR** — pure Kotlin models/generator/snapshot tests; no UI enabled.
 3. **Route UI/effects PR** — dialog flow and bounded effects behind flag.
 4. **Elite metadata PR** — enum/metadata/render legend support with no spawned elites.
