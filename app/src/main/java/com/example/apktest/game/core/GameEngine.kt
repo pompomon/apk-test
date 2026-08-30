@@ -1079,9 +1079,11 @@ class GameEngine(
      * Free cells eligible for Adventurer spawning: excludes the player start,
      * the exit, and any already-placed NPC positions, and requires each cell to
      * sit outside [DifficultyPreset.adventurerPlayerSpawnBuffer] Chebyshev cells
-     * from the player start and to have a valid path to the exit. Ranking
-     * within this eligible set (farthest-Chebyshev shortlist + random pick) is
-     * performed per-Adventurer by [pickAdventurerSpawn].
+     * from the player start. A candidate's Chebyshev distance to the exit must
+     * also be within [ADVENTURER_EXIT_DISTANCE_TOLERANCE] cells of the player's
+     * distance to the exit, and the candidate must have a valid path to the
+     * exit. Ranking within this eligible set (farthest-Chebyshev shortlist +
+     * random pick) is performed per-Adventurer by [pickAdventurerSpawn].
      */
     private fun adventurerSpawnCandidates(): List<GridPos> {
         val reserved = HashSet<GridPos>(npcs.size + 2).apply {
@@ -1089,12 +1091,20 @@ class GameEngine(
             add(maze.exit)
             npcs.forEach { add(it.position) }
         }
+        val playerExitDistance = chebyshevDistance(maze.start, maze.exit)
         val candidates = mutableListOf<GridPos>()
         for (y in 0 until maze.height) {
             for (x in 0 until maze.width) {
                 val pos = GridPos(x, y)
                 if (pos in reserved) continue
                 if (chebyshevDistance(pos, maze.start) < difficulty.adventurerPlayerSpawnBuffer) {
+                    continue
+                }
+                val candidateExitDistance = chebyshevDistance(pos, maze.exit)
+                if (
+                    abs(candidateExitDistance - playerExitDistance) >
+                    ADVENTURER_EXIT_DISTANCE_TOLERANCE
+                ) {
                     continue
                 }
                 val path = navigator.bfsPath(pos, maze.exit)
@@ -1477,6 +1487,8 @@ class GameEngine(
          * randomly spawned from (see [pickAdventurerSpawn]).
          */
         private const val ADVENTURER_SPAWN_SHORTLIST_SIZE = 5
+        /** Inclusive difference allowed between player and Adventurer Chebyshev distances to the exit. */
+        private const val ADVENTURER_EXIT_DISTANCE_TOLERANCE = 2
         /** Default duration of the manual-input override (see [queueManualMove]). */
         const val MANUAL_OVERRIDE_DURATION_SECONDS = 3f
         /** Default duration of the pre-game countdown (see [startCountdown]). */

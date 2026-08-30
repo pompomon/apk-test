@@ -44,12 +44,7 @@ class AdventurerTest {
         // farthest-by-Chebyshev-distance eligible cells remaining at the time
         // it was chosen (earlier Adventurers' cells already removed from the
         // pool).
-        val eligible = allCells(first.maze).filter {
-            it != first.maze.start &&
-                it != first.maze.exit &&
-                chebyshevDistance(it, first.maze.start) >= preset.adventurerPlayerSpawnBuffer &&
-                first.navigator.bfsPath(it, first.maze.exit).isNotEmpty()
-        }
+        val eligible = eligibleAdventurerSpawnCells(first, preset)
         val chosenSoFar = mutableSetOf<GridPos>()
         for (position in positions) {
             val shortlist = eligible
@@ -74,12 +69,7 @@ class AdventurerTest {
         val preset = adventurerPreset(adventurerCount = 1)
         val engine = GameEngine(preset, SEED)
 
-        val eligible = allCells(engine.maze).filter {
-            it != engine.maze.start &&
-                it != engine.maze.exit &&
-                chebyshevDistance(it, engine.maze.start) >= preset.adventurerPlayerSpawnBuffer &&
-                engine.navigator.bfsPath(it, engine.maze.exit).isNotEmpty()
-        }
+        val eligible = eligibleAdventurerSpawnCells(engine, preset)
         val shortlist = eligible
             .sortedWith(
                 compareByDescending<GridPos> { chebyshevDistance(it, engine.maze.start) }
@@ -93,6 +83,52 @@ class AdventurerTest {
                 "5 farthest eligible cells from the player start",
             engine.adventurers.single().position in shortlist
         )
+    }
+
+    @Test
+    fun adventurerSpawnsWithinPlayerExitChebyshevDistanceTolerance() {
+        val engine = GameEngine(adventurerPreset(adventurerCount = 3), SEED)
+        val playerExitDistance = chebyshevDistance(engine.maze.start, engine.maze.exit)
+
+        assertTrue(engine.adventurers.isNotEmpty())
+        engine.adventurers.forEach { adventurer ->
+            val adventurerExitDistance = chebyshevDistance(adventurer.position, engine.maze.exit)
+            assertTrue(
+                "Adventurer ${adventurer.id} exit-distance difference must be at most " +
+                    ADVENTURER_EXIT_DISTANCE_TOLERANCE,
+                abs(adventurerExitDistance - playerExitDistance) <=
+                    ADVENTURER_EXIT_DISTANCE_TOLERANCE
+            )
+        }
+    }
+
+    @Test
+    fun adventurerSpawn_usesAllAvailableCandidatesWhenFewerThanFiveRemain() {
+        val preset = adventurerPreset(
+            adventurerCount = 5,
+            mazeWidth = 4,
+            mazeHeight = 6,
+            adventurerPlayerSpawnBuffer = 4
+        )
+        val engine = GameEngine(preset, seed = 0L)
+        val eligible = eligibleAdventurerSpawnCells(engine, preset)
+
+        assertEquals(4, eligible.size)
+        assertEquals(eligible.toSet(), engine.adventurers.map { it.position }.toSet())
+    }
+
+    @Test
+    fun adventurerSpawn_leavesRosterEmptyWhenNoCandidateIsEligible() {
+        val preset = adventurerPreset(
+            adventurerCount = 1,
+            mazeWidth = 4,
+            mazeHeight = 6,
+            adventurerPlayerSpawnBuffer = 100
+        )
+        val engine = GameEngine(preset, seed = 0L)
+
+        assertTrue(eligibleAdventurerSpawnCells(engine, preset).isEmpty())
+        assertTrue(engine.adventurers.isEmpty())
     }
 
     @Test
@@ -367,6 +403,8 @@ class AdventurerTest {
 
     private fun adventurerPreset(
         adventurerCount: Int,
+        mazeWidth: Int = 12,
+        mazeHeight: Int = 16,
         npcCount: Int = 0,
         playerMovesPerSecond: Float = 5f,
         adventurerSpeedRatio: Float = 0.9f,
@@ -374,8 +412,8 @@ class AdventurerTest {
         initialPowerUpTypes: List<PowerUpType> = emptyList()
     ): DifficultyPreset = DifficultyPreset(
         name = "AdventurerTest",
-        mazeWidth = 12,
-        mazeHeight = 16,
+        mazeWidth = mazeWidth,
+        mazeHeight = mazeHeight,
         npcCount = npcCount,
         playerMovesPerSecond = playerMovesPerSecond,
         npcMovesPerSecond = 1f,
@@ -386,6 +424,23 @@ class AdventurerTest {
         adventurerPolicyType = PlayerPolicyType.BFS_EXIT,
         adventurerPlayerSpawnBuffer = adventurerPlayerSpawnBuffer
     )
+
+    private fun eligibleAdventurerSpawnCells(
+        engine: GameEngine,
+        preset: DifficultyPreset
+    ): List<GridPos> {
+        val playerExitDistance = chebyshevDistance(engine.maze.start, engine.maze.exit)
+        val npcPositions = engine.npcs.mapTo(mutableSetOf()) { it.position }
+        return allCells(engine.maze).filter {
+            it != engine.maze.start &&
+                it != engine.maze.exit &&
+                it !in npcPositions &&
+                chebyshevDistance(it, engine.maze.start) >= preset.adventurerPlayerSpawnBuffer &&
+                abs(chebyshevDistance(it, engine.maze.exit) - playerExitDistance) <=
+                ADVENTURER_EXIT_DISTANCE_TOLERANCE &&
+                engine.navigator.bfsPath(it, engine.maze.exit).isNotEmpty()
+        }
+    }
 
     private fun allCells(maze: Maze): List<GridPos> = buildList {
         for (y in 0 until maze.height) {
@@ -398,5 +453,6 @@ class AdventurerTest {
 
     private companion object {
         const val SEED = 73L
+        const val ADVENTURER_EXIT_DISTANCE_TOLERANCE = 2
     }
 }
