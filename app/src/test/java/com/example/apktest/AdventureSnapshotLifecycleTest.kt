@@ -11,6 +11,7 @@ class AdventureSnapshotLifecycleTest {
             val lifecycle = AdventureSnapshotLifecycle.resolve(foreground, finishing = true, destroyed = false)
             assertTrue(lifecycle.canPersist)
             assertFalse(lifecycle.canPresent)
+            assertTrue(lifecycle.requiresBlockingPersist)
         }
     }
 
@@ -21,6 +22,7 @@ class AdventureSnapshotLifecycleTest {
                 val lifecycle = AdventureSnapshotLifecycle.resolve(foreground, finishing, destroyed = true)
                 assertFalse(lifecycle.canPersist)
                 assertFalse(lifecycle.canPresent)
+                assertFalse(lifecycle.requiresBlockingPersist)
             }
         }
     }
@@ -30,8 +32,10 @@ class AdventureSnapshotLifecycleTest {
         val background = AdventureSnapshotLifecycle.resolve(false, false, false)
         assertTrue(background.canPersist)
         assertFalse(background.canPresent)
+        assertFalse(background.requiresBlockingPersist)
         val foreground = AdventureSnapshotLifecycle.resolve(true, false, false)
         assertTrue(foreground.canPersist)
         assertTrue(foreground.canPresent)
+        assertFalse(foreground.requiresBlockingPersist)
     }
 }

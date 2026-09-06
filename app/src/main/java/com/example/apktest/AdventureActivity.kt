@@ -196,11 +196,6 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         attachMaze(spec.copy(midMazeSnapshot = snapshot))
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
-    internal fun awaitAdventureWritesForTesting() {
-        autosaveExecutor.submit {}.get(SAVE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
-    }
-
     private val tickHandler = Handler(Looper.getMainLooper())
     private val tickRunnable = object : Runnable {
         override fun run() {
@@ -557,7 +552,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun handleCapturedSnapshot(engineSnapshot: GameEngineSnapshot) {
-        if (!snapshotLifecycle().canPersist || decisionPending() ||
+        val lifecycle = snapshotLifecycle()
+        if (!lifecycle.canPersist || decisionPending() ||
             !AdventurePerkSnapshotGuard.accepts(
                 engineSnapshot, controller.state.currentMazeSeed, controller.state.runPerks
             )) return
@@ -573,7 +569,11 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             )
             GameStatus.RUNNING, GameStatus.PAUSED -> {
                 controller.recordMidMazeSnapshot(engineSnapshot)
-                persistAdventureStateAsync()
+                if (lifecycle.requiresBlockingPersist) {
+                    persistAdventureStateBlocking()
+                } else {
+                    persistAdventureStateAsync()
+                }
             }
         }
     }

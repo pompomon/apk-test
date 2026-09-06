@@ -283,7 +283,6 @@ class AdventurePerkFlowTest {
                 // Deterministically deliver the GL callback after Back marked the host
                 // finishing, but before destruction invalidates this save session.
                 it.handleCapturedSnapshotForTesting(latest)
-                it.awaitAdventureWritesForTesting()
                 assertNull(it.rewardDialogForTesting())
                 assertTrue(it.perkFeedbackForTesting().isEmpty())
             }
