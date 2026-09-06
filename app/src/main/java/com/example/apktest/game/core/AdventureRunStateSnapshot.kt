@@ -26,7 +26,7 @@ data class AdventureRunStateSnapshot(
     val unlockedPlayerPolicies: List<PlayerPolicyType>,
     val currentPlayerPolicy: PlayerPolicyType,
     val currentMazeSeed: Long?,
-    val currentMazeNpcPolicies: List<NpcPolicyType>,
+    val currentMazeNpcSpawnSpecs: List<NpcSpawnSpec>,
     val currentMazeSnapshot: GameEngineSnapshot?,
     val status: AdventureStatus,
     val lastAutomatedPlayerPolicy: PlayerPolicyType? = null,
@@ -35,7 +35,7 @@ data class AdventureRunStateSnapshot(
     val totalElapsedSeconds: Float = 0f,
     val totalSteps: Int = 0,
     val deathsThisRun: Int = 0,
-    val currentMazeNpcCount: Int? = currentMazeSeed?.let { currentMazeNpcPolicies.size },
+    val currentMazeNpcCount: Int? = currentMazeSeed?.let { currentMazeNpcSpawnSpecs.size },
     val pendingReward: PendingAdventureReward? = null,
     val activeRoute: PendingRouteEvent? = null,
     val routeHistory: List<RouteEventHistoryEntry> = emptyList(),
@@ -43,6 +43,9 @@ data class AdventureRunStateSnapshot(
     val routeEventOrdinal: Int = 0,
     val rewardRerolls: Int = 0
 ) {
+    val currentMazeNpcPolicies: List<NpcPolicyType>
+        get() = currentMazeNpcSpawnSpecs.map { it.policyType }
+
     fun toJson(): String = JSONObject().apply {
         put(KEY_VERSION, schemaVersion)
         put(KEY_RUN_SEED, runSeed)
@@ -57,9 +60,7 @@ data class AdventureRunStateSnapshot(
         }
         put(KEY_AUTO_PROMPT_SHOWN, automatedPolicyPromptShown)
         if (currentMazeSeed != null) put(KEY_MAZE_SEED, currentMazeSeed)
-        put(KEY_MAZE_NPC_POLICIES, JSONArray().apply {
-            currentMazeNpcPolicies.forEach { put(it.name) }
-        })
+        put(KEY_MAZE_NPC_SPAWN_SPECS, AdventureRouteSnapshotCodec.spawnSpecsToJson(currentMazeNpcSpawnSpecs))
         if (currentMazeSnapshot != null) {
             // Embed the engine snapshot's JSON as a string so its own
             // schema version is preserved verbatim. Parsing on the way
@@ -84,11 +85,11 @@ data class AdventureRunStateSnapshot(
     }.toString()
 
     companion object {
-        // v3 requires exact pending reward stages/offers, route effects and locked NPC counts.
-        // Older saves cannot establish which reward decisions have already committed.
+        // v4 requires locked per-NPC policies and explicit nullable elite modifier IDs.
+        // Older saves cannot establish a complete modifier assignment.
         // Route mechanics/balance changes need a schema bump: resolved effects are
         // checked against the supplied configuration, not silently reinterpreted.
-        const val SCHEMA_VERSION = 3
+        const val SCHEMA_VERSION = 4
 
         private const val KEY_VERSION = "v"
         private const val KEY_RUN_SEED = "runSeed"
@@ -101,7 +102,7 @@ data class AdventureRunStateSnapshot(
         private const val KEY_LAST_AUTO_POLICY = "lastAutoPolicy"
         private const val KEY_AUTO_PROMPT_SHOWN = "autoPromptShown"
         private const val KEY_MAZE_SEED = "mazeSeed"
-        private const val KEY_MAZE_NPC_POLICIES = "mazeNpcPolicies"
+        private const val KEY_MAZE_NPC_SPAWN_SPECS = "mazeNpcSpawnSpecs"
         private const val KEY_MAZE_SNAPSHOT = "mazeSnapshot"
         private const val KEY_STATUS = "status"
         private const val KEY_PENDING_POWERUP = "pendingPowerUp"
@@ -128,7 +129,7 @@ data class AdventureRunStateSnapshot(
                 lastAutomatedPlayerPolicy = state.lastAutomatedPlayerPolicy,
                 automatedPolicyPromptShown = state.automatedPolicyPromptShown,
                 currentMazeSeed = state.currentMazeSeed,
-                currentMazeNpcPolicies = state.currentMazeNpcPolicies.toList(),
+                currentMazeNpcSpawnSpecs = state.currentMazeNpcSpawnSpecs.toList(),
                 currentMazeSnapshot = state.currentMazeSnapshot,
                 status = state.status,
                 pendingStartingPowerUp = state.pendingStartingPowerUp,
@@ -178,11 +179,9 @@ data class AdventureRunStateSnapshot(
                         // The remembered auto policy is only valid when it is non-MANUAL and still unlocked.
                         ?.takeIf { it != PlayerPolicyType.MANUAL && it in distinctUnlocked }
                 } else null
-                val mazePolicies = if (obj.has(KEY_MAZE_NPC_POLICIES)) {
-                    obj.getJSONArray(KEY_MAZE_NPC_POLICIES).let { arr ->
-                        List(arr.length()) { i -> NpcPolicyType.valueOf(arr.getString(i)) }
-                    }
-                } else emptyList()
+                val mazeSpawnSpecs = AdventureRouteSnapshotCodec.spawnSpecsFromJson(
+                    obj.getJSONArray(KEY_MAZE_NPC_SPAWN_SPECS)
+                )
                 val mazeSeed = if (obj.has(KEY_MAZE_SEED) && !obj.isNull(KEY_MAZE_SEED)) {
                     obj.requiredLong(KEY_MAZE_SEED)
                 } else null
@@ -212,7 +211,7 @@ data class AdventureRunStateSnapshot(
                     lastAutomatedPlayerPolicy = lastAutoPolicy,
                     automatedPolicyPromptShown = obj.optBoolean(KEY_AUTO_PROMPT_SHOWN, false),
                     currentMazeSeed = mazeSeed,
-                    currentMazeNpcPolicies = mazePolicies,
+                    currentMazeNpcSpawnSpecs = mazeSpawnSpecs,
                     currentMazeSnapshot = mazeSnapshot,
                     status = AdventureStatus.valueOf(obj.getString(KEY_STATUS)),
                     pendingStartingPowerUp = pendingPowerUp,
@@ -284,7 +283,7 @@ data class AdventureRunStateSnapshot(
         lastAutomatedPlayerPolicy = lastAutomatedPlayerPolicy,
         automatedPolicyPromptShown = automatedPolicyPromptShown,
         currentMazeSeed = currentMazeSeed,
-        currentMazeNpcPolicies = currentMazeNpcPolicies.toList(),
+        currentMazeNpcSpawnSpecs = currentMazeNpcSpawnSpecs.toList(),
         currentMazeSnapshot = currentMazeSnapshot,
         status = status,
         pendingStartingPowerUp = pendingStartingPowerUp,
@@ -303,17 +302,24 @@ data class AdventureRunStateSnapshot(
     private fun matchesLockedMaze(engine: GameEngineSnapshot): Boolean =
         status == AdventureStatus.IN_PROGRESS && pendingReward == null &&
             engine.matchesAdventureMaze(difficultyName, currentMazeSeed, currentMazeNpcCount,
-                currentMazeNpcPolicies, activeRoute?.pickupLifetimeSeconds)
+                currentMazeNpcSpawnSpecs, activeRoute?.pickupLifetimeSeconds)
 }
 
 internal fun GameEngineSnapshot.matchesAdventureMaze(
     difficulty: String,
     mazeSeed: Long?,
     npcCount: Int?,
-    policies: List<NpcPolicyType>,
+    spawnSpecs: List<NpcSpawnSpec>,
     lifetime: Float?
 ): Boolean =
     mazeSeed != null && npcCount != null && (status == GameStatus.RUNNING || status == GameStatus.PAUSED) &&
         difficultyName == difficulty && seed == mazeSeed && npcCountOverride == npcCount &&
-        powerUpPickupLifetimeOverrideSeconds == lifetime && npcPolicies.size == npcs.size &&
-        npcs.indices.all { npcPolicies[it] == policies.getOrNull(npcs[it].id) }
+        npcCount == spawnSpecs.size && powerUpPickupLifetimeOverrideSeconds == lifetime &&
+        npcSpawnSpecs == spawnSpecs && npcPolicies.size == npcs.size &&
+        npcs.map { it.id }.distinct().size == npcs.size &&
+        npcs.indices.all { index ->
+            val npc = npcs[index]
+            val expected = spawnSpecs.getOrNull(npc.id)
+            expected != null && npcPolicies.getOrNull(npc.id) == expected.policyType &&
+                npc.eliteModifier == expected.eliteModifier
+        }

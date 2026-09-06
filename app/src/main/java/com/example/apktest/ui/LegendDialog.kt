@@ -4,12 +4,15 @@ import android.content.Context
 import android.graphics.Typeface
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AlertDialog
 import com.example.apktest.R
+import com.example.apktest.game.core.EliteNpcModifier
 import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PowerUpType
 
@@ -17,9 +20,13 @@ import com.example.apktest.game.core.PowerUpType
  * Builds and shows the in-game legend dialog. Rows are generated from
  * [PowerUpType.entries] and [NpcPolicyType.entries] and each enum-backed row
  * reads its `label` and `description` from the shared source of truth.
+ * Elite rows are added only for modifiers present in the active Adventure maze.
  */
 object LegendDialog {
-    fun show(context: Context) {
+    fun show(
+        context: Context,
+        eliteModifiers: Set<EliteNpcModifier> = emptySet()
+    ): AlertDialog {
         val dialogPadding = dp(context, 16f)
         val rowPadding = dp(context, 8f)
         val sectionSpacing = dp(context, 12f)
@@ -68,11 +75,51 @@ object LegendDialog {
             container.addView(row)
         }
 
-        AlertDialog.Builder(context)
+        if (eliteModifiers.isNotEmpty()) {
+            container.addView(
+                sectionHeader(context, R.string.adventure_elite_summary_title, topMargin = sectionSpacing)
+            )
+            var isFirst = true
+            for (modifier in EliteNpcModifier.entries) {
+                if (modifier !in eliteModifiers) continue
+                val row = newRow(context, rowPadding, isFirst)
+                isFirst = false
+                val policy = NpcPolicyType.entries.first { modifier.supports(it) }
+                row.addView(npcIcon(context, iconSize, policy, modifier))
+                row.addView(
+                    rowText(
+                        context,
+                        context.getString(EliteNpcResources.nameFor(modifier)),
+                        context.getString(EliteNpcResources.descriptionFor(modifier))
+                    )
+                )
+                container.addView(row)
+            }
+        }
+
+        return AlertDialog.Builder(context)
             .setTitle(R.string.legend_title)
             .setView(scroll)
             .setPositiveButton(R.string.legend_close, null)
             .show()
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun textSnapshotForTesting(dialog: AlertDialog): List<String> {
+        val texts = mutableListOf<String>()
+        dialog.window?.decorView?.let { collectText(it, texts) }
+        return texts
+    }
+
+    private fun collectText(view: View, texts: MutableList<String>) {
+        when (view) {
+            is TextView -> texts.add(view.text.toString())
+            is ViewGroup -> {
+                for (index in 0 until view.childCount) {
+                    collectText(view.getChildAt(index), texts)
+                }
+            }
+        }
     }
 
     private fun sectionHeader(context: Context, stringRes: Int, topMargin: Int): TextView {
@@ -106,10 +153,15 @@ object LegendDialog {
         }
     }
 
-    private fun npcIcon(context: Context, iconSize: Int, type: NpcPolicyType): NpcIconView {
+    private fun npcIcon(
+        context: Context,
+        iconSize: Int,
+        type: NpcPolicyType,
+        eliteModifier: EliteNpcModifier? = null
+    ): NpcIconView {
         return NpcIconView(context).apply {
             layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
-            setNpcPolicyType(type)
+            setNpcPolicyType(type, eliteModifier)
             importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
     }

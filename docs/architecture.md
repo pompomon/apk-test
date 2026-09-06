@@ -52,13 +52,16 @@ SetupActivity  ── Intent extras ──▶  MainActivity  ── Fragment arg
 - `GameStateStore` persists a JSON-serialized `GameEngineSnapshot` in `SharedPreferences`. Validated load only — never read raw JSON to drive UI.
 - `MainActivity.onPause` writes a snapshot via a **shared single-thread `ExecutorService`**. "Pause & Exit" *clears* the saved state when status is `WIN` or `LOSE` instead of saving.
 - `GameEngineSnapshot.fromJson` returns `null` on:
-  - schema-version mismatch (`SCHEMA_VERSION` is currently `6`),
+  - schema-version mismatch (`SCHEMA_VERSION` is currently `7`),
   - unknown `difficultyName` (does **not** silently fall back to MEDIUM the way `DifficultyPresets.byName` does),
   - any persisted coordinate (player, NPCs, Adventurers, spawned power-ups, or `removedWalls` cell) falling outside the maze bounds implied by the preset (rounded up to even, like the generator),
   - JSON / enum-value parse errors.
 - The snapshot persists `removedWalls` — walls destroyed during gameplay — so restore re-applies them on the regenerated baseline maze.
 - The snapshot persists surviving Adventurers; shipped presets spawn one in both Classic and Adventure modes.
 - The snapshot also persists Adventure-mode overrides — `npcCountOverride` (replaces the preset's `npcCount`) and `npcPolicies` (per-NPC policy by spawn id) — so a paused-mid-maze resume re-spawns the same set of NPCs with the same per-NPC strategies.
+- `npcSpawnSpecs` stores the complete Adventure restart roster; each active
+  `NpcSnapshot` also stores its nullable elite modifier. The full roster is kept
+  even when maze capacity is smaller than the requested count.
 - `powerUpPickupLifetimeOverrideSeconds` persists an optional finite Adventure
   pickup lifetime. It applies to initial pickups and respawns, without changing
   active-effect durations or baseline Easy's infinite lifetime.
@@ -78,13 +81,19 @@ SetupActivity ──▶ AdventureSetupActivity ──▶ AdventureActivity ─�
 ```
 
 - **`AdventureConfig`** (`game/core/AdventureConfig.kt`): per-difficulty rules — Easy 5 lives / 5 mazes / base 1 NPC, Medium 3 / 7 / base 1, Hard 1 / 9 / base 2. `npcCountForMaze(mazeIndex1Based)` = `baseNpcsPerMaze + ((mazeIndex1Based - 1) / 3)` plus +1 on the final maze. Unknown presets fall back to Medium rules.
-- **`AdventureRunController`** (`game/core/AdventureRunController.kt`): pure-Kotlin state transitions (no Android imports → fully JVM-testable). Locks `currentMazeSeed` + `currentMazeNpcPolicies` on first `prepareCurrentMaze()` per maze so a death replay returns the *same* spec; clears them on win; awards +1 life every 3 consecutive wins (resets streak on death OR on bonus); starts with only `MANUAL`, enables every automated player policy after maze 1, and offers three deterministic non-`GHOST_MODE` starting power-ups after every non-final win.
+- **`AdventureRunController`** (`game/core/AdventureRunController.kt`): pure-Kotlin state transitions (no Android imports → fully JVM-testable). Locks `currentMazeSeed` + `currentMazeNpcSpawnSpecs` on first preparation or route choice so a death replay returns the *same* spec; clears them on win; awards +1 life every 3 consecutive wins (resets streak on death OR on bonus); starts with only `MANUAL`, enables every automated player policy after maze 1, and offers three deterministic non-`GHOST_MODE` starting power-ups after every non-final win.
 - **`AdventureRunStateSnapshot`** (`game/core/AdventureRunStateSnapshot.kt`): JSON, schema-versioned, validates the MANUAL-always-unlocked invariant. Embeds a `GameEngineSnapshot` for paused-mid-maze resume.
 - **`AdventureStateStore`** (`AdventureStateStore.kt`): sibling of `GameStateStore` but in its own SharedPreferences file (`adventure_state`) so a saved adventure never appears as a single-maze Resume on the main start menu, and vice versa.
 - **`AdventureActivity`** mirrors `MainActivity`'s lifecycle / popover / swipe handling, polls engine status every 200ms to detect `WIN`/`LOSE`, runs the win/lose/power-up chooser overlays, and persists via a per-activity single-thread autosave executor (guarded against `RejectedExecutionException` per Hard rule #8).
-- **`GameEngine.configureAdventureMaze(npcCount, policies)`** sets `npcCountOverride` + `npcPolicies`. Per-NPC `policyType` is resolved through a per-type policy cache with deterministic seeded RNG (`NPC_POLICY_TYPE_SEED_STRIDE`) — single-maze runs still go through the long-lived `npcPolicy` instance so behaviour is byte-for-byte unchanged.
+- **`GameEngine.configureAdventureMaze(npcCount, policies, ..., npcSpawnSpecs)`** sets
+  `npcCountOverride` and the canonical full restart specs. Policy-only calls are
+  normalized into unmodified specs. Per-NPC `policyType` is resolved through the
+  existing seeded per-type cache; Classic retains the long-lived `npcPolicy` instance.
 
-**Hard rule (Adventure):** every per-maze NPC policy assignment is locked into `AdventureRunState.currentMazeNpcPolicies` on first entry so death replays use the same set; reloading an in-progress run preserves the locked list verbatim regardless of any future change to the derivation function.
+**Hard rule (Adventure):** every per-maze NPC policy/modifier assignment is locked into
+`AdventureRunState.currentMazeNpcSpawnSpecs` on first entry or route choice so death
+replays use the same set. `currentMazeNpcPolicies` is a derived compatibility view;
+reloading preserves the full locked list verbatim rather than rerunning assignment.
 
 ### Route events and pending rewards
 
@@ -102,7 +111,7 @@ SetupActivity ──▶ AdventureSetupActivity ──▶ AdventureActivity ─�
 - The controller locks effective NPC count with the seed and policy list.
   Selected route effects and starting power-ups survive deaths; completion
   settles their reward once before clearing the per-maze effect.
-- Adventure schema 3 stores pending offers, route history, previews, rerolls,
+- Adventure schema 4 retains pending offers, route history, previews, rerolls,
   cadence, active effects, and the locked count. Unknown active effects or
   inconsistent combinations fail validation instead of silently losing a
   decision.
@@ -111,6 +120,22 @@ SetupActivity ──▶ AdventureSetupActivity ──▶ AdventureActivity ─�
   generation/seed checks reject late GL snapshots from a previous maze.
 - Rollout flags gate new offers, not compatible saved decisions. Production
   remains default-off; enabling the route flag initially exposes Medium only.
+
+### Elite NPC modifiers
+
+- `NpcSpawnPlanner` supplies the same seeded placement order to the engine and
+  controller. Strict elite safety filters do not change ordinary placement or RNG use.
+- `AdventureEliteAssignment` selects compatible safe Patrol Guards with a separate
+  seeded stream. The default-off Medium/Hard rollout permits at most one Tracker,
+  excluding count-ramp/final mazes and risky routes. No route requests elites yet.
+- `Tracker` extends Patrol Guard acquisition by two Manhattan cells and prefers
+  the reachable visible player. It does not change movement cadence, power-up
+  effects, or last-known-target/search behavior.
+- Adventure schema 4 and engine schema 7 persist assignments for retries and
+  paused-maze restoration, including the complete capacity-truncated restart roster.
+  An invalid engine snapshot is discarded rather than partially restoring modifiers.
+- Renderer/legend share a precomputed shape-and-color accent; Classic's default
+  legend remains unchanged, and saved elites remain explainable with generation off.
 
 ## Player policy hierarchy
 

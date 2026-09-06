@@ -59,7 +59,7 @@ class AdventureRouteSnapshotTest {
         assertInvalid(snapshot) { put("mazeNpcCount", -1) }
         assertInvalid(snapshot) { put("mazeNpcCount", snapshot.currentMazeNpcCount!! + 1) }
         assertInvalid(snapshot) { remove("mazeSeed") }
-        assertInvalid(snapshot) { put("mazeNpcPolicies", JSONArray()) }
+        assertInvalid(snapshot) { put("mazeNpcSpawnSpecs", JSONArray()) }
         assertInvalid(snapshot) { put("lives", 0) }
         assertInvalid(snapshot) { put("streak", AdventureConfig.STREAK_BONUS_THRESHOLD) }
         assertInvalid(snapshot) { put("status", AdventureStatus.WON.name) }
@@ -148,7 +148,7 @@ class AdventureRouteSnapshotTest {
         }
         c.state.activeRoute = c.state.activeRoute!!.let { it.copy(effects = it.effects.toMutableList()) }
         c.state.routeHistory = c.state.routeHistory.toMutableList()
-        c.state.currentMazeNpcPolicies = c.state.currentMazeNpcPolicies.toMutableList()
+        c.state.currentMazeNpcSpawnSpecs = c.state.currentMazeNpcSpawnSpecs.toMutableList()
         val snapshot = AdventureRunStateSnapshot.fromState(c.state, fixture.seed)
         val original = snapshot.toJson()
         (c.state.pendingReward!!.routeChoices.first().effects as MutableList).clear()
@@ -157,10 +157,11 @@ class AdventureRouteSnapshotTest {
         (c.state.pendingReward!!.preview!!.categories as MutableList).clear()
         (c.state.activeRoute!!.effects as MutableList).clear()
         (c.state.routeHistory as MutableList).clear()
-        (c.state.currentMazeNpcPolicies as MutableList).clear()
+        (c.state.currentMazeNpcSpawnSpecs as MutableList).clear()
         assertEquals(original, snapshot.toJson())
 
         val mutable = snapshot.copy(
+            currentMazeNpcSpawnSpecs = snapshot.currentMazeNpcSpawnSpecs.toMutableList(),
             routeHistory = snapshot.routeHistory.toMutableList(),
             activeRoute = snapshot.activeRoute!!.copy(effects = snapshot.activeRoute.effects.toMutableList()),
             pendingReward = snapshot.pendingReward!!.let { reward ->
@@ -172,6 +173,7 @@ class AdventureRouteSnapshotTest {
             }
         )
         val state = mutable.toState()
+        (mutable.currentMazeNpcSpawnSpecs as MutableList).clear()
         (mutable.pendingReward!!.routeChoices.first().effects as MutableList).clear()
         (mutable.pendingReward.routeChoices as MutableList).clear()
         (mutable.pendingReward.powerUpCandidates as MutableList).clear()

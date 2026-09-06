@@ -39,6 +39,24 @@ private fun JSONObject.requiredNullableString(key: String): String? {
 }
 
 internal object AdventureRouteSnapshotCodec {
+    fun spawnSpecsToJson(specs: List<NpcSpawnSpec>): JSONArray = JSONArray().apply {
+        specs.forEach { spec ->
+            put(JSONObject().apply {
+                put("policyType", spec.policyType.name)
+                put("eliteModifier", spec.eliteModifier?.id ?: JSONObject.NULL)
+            })
+        }
+    }
+
+    fun spawnSpecsFromJson(array: JSONArray): List<NpcSpawnSpec> = List(array.length()) { index ->
+        val obj = array.getJSONObject(index)
+        val modifierId = obj.requiredNullableString("eliteModifier")
+        NpcSpawnSpec(
+            NpcPolicyType.valueOf(obj.requiredString("policyType")),
+            modifierId?.let { requireNotNull(EliteNpcModifier.fromId(it)) }
+        )
+    }
+
     fun rewardToJson(reward: PendingAdventureReward): JSONObject = JSONObject().apply {
         put("mazeIndexCompleted", reward.mazeIndexCompleted)
         put("stage", reward.stage.name)
@@ -161,8 +179,15 @@ internal object AdventureRouteSnapshotCodec {
         if (snapshot.nextRouteEventMazeIndex !in
             (2 + snapshot.routeEventOrdinal * 2)..(2 + snapshot.routeEventOrdinal * 3)) return false
         if (snapshot.currentMazeSeed == null) {
-            if (count != null || snapshot.currentMazeNpcPolicies.isNotEmpty()) return false
-        } else if (count == null || count < 0 || count != snapshot.currentMazeNpcPolicies.size) return false
+            if (count != null || snapshot.currentMazeNpcSpawnSpecs.isNotEmpty()) return false
+        } else if (count == null || count < 0 || count != snapshot.currentMazeNpcSpawnSpecs.size) return false
+        if (snapshot.currentMazeNpcSpawnSpecs.any {
+            it.eliteModifier != null && !it.eliteModifier.supports(it.policyType)
+        }) return false
+        // Validate persisted structure/budget, never rerun assignment or maze generation.
+        if (count != null && index < config.totalMazes &&
+            snapshot.currentMazeNpcSpawnSpecs.count { it.eliteModifier != null } >
+            AdventureEliteAssignment.rolloutBudget(config, index + 1, count, route?.choiceId)) return false
 
         when (snapshot.status) {
             AdventureStatus.IN_PROGRESS -> if (index == config.totalMazes || snapshot.livesRemaining <= 0) return false

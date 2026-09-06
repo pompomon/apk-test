@@ -1,11 +1,13 @@
 package com.example.apktest.game.render
 
+import com.badlogic.gdx.graphics.Color
 import com.example.apktest.game.core.NpcPolicyType
 import kotlin.math.roundToInt
 
 /**
- * Single source of truth for NPC sprite presentation outside the libGDX
- * renderer (currently: the legend dialog's [com.example.apktest.ui.NpcIconView]).
+ * Cached base-policy presentation for libGDX and the legend dialog's
+ * [com.example.apktest.ui.NpcIconView]. [EliteNpcIcons] adds an independent badge
+ * without replacing these policy colors.
  *
  * The pixel pattern is shared with the in-game renderer
  * ([Sprites.monsterIdle]), and dark-shading colors are sourced from
@@ -16,8 +18,14 @@ object NpcIcons {
     /** Idle NPC pattern reused from the in-game renderer. */
     fun pattern(): Array<String> = Sprites.monsterIdle
 
-    private val colorsByPolicy: Map<NpcPolicyType, Map<Char, Int>> =
-        NpcPolicyType.entries.associateWith { buildColors(it) }
+    private val gdxColorsByPolicy = Array(NpcPolicyType.entries.size) {
+        Sprites.monsterPaletteFor(NpcPolicyType.entries[it])
+    }
+    private val colorsByPolicy = Array(NpcPolicyType.entries.size) {
+        buildColors(NpcPolicyType.entries[it])
+    }
+
+    fun gdxColorsFor(type: NpcPolicyType): Map<Char, Color> = gdxColorsByPolicy[type.ordinal]
 
     /**
      * 0xAARRGGBB Android-friendly color map keyed by sprite character
@@ -25,7 +33,7 @@ object NpcIcons {
      * matching [Sprites.monsterPaletteFor] for the same [type].
      */
     fun androidColorsFor(type: NpcPolicyType): Map<Char, Int> =
-        colorsByPolicy.getValue(type)
+        colorsByPolicy[type.ordinal]
 
     private fun buildColors(type: NpcPolicyType): Map<Char, Int> {
         val (r, g, b) = type.colorRgb

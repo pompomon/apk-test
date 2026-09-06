@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.utils.ScreenUtils
 import com.badlogic.gdx.utils.viewport.ExtendViewport
 import com.example.apktest.game.core.Direction
+import com.example.apktest.game.core.EliteNpcModifier
 import com.example.apktest.game.core.GameEngine
 import com.example.apktest.game.core.Maze
 import com.example.apktest.game.core.PowerUpEffectKind
@@ -415,11 +416,19 @@ class MazeRenderer {
             PixelSpriteRenderer.draw(
                 shapes = shapes,
                 pattern = npcPattern,
-                palette = Sprites.monsterPaletteFor(npc.policyType),
+                palette = NpcIcons.gdxColorsFor(npc.policyType),
                 centerX = mazeOriginX + npc.position.x + 0.5f,
                 centerY = mazeOriginY + npc.position.y + 0.5f,
-                size = 0.72f
+                size = NPC_SPRITE_SIZE
             )
+            val eliteModifier = npc.eliteModifier
+            if (eliteModifier != null) {
+                drawEliteBadge(
+                    eliteModifier,
+                    mazeOriginX + npc.position.x + 0.5f,
+                    mazeOriginY + npc.position.y + 0.5f
+                )
+            }
         }
 
         // Draw the player last so they retain visual priority when sharing a
@@ -764,7 +773,30 @@ class MazeRenderer {
         shapes.end()
     }
 
+    private fun drawEliteBadge(modifier: EliteNpcModifier, centerX: Float, centerY: Float) {
+        val geometry = EliteNpcIcons.geometryFor(modifier)
+        val colors = EliteNpcIcons.gdxColorsFor(modifier)
+        val rects = geometry.rects
+        val originX = centerX - NPC_SPRITE_SIZE / 2f
+        val originY = centerY + NPC_SPRITE_SIZE / 2f
+        for (index in geometry.colorIndices.indices) {
+            val offset = index * EliteNpcIcons.RECT_STRIDE
+            val left = rects[offset + EliteNpcIcons.LEFT]
+            val top = rects[offset + EliteNpcIcons.TOP]
+            val right = rects[offset + EliteNpcIcons.RIGHT]
+            val bottom = rects[offset + EliteNpcIcons.BOTTOM]
+            shapes.color = colors[geometry.colorIndices[index]]
+            shapes.rect(
+                originX + NPC_SPRITE_SIZE * left,
+                originY - NPC_SPRITE_SIZE * bottom,
+                NPC_SPRITE_SIZE * (right - left),
+                NPC_SPRITE_SIZE * (bottom - top)
+            )
+        }
+    }
+
     private companion object {
+        private const val NPC_SPRITE_SIZE = 0.72f
         // Wall thickness as fraction of a cell (world units).
         private const val WALL_THICKNESS = 0.18f
 

@@ -22,11 +22,11 @@ class AdventureRunStateSnapshotTest {
         lastAutomatedPlayerPolicy = PlayerPolicyType.BFS_EXIT,
         automatedPolicyPromptShown = true,
         currentMazeSeed = 0xDEADBEEFL,
-        currentMazeNpcPolicies = listOf(
+        currentMazeNpcSpawnSpecs = listOf(
             NpcPolicyType.DIRECT_CHASE,
             NpcPolicyType.PATROL_GUARD,
             NpcPolicyType.PREDICTIVE_CHASE
-        ),
+        ).map { NpcSpawnSpec(it) },
         currentMazeSnapshot = null,
         status = AdventureStatus.IN_PROGRESS
     )
@@ -57,7 +57,8 @@ class AdventureRunStateSnapshotTest {
             manualQueue = emptyList(),
             manualOverrideRemainingSeconds = 0f,
             npcCountOverride = 3,
-            npcPolicies = sampleState().currentMazeNpcPolicies
+            npcPolicies = sampleState().currentMazeNpcPolicies,
+            npcSpawnSpecs = sampleState().currentMazeNpcSpawnSpecs
         )
         val state = sampleState().apply { currentMazeSnapshot = engineSnapshot }
         val snap = AdventureRunStateSnapshot.fromState(state, runSeed = 0xCAFEL)
@@ -104,7 +105,7 @@ class AdventureRunStateSnapshotTest {
             unlockedPlayerPolicies = listOf(PlayerPolicyType.BFS_EXIT),
             currentPlayerPolicy = PlayerPolicyType.BFS_EXIT,
             currentMazeSeed = null,
-            currentMazeNpcPolicies = emptyList(),
+            currentMazeNpcSpawnSpecs = emptyList(),
             currentMazeSnapshot = null,
             status = AdventureStatus.IN_PROGRESS
         )
@@ -125,7 +126,7 @@ class AdventureRunStateSnapshotTest {
             unlockedPlayerPolicies = listOf(PlayerPolicyType.MANUAL),
             currentPlayerPolicy = PlayerPolicyType.BFS_EXIT,
             currentMazeSeed = null,
-            currentMazeNpcPolicies = emptyList(),
+            currentMazeNpcSpawnSpecs = emptyList(),
             currentMazeSnapshot = null,
             status = AdventureStatus.IN_PROGRESS
         )
@@ -170,7 +171,7 @@ class AdventureRunStateSnapshotTest {
             currentPlayerPolicy = PlayerPolicyType.MANUAL,
             lastAutomatedPlayerPolicy = PlayerPolicyType.BFS_EXIT,
             currentMazeSeed = null,
-            currentMazeNpcPolicies = emptyList(),
+            currentMazeNpcSpawnSpecs = emptyList(),
             currentMazeSnapshot = null,
             status = AdventureStatus.IN_PROGRESS
         )
@@ -190,7 +191,7 @@ class AdventureRunStateSnapshotTest {
             unlockedPlayerPolicies = listOf(PlayerPolicyType.MANUAL),
             currentPlayerPolicy = PlayerPolicyType.MANUAL,
             currentMazeSeed = null,
-            currentMazeNpcPolicies = emptyList(),
+            currentMazeNpcSpawnSpecs = emptyList(),
             currentMazeSnapshot = null,
             status = AdventureStatus.IN_PROGRESS
         )
