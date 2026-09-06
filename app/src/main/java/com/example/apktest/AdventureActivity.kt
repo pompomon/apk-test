@@ -31,6 +31,7 @@ import com.example.apktest.game.core.MazeStartupSpec
 import com.example.apktest.game.core.PendingAdventureReward
 import com.example.apktest.game.core.RewardStage
 import com.example.apktest.game.core.RouteEventCategory
+import com.example.apktest.game.core.RouteEventGenerator
 import com.example.apktest.game.core.automatedPlayerPolicies
 import com.example.apktest.game.ui.HudState
 import com.example.apktest.ui.GameInputController
@@ -168,12 +169,12 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         setupSwipeControls()
         refreshStatusBar()
         refreshAutoToggle()
+        // Never allow a FragmentManager-restored maze to run while its
+        // controller decisions are still waiting for a durable recommit.
+        supportFragmentManager.findFragmentById(R.id.fragmentGameHost)?.let {
+            supportFragmentManager.beginTransaction().remove(it).commitNow()
+        }
         if (controller.state.pendingReward != null) {
-            // A reward phase has no running maze. Remove any OS-restored
-            // fragment before it can replay stale arguments behind the dialog.
-            supportFragmentManager.findFragmentById(R.id.fragmentGameHost)?.let {
-                supportFragmentManager.beginTransaction().remove(it).commitNow()
-            }
             transitionPending = true
             commitTransition { showPendingReward() }
             return
@@ -196,6 +197,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun attachMaze(spec: MazeStartupSpec) {
+        // A new fragment cannot expose the previous maze's terminal HUD.
+        // In particular a restored maze may win before our very first poll.
+        lastObservedStatus = GameStatus.RUNNING
+        transitionPending = false
         val fragment = GameFragment()
         val args = Bundle().apply {
             putString(GameFragment.ARG_PLAYER_POLICY, spec.playerPolicy.name)
@@ -896,7 +901,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                         it.categories.joinToString(", ") { category -> routeCategory(category) }
                     ) + "\n"
                 } ?: ""
-                val title = if (pending.selectedRouteId == "supply_cache") {
+                val title = if (pending.selectedRouteId == RouteEventGenerator.SUPPLY_CACHE) {
                     getString(R.string.adventure_route_supply_cache_name)
                 } else getString(R.string.adventure_powerup_prompt)
                 builder.setTitle(preview + title)
@@ -933,20 +938,20 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     })
 
     private fun routeName(id: String): String = getString(when (id) {
-        "quiet_corridor" -> R.string.adventure_route_quiet_corridor_name
-        "ambush_shortcut" -> R.string.adventure_route_ambush_shortcut_name
-        "supply_cache" -> R.string.adventure_route_supply_cache_name
-        "scout_map" -> R.string.adventure_route_scout_map_name
-        "cursed_gate" -> R.string.adventure_route_cursed_gate_name
+        RouteEventGenerator.QUIET_CORRIDOR -> R.string.adventure_route_quiet_corridor_name
+        RouteEventGenerator.AMBUSH_SHORTCUT -> R.string.adventure_route_ambush_shortcut_name
+        RouteEventGenerator.SUPPLY_CACHE -> R.string.adventure_route_supply_cache_name
+        RouteEventGenerator.SCOUT_MAP -> R.string.adventure_route_scout_map_name
+        RouteEventGenerator.CURSED_GATE -> R.string.adventure_route_cursed_gate_name
         else -> error("Unknown route $id")
     })
 
     private fun routeDescription(id: String): String = getString(when (id) {
-        "quiet_corridor" -> R.string.adventure_route_quiet_corridor_description
-        "ambush_shortcut" -> R.string.adventure_route_ambush_shortcut_description
-        "supply_cache" -> R.string.adventure_route_supply_cache_description
-        "scout_map" -> R.string.adventure_route_scout_map_description
-        "cursed_gate" -> R.string.adventure_route_cursed_gate_description
+        RouteEventGenerator.QUIET_CORRIDOR -> R.string.adventure_route_quiet_corridor_description
+        RouteEventGenerator.AMBUSH_SHORTCUT -> R.string.adventure_route_ambush_shortcut_description
+        RouteEventGenerator.SUPPLY_CACHE -> R.string.adventure_route_supply_cache_description
+        RouteEventGenerator.SCOUT_MAP -> R.string.adventure_route_scout_map_description
+        RouteEventGenerator.CURSED_GATE -> R.string.adventure_route_cursed_gate_description
         else -> error("Unknown route $id")
     })
 

@@ -184,6 +184,13 @@ internal object AdventureRouteSnapshotCodec {
         if (snapshot.routeHistory.size + (if (reward?.routeChoices?.isNotEmpty() == true &&
                 reward.selectedRouteId == null) 1 else 0) != snapshot.routeEventOrdinal) return false
         if (snapshot.routeHistory.lastOrNull()?.mazeIndexCompleted == index && route == null) return false
+        val uncommittedOffer = reward?.routeChoices?.isNotEmpty() == true && reward.selectedRouteId == null
+        val previousOffer = snapshot.routeHistory.lastOrNull()?.mazeIndexCompleted
+        if (uncommittedOffer && (if (previousOffer == null) index != 2 else index - previousOffer !in 2..3)) {
+            return false
+        }
+        val lastOffer = if (uncommittedOffer) index else previousOffer
+        if (lastOffer != null && snapshot.nextRouteEventMazeIndex - lastOffer !in 2..3) return false
 
         if (route != null) {
             val known = RouteEventGenerator.choice(route.choiceId) ?: return false

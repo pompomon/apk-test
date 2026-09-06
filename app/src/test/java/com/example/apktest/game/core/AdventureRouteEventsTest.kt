@@ -272,6 +272,32 @@ class AdventureRouteEventsTest {
     }
 
     @Test
+    fun quietCanLockZeroNpcsInCustomRunsAndResumeTheEmptyPolicyList() {
+        val config = AdventureConfig(DifficultyPresets.MEDIUM, 3, 7, 0)
+        for (seed in 0L..63L) {
+            val c = AdventureRunController(config, runSeed = seed, routesEnabled = true)
+            while (c.state.currentMazeIndex < 5) {
+                c.prepareCurrentMaze()
+                c.completeMaze()
+                c.acknowledgeMazeWin(c.state.currentMazeIndex)
+                if (c.state.pendingReward!!.routeChoices.any { it.id == RouteEventGenerator.QUIET_CORRIDOR }) {
+                    c.chooseRoute(c.state.currentMazeIndex, RouteEventGenerator.QUIET_CORRIDOR)
+                    assertEquals(0, c.state.currentMazeNpcCount)
+                    assertTrue(c.state.currentMazeNpcPolicies.isEmpty())
+                    assertEquals(0, restore(c, seed).state.currentMazeNpcCount)
+                    finishReward(c)
+                    val startup = c.prepareCurrentMaze()!!
+                    c.onPlayerDied()
+                    assertEquals(startup, restore(c, seed).prepareCurrentMaze())
+                    return
+                }
+                finishReward(c)
+            }
+        }
+        fail("No Quiet Corridor fixture reached")
+    }
+
+    @Test
     fun terminalLossClearsAllRouteState() {
         val c = atRoute(RouteEventGenerator.AMBUSH_SHORTCUT).controller
         c.chooseRoute(c.state.currentMazeIndex, RouteEventGenerator.AMBUSH_SHORTCUT)

@@ -38,7 +38,8 @@ Adventure mode currently advances through a mostly fixed sequence: win a maze, c
   on Easy and when no lifetime reduction is possible. The penalty affects
   initial pickups and respawns, not activated effects. Its extra streak point
   is added before checking the three-point life bonus; the counter still
-  resets to zero on a bonus or death.
+  resets to zero on a bonus or death. Cursed Gate is also excluded when its
+  target is final, where the streak progress would have no remaining use.
 - The controller persists win acknowledgement, route choice, and power-up
   choice stages. Confirmed transitions are durably saved before displaying
   the next stage or starting the maze. Restoring a pending stage does not

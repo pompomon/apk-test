@@ -189,6 +189,13 @@ class AdventureRouteSnapshotTest {
         c.recordMidMazeSnapshot(engine.snapshot())
         val snapshot = AdventureRunStateSnapshot.fromState(c.state, fixture.seed)
         assertEquals(snapshot, AdventureRunStateSnapshot.fromJson(snapshot.toJson()))
+        c.recordMidMazeSnapshot(engine.snapshot().copy(seed = 10L))
+        assertEquals(snapshot, AdventureRunStateSnapshot.fromState(c.state, fixture.seed))
+        val fewerSpawnedNpcs = snapshot.copy(currentMazeSnapshot = engine.snapshot().copy(
+            npcs = engine.snapshot().npcs.take(1),
+            npcPolicies = engine.snapshot().npcPolicies.take(1)
+        ))
+        assertEquals(fewerSpawnedNpcs, AdventureRunStateSnapshot.fromJson(fewerSpawnedNpcs.toJson()))
         for (stale in listOf(
             engine.snapshot().copy(seed = 10L),
             engine.snapshot().copy(powerUpPickupLifetimeOverrideSeconds = null),
@@ -203,6 +210,30 @@ class AdventureRouteSnapshotTest {
             assertEquals(spec, AdventureRunController(c.config, restored.toState(), fixture.seed, false)
                 .prepareCurrentMaze())
         }
+    }
+
+    @Test
+    fun aCommittedRouteCannotDisappearWhileItsTargetMazeIsActive() {
+        val fixture = AdventureRouteEventsTest.atRoute(RouteEventGenerator.AMBUSH_SHORTCUT)
+        val c = fixture.controller
+        c.chooseRoute(2, RouteEventGenerator.AMBUSH_SHORTCUT)
+        AdventureRouteEventsTest.finishReward(c)
+        val snapshot = AdventureRunStateSnapshot.fromState(c.state, fixture.seed)
+        assertInvalid(snapshot) { put("activeRoute", JSONObject.NULL) }
+        assertInvalid(snapshot) { remove("pendingPowerUp") }
+    }
+
+    @Test
+    fun staleEngineWithoutALockedRestartIsRejectedButRewardPhaseIsRecoverable() {
+        val c = AdventureRunController(AdventureConfig.forDifficulty(DifficultyPresets.MEDIUM), runSeed = 5L)
+        val engine = GameEngine(DifficultyPresets.MEDIUM, 5L).snapshot()
+        val unprepared = AdventureRunStateSnapshot.fromState(c.state, 5L).copy(currentMazeSnapshot = engine)
+        assertNull(AdventureRunStateSnapshot.fromJson(unprepared.toJson()))
+        c.prepareCurrentMaze()
+        c.completeMaze()
+        val reward = AdventureRunStateSnapshot.fromState(c.state, 5L)
+        val recovered = AdventureRunStateSnapshot.fromJson(reward.copy(currentMazeSnapshot = engine).toJson())
+        assertEquals(reward, recovered)
     }
 
     private fun selectedRouteSnapshot(id: String): AdventureRunStateSnapshot {
