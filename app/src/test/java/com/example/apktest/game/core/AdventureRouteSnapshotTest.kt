@@ -112,6 +112,11 @@ class AdventureRouteSnapshotTest {
             getJSONObject("pendingReward").getJSONObject("preview").put("categories",
                 JSONArray(listOf("RISKY", "RISKY")))
         }
+        assertInvalid(snapshot) {
+            val categories = getJSONObject("pendingReward").getJSONObject("preview")
+                .getJSONArray("categories")
+            categories.put(0, if (categories.getString(0) == "SAFE") "UTILITY" else "SAFE")
+        }
     }
 
     @Test

@@ -239,6 +239,11 @@ internal object AdventureRouteSnapshotCodec {
                 preview.nextEventMazeIndex !in (index + 2) until config.totalMazes ||
                 preview.npcCount != count || preview.categories.size !in 2..3 ||
                 preview.categories.all { it == RouteEventCategory.RISKY }) return false
+            val expectedCategories = generator.offer(
+                preview.nextEventMazeIndex,
+                snapshot.routeEventOrdinal
+            ).map { it.category }
+            if (preview.categories != expectedCategories) return false
         } else if (reward.preview != null) return false
         return true
     }

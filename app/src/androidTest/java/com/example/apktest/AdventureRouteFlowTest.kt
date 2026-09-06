@@ -12,6 +12,8 @@ import com.example.apktest.game.core.AdventureConfig
 import com.example.apktest.game.core.AdventureRunController
 import com.example.apktest.game.core.AdventureRunStateSnapshot
 import com.example.apktest.game.core.DifficultyPresets
+import com.example.apktest.game.core.GameEngine
+import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.RewardStage
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -184,6 +186,56 @@ class AdventureRouteFlowTest {
             scenario.onActivity {
                 assertEquals(preview, it.controllerForTesting().state.pendingReward!!.preview)
             }
+        }
+    }
+
+    @Test
+    fun capturedTerminalSnapshotPersistsWinTransitionBeforeResume() {
+        launchResume().use { scenario ->
+            await(scenario) {
+                it.supportFragmentManager.findFragmentById(R.id.fragmentGameHost) is GameFragment &&
+                    it.rewardDecisionReadyForTesting()
+            }
+            scenario.onActivity {
+                val spec = it.controllerForTesting().prepareCurrentMaze()!!
+                val snapshot = GameEngine(spec.difficulty, spec.seed).snapshot().copy(
+                    status = GameStatus.WIN,
+                    elapsedSeconds = 12f,
+                    steps = 34
+                )
+                it.handleCapturedSnapshotForTesting(snapshot)
+            }
+            awaitStage(scenario, RewardStage.WIN_ACKNOWLEDGEMENT)
+            val saved = store.load()!!
+            assertEquals(1, saved.currentMazeIndex)
+            assertEquals(12f, saved.totalElapsedSeconds)
+            assertEquals(34, saved.totalSteps)
+        }
+    }
+
+    @Test
+    fun capturedTerminalSnapshotPersistsDeathTransitionBeforeResume() {
+        launchResume().use { scenario ->
+            await(scenario) {
+                it.supportFragmentManager.findFragmentById(R.id.fragmentGameHost) is GameFragment &&
+                    it.rewardDecisionReadyForTesting()
+            }
+            var initialLives = 0
+            scenario.onActivity {
+                initialLives = it.controllerForTesting().state.livesRemaining
+                val spec = it.controllerForTesting().prepareCurrentMaze()!!
+                val snapshot = GameEngine(spec.difficulty, spec.seed).snapshot().copy(
+                    status = GameStatus.LOSE
+                )
+                it.handleCapturedSnapshotForTesting(snapshot)
+            }
+            await(scenario) {
+                it.rewardDialogForTesting()?.isShowing == true &&
+                    it.rewardDecisionReadyForTesting()
+            }
+            val saved = store.load()!!
+            assertEquals(initialLives - 1, saved.livesRemaining)
+            assertEquals(1, saved.deathsThisRun)
         }
     }
 

@@ -24,6 +24,7 @@ import com.example.apktest.game.core.AdventureRunStateSnapshot
 import com.example.apktest.game.core.AdventureStatus
 import com.example.apktest.game.core.DifficultyPresets
 import com.example.apktest.game.core.Direction
+import com.example.apktest.game.core.GameEngineSnapshot
 import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.game.core.PowerUpType
@@ -33,7 +34,6 @@ import com.example.apktest.game.core.RewardStage
 import com.example.apktest.game.core.RouteEventCategory
 import com.example.apktest.game.core.RouteEventGenerator
 import com.example.apktest.game.core.automatedPlayerPolicies
-import com.example.apktest.game.ui.HudState
 import com.example.apktest.ui.GameInputController
 import com.example.apktest.ui.LegendDialog
 import com.example.apktest.ui.AdventureTimeFormatter
@@ -129,6 +129,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun rewardDecisionReadyForTesting(): Boolean =
         pendingCommit == null && !saveInFlight && !saveFailed
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun handleCapturedSnapshotForTesting(snapshot: GameEngineSnapshot) =
+        handleCapturedSnapshot(snapshot)
 
     private val tickHandler = Handler(Looper.getMainLooper())
     private val tickRunnable = object : Runnable {
@@ -378,18 +382,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                         controller.state.status != AdventureStatus.IN_PROGRESS
                     ) return@post
                     try {
-                        if (engineSnapshot.status == GameStatus.WIN ||
-                            engineSnapshot.status == GameStatus.LOSE
-                        ) {
-                            // Don't persist terminal snapshots; relaunch
-                            // would re-trigger the overlay flow.
-                            // The status poll will commit the corresponding
-                            // transition; don't save an unprocessed terminal maze.
-                            return@post
-                        } else {
-                            controller.recordMidMazeSnapshot(engineSnapshot)
-                        }
-                        persistAdventureStateAsync()
+                        handleCapturedSnapshot(engineSnapshot)
                     } catch (_: RejectedExecutionException) {
                         // Executor shut down between hop and persist.
                     }
@@ -397,6 +390,20 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             }
         }
         super.onPause()
+    }
+
+    private fun handleCapturedSnapshot(engineSnapshot: GameEngineSnapshot) {
+        when (engineSnapshot.status) {
+            GameStatus.WIN, GameStatus.LOSE -> handleTerminalStatus(
+                engineSnapshot.status,
+                engineSnapshot.elapsedSeconds,
+                engineSnapshot.steps
+            )
+            else -> {
+                controller.recordMidMazeSnapshot(engineSnapshot)
+                persistAdventureStateAsync()
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -738,28 +745,30 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         }
         if (status != lastObservedStatus &&
             (status == GameStatus.WIN || status == GameStatus.LOSE)) {
-            transitionPending = true
-            when (status) {
-                GameStatus.WIN -> handleMazeWon(hud)
-                GameStatus.LOSE -> handleMazeLost()
-                else -> {}
-            }
+            handleTerminalStatus(status, hud.elapsedSeconds, hud.steps)
         }
         lastObservedStatus = status
     }
 
-    private fun handleMazeWon(hud: HudState) {
+    private fun handleTerminalStatus(status: GameStatus, elapsedSeconds: Float, steps: Int) {
+        transitionPending = true
+        lastObservedStatus = status
+        when (status) {
+            GameStatus.WIN -> handleMazeWon(elapsedSeconds, steps)
+            GameStatus.LOSE -> handleMazeLost(elapsedSeconds, steps)
+            GameStatus.RUNNING, GameStatus.PAUSED -> error("Expected terminal game status")
+        }
+    }
+
+    private fun handleMazeWon(elapsedSeconds: Float, steps: Int) {
         // No engine pause needed: GameEngine.update() early-returns when
         // status != RUNNING, and we only get here after observing WIN.
-        // [hud] is the same non-null snapshot that detected the WIN in
-        // [pollEngineStatus], so time/steps are always the real values —
-        // we never silently record a 0-time run or a bogus 00:00 best time.
         val completedRoute = controller.state.activeRoute
-        val outcome = controller.completeMaze(elapsedSeconds = hud.elapsedSeconds, steps = hud.steps)
+        val outcome = controller.completeMaze(elapsedSeconds = elapsedSeconds, steps = steps)
         if (!outcome.runComplete) {
             commitTransition {
                 completedRoute?.let {
-                    routeTelemetry.outcome(it.choiceId, true, hud.elapsedSeconds, hud.steps, 0)
+                    routeTelemetry.outcome(it.choiceId, true, elapsedSeconds, steps, 0)
                 }
                 val pending = controller.state.pendingReward
                 if (pending != null && pending.routeChoices.isNotEmpty()) {
@@ -829,7 +838,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             }
             commitTransition {
                 completedRoute?.let {
-                    routeTelemetry.outcome(it.choiceId, true, hud.elapsedSeconds, hud.steps, 0)
+                    routeTelemetry.outcome(it.choiceId, true, elapsedSeconds, steps, 0)
                 }
                 rewardDialog = builder.show()
             }
@@ -989,9 +998,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         // from re-triggering the win handler on the next poll.
     }
 
-    private fun handleMazeLost() {
+    private fun handleMazeLost(elapsedSeconds: Float, steps: Int) {
         val route = controller.state.activeRoute
-        val hud = gameFragment()?.hudState()
         val outcome = controller.onPlayerDied()
         val title = if (outcome.runOver)
             getString(R.string.adventure_run_lost_title)
@@ -1032,7 +1040,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         commitTransition {
             route?.let {
                 routeTelemetry.outcome(
-                    it.choiceId, false, hud?.elapsedSeconds ?: 0f, hud?.steps ?: 0, 1
+                    it.choiceId, false, elapsedSeconds, steps, 1
                 )
             }
             rewardDialog = builder.show()
