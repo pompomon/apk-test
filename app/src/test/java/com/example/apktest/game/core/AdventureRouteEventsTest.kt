@@ -259,6 +259,30 @@ class AdventureRouteEventsTest {
     }
 
     @Test
+    fun flagOffRunRestoredWithRoutesEnabledReceivesFutureOffer() {
+        val config = AdventureConfig.forDifficulty(DifficultyPresets.MEDIUM)
+        var controller = AdventureRunController(config, runSeed = 101L, routesEnabled = false)
+        repeat(3) {
+            controller.prepareCurrentMaze()
+            controller.completeMaze()
+            assertTrue(controller.state.pendingReward!!.routeChoices.isEmpty())
+            finishReward(controller)
+        }
+        assertTrue(controller.state.nextRouteEventMazeIndex > controller.state.currentMazeIndex)
+
+        controller = restore(controller, 101L, routesEnabled = true)
+        while (controller.state.pendingReward == null ||
+            controller.state.pendingReward!!.routeChoices.isEmpty()) {
+            controller.prepareCurrentMaze()
+            val outcome = controller.completeMaze()
+            assertFalse(outcome.runComplete)
+            if (controller.state.pendingReward!!.routeChoices.isEmpty()) finishReward(controller)
+        }
+        assertEquals(controller.state.currentMazeIndex,
+            controller.state.pendingReward!!.mazeIndexCompleted)
+    }
+
+    @Test
     fun zeroNpcLockIsNotMistakenForAnUnpreparedMaze() {
         val config = AdventureConfig(DifficultyPresets.MEDIUM, 3, 7, 0)
         val c = AdventureRunController(config, runSeed = 5L, routesEnabled = true)

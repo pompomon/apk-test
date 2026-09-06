@@ -19,7 +19,8 @@ internal class AdventureSaveSession private constructor(private val generation: 
         private val currentGeneration = AtomicLong()
         private val writeLock = Any()
 
-        fun open(): AdventureSaveSession =
+        fun open(): AdventureSaveSession = synchronized(writeLock) {
             AdventureSaveSession(currentGeneration.incrementAndGet())
+        }
     }
 }

@@ -218,14 +218,17 @@ class AdventureRunController(
         state.pendingReward?.let { return pendingWinOutcome(it) }
         val outcome = onMazeWon(elapsedSeconds, steps)
         if (outcome.runComplete) return outcome
-        val choices = if (routesEnabled && outcome.mazeIndexCompleted == state.nextRouteEventMazeIndex) {
-            routeGenerator.offer(outcome.mazeIndexCompleted, state.routeEventOrdinal).also {
-                state.nextRouteEventMazeIndex = routeGenerator.nextEventMazeIndex(
-                    outcome.mazeIndexCompleted, state.routeEventOrdinal
-                )
-                state.routeEventOrdinal += 1
+        var choices = emptyList<RouteEventChoice>()
+        while (outcome.mazeIndexCompleted >= state.nextRouteEventMazeIndex) {
+            val scheduledIndex = state.nextRouteEventMazeIndex
+            if (routesEnabled && outcome.mazeIndexCompleted == scheduledIndex) {
+                choices = routeGenerator.offer(scheduledIndex, state.routeEventOrdinal)
             }
-        } else emptyList()
+            state.nextRouteEventMazeIndex = routeGenerator.nextEventMazeIndex(
+                scheduledIndex, state.routeEventOrdinal
+            )
+            state.routeEventOrdinal += 1
+        }
         state.pendingReward = PendingAdventureReward(
             mazeIndexCompleted = outcome.mazeIndexCompleted,
             stage = RewardStage.WIN_ACKNOWLEDGEMENT,
