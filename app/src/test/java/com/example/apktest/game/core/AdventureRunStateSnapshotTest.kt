@@ -45,18 +45,19 @@ class AdventureRunStateSnapshotTest {
             difficultyName = DifficultyPresets.MEDIUM.name,
             playerPolicy = PlayerPolicyType.BFS_EXIT,
             npcPolicy = NpcPolicyType.DIRECT_CHASE,
-            seed = 7L,
+            seed = 0xDEADBEEFL,
             status = GameStatus.PAUSED,
             elapsedSeconds = 1.5f,
             steps = 3,
             player = GameEngineSnapshot.PlayerSnapshot(2, 2, Direction.EAST),
-            npcs = listOf(GameEngineSnapshot.NpcSnapshot(0, 1, 1, Direction.WEST)),
+            npcs = List(3) { GameEngineSnapshot.NpcSnapshot(it, it + 1, 1, Direction.WEST) },
             spawnedPowerUps = emptyList(),
             activeEffects = emptyList(),
             npcInducedPlayerFreezeRemainingSeconds = null,
             manualQueue = emptyList(),
             manualOverrideRemainingSeconds = 0f,
-            npcPolicies = listOf(NpcPolicyType.DIRECT_CHASE)
+            npcCountOverride = 3,
+            npcPolicies = sampleState().currentMazeNpcPolicies
         )
         val state = sampleState().apply { currentMazeSnapshot = engineSnapshot }
         val snap = AdventureRunStateSnapshot.fromState(state, runSeed = 0xCAFEL)

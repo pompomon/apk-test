@@ -65,7 +65,9 @@ data class GameEngineSnapshot(
      * NPC. Older schema versions that pre-date this field are rejected by
      * `fromJson`.
      */
-    val npcPolicies: List<NpcPolicyType> = emptyList()
+    val npcPolicies: List<NpcPolicyType> = emptyList(),
+    /** Finite-positive per-maze pickup lifetime; `null` uses the difficulty preset. */
+    val powerUpPickupLifetimeOverrideSeconds: Float? = null
 ) {
     data class PlayerSnapshot(val x: Int, val y: Int, val facing: Direction)
     data class NpcSnapshot(val id: Int, val x: Int, val y: Int, val facing: Direction)
@@ -208,10 +210,13 @@ data class GameEngineSnapshot(
         put(KEY_NPC_POLICIES, JSONArray().apply {
             npcPolicies.forEach { put(it.name) }
         })
+        if (powerUpPickupLifetimeOverrideSeconds != null) {
+            put(KEY_PICKUP_LIFETIME_OVERRIDE, powerUpPickupLifetimeOverrideSeconds.toDouble())
+        }
     }.toString()
 
     companion object {
-        const val SCHEMA_VERSION = 5
+        const val SCHEMA_VERSION = 6
 
         private const val KEY_VERSION = "v"
         private const val KEY_DIFFICULTY = "difficulty"
@@ -233,6 +238,7 @@ data class GameEngineSnapshot(
         private const val KEY_REMOVED_WALLS = "removedWalls"
         private const val KEY_NPC_COUNT_OVERRIDE = "npcCountOverride"
         private const val KEY_NPC_POLICIES = "npcPolicies"
+        private const val KEY_PICKUP_LIFETIME_OVERRIDE = "powerUpPickupLifetimeOverrideSeconds"
 
         fun fromJson(json: String): GameEngineSnapshot? {
             return try {
@@ -332,6 +338,16 @@ data class GameEngineSnapshot(
                         List(arr.length()) { i -> NpcPolicyType.valueOf(arr.getString(i)) }
                     }
                 } else emptyList()
+                val pickupLifetimeOverride = if (
+                    !obj.has(KEY_PICKUP_LIFETIME_OVERRIDE) || obj.isNull(KEY_PICKUP_LIFETIME_OVERRIDE)
+                ) {
+                    null
+                } else {
+                    val value = obj.get(KEY_PICKUP_LIFETIME_OVERRIDE) as? Number ?: return null
+                    value.toFloat().also {
+                        if (!it.isFinite() || it <= 0f) return null
+                    }
+                }
                 val snapshot = GameEngineSnapshot(
                     schemaVersion = version,
                     difficultyName = obj.getString(KEY_DIFFICULTY),
@@ -354,7 +370,8 @@ data class GameEngineSnapshot(
                     manualOverrideRemainingSeconds = obj.optDouble(KEY_MANUAL_OVERRIDE, 0.0).toFloat(),
                     removedWalls = removedWalls,
                     npcCountOverride = npcCountOverride,
-                    npcPolicies = npcPolicies
+                    npcPolicies = npcPolicies,
+                    powerUpPickupLifetimeOverrideSeconds = pickupLifetimeOverride
                 )
                 val preset = snapshot.resolvePreset() ?: return null
                 // Reject snapshots whose NPC metadata is internally

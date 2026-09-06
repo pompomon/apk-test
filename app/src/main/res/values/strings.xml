@@ -109,16 +109,21 @@
     <string name="adventure_route_quiet_corridor_name">Quiet Corridor</string>
     <string name="adventure_route_quiet_corridor_description">Next maze: -1 NPC, subject to the difficulty minimum. Next reward: -1 choice.</string>
     <string name="adventure_route_scout_map_name">Scout Map</string>
-    <string name="adventure_route_scout_map_description">Reveal the next maze NPC count and upcoming route category.</string>
+    <string name="adventure_route_scout_map_description">Reveal the next maze NPC count and categories in the next route offer.</string>
     <string name="adventure_route_ambush_shortcut_name">Ambush Shortcut</string>
-    <string name="adventure_route_ambush_shortcut_description">Next maze: +1 NPC or 1 elite. Win it to gain 1 reward reroll.</string>
+    <string name="adventure_route_ambush_shortcut_description">Next maze: +1 NPC. Win it to gain 1 reward reroll (maximum 1 saved).</string>
     <string name="adventure_route_cursed_gate_name">Cursed Gate</string>
-    <string name="adventure_route_cursed_gate_description">Next maze: power-up pickups expire sooner. Win it to gain +1 streak progress.</string>
+    <string name="adventure_route_cursed_gate_description">Next maze: pickups last 10s less (minimum 10s, plus initial staggering). Win it for +1 streak progress.</string>
     <string name="adventure_route_supply_cache_name">Supply Cache</string>
     <string name="adventure_route_supply_cache_description">Choose 1 starting power-up now instead of the normal next-maze reward.</string>
     <string name="adventure_route_training_room_name">Training Room</string>
     <string name="adventure_route_training_room_description">Temporarily unlock 1 automated strategy for the next maze.</string>
     <string name="adventure_route_choice_accessibility">%1$s, %2$s route. %3$s</string>
+    <string name="adventure_route_preview">Next maze: %1$d NPCs. Route after maze %2$d: %3$s.</string>
+    <string name="adventure_route_reroll">Reroll (use 1)</string>
+    <string name="adventure_save_failed_title">Progress not saved</string>
+    <string name="adventure_save_failed_body">Your decision is waiting to be saved. Retry before continuing.</string>
+    <string name="adventure_save_retry">Retry save</string>
 
     <!-- Adventure elite NPC modifiers (provisional; unused while the feature is disabled) -->
     <string name="adventure_elite_summary_title">Elite modifiers</string>

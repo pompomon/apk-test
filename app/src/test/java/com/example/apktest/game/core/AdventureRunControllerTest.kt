@@ -276,17 +276,19 @@ class AdventureRunControllerTest {
             difficultyName = DifficultyPresets.EASY.name,
             playerPolicy = PlayerPolicyType.MANUAL,
             npcPolicy = NpcPolicyType.DIRECT_CHASE,
-            seed = 1L,
+            seed = c.state.currentMazeSeed!!,
             status = GameStatus.RUNNING,
             elapsedSeconds = 0f,
             steps = 0,
             player = GameEngineSnapshot.PlayerSnapshot(0, 0, Direction.NORTH),
-            npcs = emptyList(),
+            npcs = listOf(GameEngineSnapshot.NpcSnapshot(0, 1, 1, Direction.WEST)),
             spawnedPowerUps = emptyList(),
             activeEffects = emptyList(),
             npcInducedPlayerFreezeRemainingSeconds = null,
             manualQueue = emptyList(),
-            manualOverrideRemainingSeconds = 0f
+            manualOverrideRemainingSeconds = 0f,
+            npcCountOverride = c.state.currentMazeNpcCount,
+            npcPolicies = c.state.currentMazeNpcPolicies
         )
         c.recordMidMazeSnapshot(fakeSnapshot)
         assertNotNull(c.state.currentMazeSnapshot)

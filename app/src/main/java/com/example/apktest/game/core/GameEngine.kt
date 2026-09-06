@@ -136,6 +136,13 @@ class GameEngine(
     var npcPolicies: List<NpcPolicyType>? = null
         private set
 
+    /** Per-maze pickup lifetime; null preserves the preset, including infinite Easy pickups. */
+    var powerUpPickupLifetimeOverrideSeconds: Float? = null
+        private set
+
+    private val effectivePowerUpPickupLifetimeSeconds: Float
+        get() = powerUpPickupLifetimeOverrideSeconds ?: difficulty.powerUpPickupLifetimeSeconds
+
     private var playerAccumulator = 0f
     private val adventurerAccumulatorsById = mutableMapOf<Int, Float>()
     private var npcAccumulator = 0f
@@ -216,9 +223,10 @@ class GameEngine(
     fun applyDifficulty(newDifficulty: DifficultyPreset) {
         difficulty = newDifficulty
         // Changing difficulty discards any per-maze Adventure overrides so a
-        // user who flips difficulty mid-session gets the preset's NPC count.
+        // user who flips difficulty mid-session gets the preset's NPC count and pickup lifetime.
         npcCountOverride = null
         npcPolicies = null
+        powerUpPickupLifetimeOverrideSeconds = null
     }
 
     fun setPlayerPolicy(type: PlayerPolicyType) {
@@ -262,22 +270,35 @@ class GameEngine(
      * restart path to run) so the new NPC spawn count and policies take
      * effect. Passing an empty [policies] list (or fewer than [npcCount])
      * falls back to the engine's configured [npcPolicyType] for any
-     * unassigned NPC index.
+     * unassigned NPC index. [pickupLifetimeSeconds] overrides only map-pickup
+     * lifetime, not active-effect durations; `null` preserves the preset.
      */
-    fun configureAdventureMaze(npcCount: Int, policies: List<NpcPolicyType>) {
+    fun configureAdventureMaze(
+        npcCount: Int,
+        policies: List<NpcPolicyType>,
+        pickupLifetimeSeconds: Float? = null
+    ) {
         require(npcCount >= 0) { "npcCount must be >= 0 (was $npcCount)" }
+        require(
+            pickupLifetimeSeconds == null ||
+                (pickupLifetimeSeconds.isFinite() && pickupLifetimeSeconds > 0f)
+        ) {
+            "pickupLifetimeSeconds must be finite and positive, or null"
+        }
         npcCountOverride = npcCount
         npcPolicies = policies.toList()
+        powerUpPickupLifetimeOverrideSeconds = pickupLifetimeSeconds
     }
 
     /**
      * Clears any Adventure-mode overrides previously installed via
      * [configureAdventureMaze] so subsequent [restart] calls revert to the
-     * preset's `npcCount` and the uniform [npcPolicyType].
+     * preset's NPC count, pickup lifetime and the uniform [npcPolicyType].
      */
     fun clearAdventureMazeConfig() {
         npcCountOverride = null
         npcPolicies = null
+        powerUpPickupLifetimeOverrideSeconds = null
     }
 
     /**
@@ -354,7 +375,8 @@ class GameEngine(
         // [Npc.id]) so a resume on a snapshot taken mid-Adventure-maze
         // restores each NPC's individual policy. For single-maze runs this
         // is just a uniform list of [npcPolicyType] — small and harmless.
-        npcPolicies = npcs.map { it.policyType }
+        npcPolicies = npcs.map { it.policyType },
+        powerUpPickupLifetimeOverrideSeconds = powerUpPickupLifetimeOverrideSeconds
     )
 
     /**
@@ -420,6 +442,10 @@ class GameEngine(
         require(snapshot.isWithinBounds(preset)) {
             "Snapshot contains positions outside maze bounds for preset ${preset.name}"
         }
+        val pickupLifetime = snapshot.powerUpPickupLifetimeOverrideSeconds
+        require(pickupLifetime == null || (pickupLifetime.isFinite() && pickupLifetime > 0f)) {
+            "Snapshot pickup lifetime override must be finite and positive, or null"
+        }
         difficulty = preset
         playerPolicyType = snapshot.playerPolicy
         npcPolicyType = snapshot.npcPolicy
@@ -459,6 +485,7 @@ class GameEngine(
         // list. Treat the snapshot as an Adventure override only when it
         // explicitly carries a count override or a non-uniform policy list.
         npcCountOverride = snapshot.npcCountOverride
+        powerUpPickupLifetimeOverrideSeconds = snapshot.powerUpPickupLifetimeOverrideSeconds
         npcPolicies = snapshot.npcPolicies
             .takeIf { list ->
                 list.isNotEmpty() && (
@@ -1183,7 +1210,7 @@ class GameEngine(
         if (position == player.position) return
         if (npcs.any { it.position == position }) return
         if (adventurers.any { it.position == position }) return
-        val lifetime = difficulty.powerUpPickupLifetimeSeconds
+        val lifetime = effectivePowerUpPickupLifetimeSeconds
         val expiresAt = if (lifetime > 0f) {
             elapsedSeconds + lifetime + extraDelaySeconds.coerceAtLeast(0f)
         } else {
@@ -1204,7 +1231,7 @@ class GameEngine(
     }
 
     private fun expireTimedPowerUpsOnMap() {
-        if (difficulty.powerUpPickupLifetimeSeconds <= 0f) return
+        if (effectivePowerUpPickupLifetimeSeconds <= 0f) return
         val expired = powerUpsByCell.values
             .filter { it.expiresAtSeconds != null && elapsedSeconds >= it.expiresAtSeconds }
             .map { it.position }

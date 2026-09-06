@@ -13,6 +13,47 @@ Adventure mode currently advances through a mostly fixed sequence: win a maze, c
 
 ## Functional design
 
+### Phase 1 implementation contract
+
+- All five non-deferred routes are implemented behind the default-off route
+  flag. The Android host limits new offers to Medium when the flag is enabled;
+  tests can explicitly enable other difficulties. Existing saved offers and
+  effects are honored even with generation disabled.
+- Offers contain two or three distinct choices, including a non-risky choice.
+  Quiet Corridor is omitted when its NPC reduction would be clamped away.
+  Shipped presets retain at least one NPC; zero is permitted for custom
+  zero-base configurations. Final-maze protection is applied after the delta.
+- Ambush Shortcut adds one NPC, never an elite. Winning the affected maze
+  grants one banked reroll, capped at one. A reroll replaces the currently
+  offered starting-power-up options; it cannot be earned from a death.
+  Ambush is excluded when its target is the final maze.
+- Supply Cache is a neutral route using the ordinary starting-reward pool.
+  Its chooser replaces, rather than supplements, the normal reward chooser.
+- Scout Map shows the locked next-maze NPC count and **all categories in the
+  next scheduled offer**. Offer generation does not depend on earlier route
+  selections or reroll balance, so the preview remains truthful. Scout is
+  excluded if no later non-final event remains.
+- Cursed Gate subtracts 10 seconds from finite pickup lifetime, with a
+  10-second minimum, preserving initial expiration staggering. It is excluded
+  on Easy and when no lifetime reduction is possible. The penalty affects
+  initial pickups and respawns, not activated effects. Its extra streak point
+  is added before checking the three-point life bonus; the counter still
+  resets to zero on a bonus or death.
+- The controller persists win acknowledgement, route choice, and power-up
+  choice stages. Confirmed transitions are durably saved before displaying
+  the next stage or starting the maze. Restoring a pending stage does not
+  start a maze, reroll offers, or repeat win bookkeeping. Disk failures keep
+  the transition blocked and expose a retry action.
+- Adventure snapshot schema 3 intentionally rejects schema-2 runs. Engine
+  snapshot schema 6 adds the pickup-lifetime override and rejects schema-5
+  engine saves, including Classic saves. No partial route-state migration is
+  attempted.
+
+Telemetry hooks use the no-op sink by default. Offered/chosen/applied events
+follow successful saves, not dialog redraws. Outcome events describe each
+affected-maze attempt: a failed attempt has death delta 1; a win has delta 0.
+Delivery is best-effort, not a durable analytics outbox.
+
 - Schedule the first route-event offer after maze 2. After each offer, deterministically add 2 or 3 to the completed-maze index using an independent RNG derived from the run seed and route-event ordinal, and persist that result as `nextRouteEventMazeIndex`. Eligibility is therefore defined only by the persisted next index, not by a separate even-maze rule.
 - Do not trigger on the final maze win.
 - Present 2-3 route choices before the existing reward chooser:
@@ -100,7 +141,9 @@ Persistence changes:
 
 - Add route history and pending route effect fields to `AdventureRunState` and `AdventureRunStateSnapshot`.
 - Persist `nextRouteEventMazeIndex` so resume and death replay do not recompute cadence.
-- Keep generated offers out of persistence unless a process can die while the offer dialog is visible. If so, persist the exact offered IDs plus selected index state.
+- Persist exact route and power-up offers and confirmed selections while the
+  reward flow is pending. An unconfirmed highlighted row may reset on recreation;
+  confirming a row is the durable gameplay decision.
 - If route effects alter `GameEngine` runtime state beyond existing `configureAdventureMaze(...)` inputs, add those fields to `GameEngineSnapshot` and bump its schema.
 
 ## Integration points
@@ -116,7 +159,8 @@ Persistence changes:
   - Reject snapshots containing an unknown pending choice or effect because dropping gameplay state could change the next maze. Unknown IDs may be discarded only from history-only records that cannot affect future behavior; otherwise bump the schema.
 - `AdventureActivity`
   - Insert the route-event dialog before `showStartingPowerUpChooser(...)`.
-  - Persist only after player commits all required choices, matching the current reward-dialog safety pattern.
+  - Persist each reward-flow transition before showing its next screen. Restore
+    the pending stage before attaching a new game fragment.
 - `GameFragment` / `GameEngine`
   - Prefer extending `MazeStartupSpec` first; only add engine APIs for effects that cannot be represented as NPC count, policy list, or starting power-up.
 

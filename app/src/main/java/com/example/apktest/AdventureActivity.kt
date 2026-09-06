@@ -18,6 +18,7 @@ import androidx.core.view.WindowInsetsCompat
 import com.badlogic.gdx.backends.android.AndroidFragmentApplication
 import com.example.apktest.game.GameFragment
 import com.example.apktest.game.core.AdventureConfig
+import com.example.apktest.game.core.AdventureFeatureFlags
 import com.example.apktest.game.core.AdventureRunController
 import com.example.apktest.game.core.AdventureRunStateSnapshot
 import com.example.apktest.game.core.AdventureStatus
@@ -26,11 +27,16 @@ import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.game.core.PowerUpType
+import com.example.apktest.game.core.MazeStartupSpec
+import com.example.apktest.game.core.PendingAdventureReward
+import com.example.apktest.game.core.RewardStage
+import com.example.apktest.game.core.RouteEventCategory
 import com.example.apktest.game.core.automatedPlayerPolicies
 import com.example.apktest.game.ui.HudState
 import com.example.apktest.ui.GameInputController
 import com.example.apktest.ui.LegendDialog
 import com.example.apktest.ui.AdventureTimeFormatter
+import com.example.apktest.telemetry.AdventureRouteTelemetry
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -48,6 +54,7 @@ import java.util.concurrent.RejectedExecutionException
 class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
 
     private lateinit var adventureStore: AdventureStateStore
+    private lateinit var saveSession: AdventureSaveSession
     private lateinit var bestStore: AdventureBestStore
     private val autosaveExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
@@ -72,6 +79,15 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     private var selectedAutomatedPlayerPolicy: PlayerPolicyType? = null
     private var automatedPolicyPromptShown: Boolean = false
     private var automatedPolicyDialog: AlertDialog? = null
+    private var rewardDialog: AlertDialog? = null
+    private var foreground = false
+    private var stateGeneration = 0L
+    private var saveInFlight = false
+    private var saveFailed = false
+    private var failNextRewardSave = false
+    private var pendingCommit: (() -> Unit)? = null
+    private var afterResume: (() -> Unit)? = null
+    private val routeTelemetry = AdventureRouteTelemetry()
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun adventureStatusBarTextForTesting(): CharSequence = statusBar.text
@@ -89,6 +105,30 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun isInertiaToggleCheckedForTesting(): Boolean = inertiaToggle.isChecked
 
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun rewardStageForTesting(): RewardStage? = controller.state.pendingReward?.stage
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun rewardDialogForTesting(): AlertDialog? = rewardDialog
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun rewardOptionsForTesting(): List<String> {
+        val adapter = rewardDialog?.listView?.adapter ?: return emptyList()
+        return (0 until adapter.count).map { adapter.getItem(it).toString() }
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun failNextRewardSaveForTesting() {
+        failNextRewardSave = true
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun rewardSaveFailedForTesting(): Boolean = saveFailed
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun rewardDecisionReadyForTesting(): Boolean =
+        pendingCommit == null && !saveInFlight && !saveFailed
+
     private val tickHandler = Handler(Looper.getMainLooper())
     private val tickRunnable = object : Runnable {
         override fun run() {
@@ -103,6 +143,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         setContentView(R.layout.activity_adventure)
 
         adventureStore = AdventureStateStore(this)
+        saveSession = AdventureSaveSession.open()
         bestStore = AdventureBestStore(this)
 
         val root = findViewById<View>(R.id.adventureRoot)
@@ -117,19 +158,26 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         autoToggle = findViewById(R.id.buttonAuto)
         inertiaToggle = findViewById(R.id.buttonInertia)
 
-        val (initialController, initialSeed, isFreshStart) = loadOrBuildController(intent, savedInstanceState)
+        val (initialController, initialSeed, _) = loadOrBuildController(intent, savedInstanceState)
         controller = initialController
         runSeed = initialSeed
         restoreAutomationUiState(savedInstanceState)
         restoreInputUiState(savedInstanceState)
 
-        // Always (re)create the GameFragment from the current controller
-        // spec, including on activity recreation (savedInstanceState != null,
-        // typically process-death). The FragmentManager would otherwise
-        // restore the previous GameFragment with its original arguments,
-        // which can be stale (wrong maze index / wrong mid-maze snapshot)
-        // versus the persisted controller state we just loaded. Replacing
-        // the fragment reconciles the engine/UI with controller.prepareCurrentMaze().
+        setupControls()
+        setupSwipeControls()
+        refreshStatusBar()
+        refreshAutoToggle()
+        if (controller.state.pendingReward != null) {
+            // A reward phase has no running maze. Remove any OS-restored
+            // fragment before it can replay stale arguments behind the dialog.
+            supportFragmentManager.findFragmentById(R.id.fragmentGameHost)?.let {
+                supportFragmentManager.beginTransaction().remove(it).commitNow()
+            }
+            transitionPending = true
+            commitTransition { showPendingReward() }
+            return
+        }
         val spec = controller.prepareCurrentMaze()
         if (spec == null) {
             // Defensive: terminal state recovered from store. Clear and bail.
@@ -137,6 +185,17 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             returnToSetup()
             return
         }
+        // SharedPreferences may expose a failed commit in its memory cache.
+        // Recommit on recreation before starting GL or acknowledging a stage.
+        transitionPending = true
+        commitTransition {
+            attachMaze(spec)
+            refreshAutoToggle()
+            promptForAutomatedPolicyIfNeeded()
+        }
+    }
+
+    private fun attachMaze(spec: MazeStartupSpec) {
         val fragment = GameFragment()
         val args = Bundle().apply {
             putString(GameFragment.ARG_PLAYER_POLICY, spec.playerPolicy.name)
@@ -166,25 +225,9 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 playerPolicy = spec.playerPolicy,
                 npcCount = spec.npcCount,
                 npcPolicies = spec.npcPolicies,
-                startingPowerUp = spec.startingPowerUp
+                startingPowerUp = spec.startingPowerUp,
+                pickupLifetimeSeconds = spec.pickupLifetimeSeconds
             )
-        }
-
-        setupControls()
-        setupSwipeControls()
-        refreshStatusBar()
-        refreshAutoToggle()
-        // The Adventure GameFragment is attached synchronously via commitNow()
-        // above, so the prompt can run inline; no need to defer to the event
-        // queue (which could race the transaction).
-        promptForAutomatedPolicyIfNeeded()
-
-        if (isFreshStart) {
-            // Eagerly persist the freshly-built run state with commit() so a
-            // process death before the first autosave can't resurrect a
-            // previous run (AdventureSetupActivity's clear() uses async
-            // apply(), which is not flushed yet at this point).
-            persistAdventureStateBlocking()
         }
     }
 
@@ -237,7 +280,9 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             val controller = AdventureRunController(
                 config = config,
                 initialState = saved.toState(),
-                runSeed = saved.runSeed
+                runSeed = saved.runSeed,
+                routesEnabled = AdventureFeatureFlags.ROUTE_EVENTS_ENABLED &&
+                    config.difficulty.name == DifficultyPresets.MEDIUM.name
             )
             return Triple(controller, saved.runSeed, false)
         }
@@ -245,7 +290,12 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             ?: DifficultyPresets.EASY.name
         val config = AdventureConfig.forDifficulty(DifficultyPresets.byName(difficultyName))
         val seed = System.currentTimeMillis()
-        return Triple(AdventureRunController(config = config, runSeed = seed), seed, true)
+        return Triple(AdventureRunController(
+            config = config,
+            runSeed = seed,
+            routesEnabled = AdventureFeatureFlags.ROUTE_EVENTS_ENABLED &&
+                config.difficulty.name == DifficultyPresets.MEDIUM.name
+        ), seed, true)
     }
 
     override fun exit() {
@@ -254,19 +304,34 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     override fun onResume() {
         super.onResume()
+        foreground = true
+        val action = afterResume
+        afterResume = null
+        when {
+            action != null -> action()
+            saveFailed -> showSaveFailure()
+            !saveInFlight && controller.state.pendingReward != null -> showPendingReward()
+        }
         tickHandler.removeCallbacks(tickRunnable)
         tickHandler.postDelayed(tickRunnable, TICK_INTERVAL_MS)
     }
 
     override fun onPause() {
+        foreground = false
         tickHandler.removeCallbacks(tickRunnable)
         // Stop held D-pad repeats while the activity is backgrounded.
         inputController.stop()
+        // Every reward transition is saved explicitly before its next screen.
+        // Never let an old GL snapshot overwrite a pending decision.
+        if (pendingCommit != null || controller.state.pendingReward != null) {
+            super.onPause()
+            return
+        }
         // Adventure runs that are already terminal (WON/LOST) clear the
         // store so the next launch doesn't try to "resume" a finished run.
         if (controller.state.status != AdventureStatus.IN_PROGRESS) {
             try {
-                autosaveExecutor.execute { adventureStore.clearBlocking() }
+                autosaveExecutor.execute { saveSession.write { adventureStore.clearBlocking() } }
             } catch (_: RejectedExecutionException) {
                 // Executor shut down — accept the loss.
             }
@@ -291,19 +356,31 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             return
         }
         if (frag != null && (status == GameStatus.RUNNING || status == GameStatus.PAUSED)) {
+            val generation = stateGeneration
+            val mazeIndex = controller.state.currentMazeIndex
+            val mazeSeed = controller.state.currentMazeSeed
             frag.captureSnapshotAsync { engineSnapshot ->
                 // captureSnapshotAsync's callback fires on the GL thread.
                 // Hop back to the main thread before mutating the
                 // controller (not thread-safe) and before reading state
                 // into a serialisable snapshot.
                 tickHandler.post {
+                    if (isDestroyed || generation != stateGeneration ||
+                        mazeIndex != controller.state.currentMazeIndex ||
+                        mazeSeed != controller.state.currentMazeSeed ||
+                        engineSnapshot.seed != mazeSeed ||
+                        controller.state.pendingReward != null || pendingCommit != null ||
+                        controller.state.status != AdventureStatus.IN_PROGRESS
+                    ) return@post
                     try {
                         if (engineSnapshot.status == GameStatus.WIN ||
                             engineSnapshot.status == GameStatus.LOSE
                         ) {
                             // Don't persist terminal snapshots; relaunch
                             // would re-trigger the overlay flow.
-                            controller.clearMidMazeSnapshot()
+                            // The status poll will commit the corresponding
+                            // transition; don't save an unprocessed terminal maze.
+                            return@post
                         } else {
                             controller.recordMidMazeSnapshot(engineSnapshot)
                         }
@@ -313,12 +390,6 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                     }
                 }
             }
-        } else {
-            // WIN/LOSE were handled by the engine before we got here
-            // and the controller already transitioned via pollEngineStatus;
-            // persist the run-level state without a mid-maze snapshot.
-            controller.clearMidMazeSnapshot()
-            persistAdventureStateAsync()
         }
         super.onPause()
     }
@@ -327,6 +398,11 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         inputController.stop()
         automatedPolicyDialog?.dismiss()
         automatedPolicyDialog = null
+        rewardDialog?.dismiss()
+        rewardDialog = null
+        afterResume = null
+        stateGeneration++
+        saveSession.close()
         autosaveExecutor.shutdown()
         super.onDestroy()
     }
@@ -340,47 +416,86 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun persistAdventureStateAsync() {
+        if (pendingCommit != null || controller.state.pendingReward != null ||
+            controller.state.status != AdventureStatus.IN_PROGRESS) return
         val snapshot = AdventureRunStateSnapshot.fromState(controller.state, runSeed)
         try {
-            autosaveExecutor.execute { adventureStore.save(snapshot) }
+            autosaveExecutor.execute { saveSession.write { adventureStore.saveBlocking(snapshot) } }
         } catch (_: RejectedExecutionException) {
             // Executor shut down — accept the loss.
         }
     }
 
+    private fun commitTransition(onCommitted: () -> Unit) {
+        stateGeneration++
+        pendingCommit = onCommitted
+        automatedPolicyDialog?.dismiss()
+        automatedPolicyDialog = null
+        rewardDialog?.dismiss()
+        rewardDialog = null
+        refreshAutoToggle()
+        savePendingTransition()
+    }
+
+    private fun savePendingTransition() {
+        if (saveInFlight || pendingCommit == null) return
+        saveFailed = false
+        saveInFlight = true
+        val generation = stateGeneration
+        val snapshot = AdventureRunStateSnapshot.fromState(controller.state, runSeed)
+        val failWrite = failNextRewardSave
+        failNextRewardSave = false
+        try {
+            autosaveExecutor.execute {
+                val saved = try {
+                    !failWrite && saveSession.write {
+                        if (snapshot.status == AdventureStatus.IN_PROGRESS) {
+                            adventureStore.saveBlocking(snapshot)
+                        } else {
+                            adventureStore.clearBlocking()
+                        }
+                    }
+                } catch (_: Exception) {
+                    false
+                }
+                tickHandler.post {
+                    if (isDestroyed || generation != stateGeneration) return@post
+                    saveInFlight = false
+                    if (saved) {
+                        val action = pendingCommit
+                        pendingCommit = null
+                        if (foreground) action?.invoke() else afterResume = action
+                    } else {
+                        saveFailed = true
+                        if (foreground) showSaveFailure()
+                    }
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            saveInFlight = false
+            saveFailed = true
+            if (foreground && !isDestroyed) showSaveFailure()
+        }
+    }
+
+    private fun showSaveFailure() {
+        rewardDialog?.dismiss()
+        rewardDialog = AlertDialog.Builder(this)
+            .setTitle(R.string.adventure_save_failed_title)
+            .setMessage(R.string.adventure_save_failed_body)
+            .setCancelable(false)
+            .setPositiveButton(R.string.adventure_save_retry) { _, _ -> savePendingTransition() }
+            .show()
+    }
+
     private fun persistAdventureStateBlocking() {
         val snapshot = AdventureRunStateSnapshot.fromState(controller.state, runSeed)
         try {
-            autosaveExecutor.submit { adventureStore.saveBlocking(snapshot) }
+            autosaveExecutor.submit { saveSession.write { adventureStore.saveBlocking(snapshot) } }
                 .get(SAVE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
         } catch (_: RejectedExecutionException) {
             // Executor shut down — accept the loss rather than calling
             // saveBlocking() (which does SharedPreferences.commit() disk
-            // I/O) on the calling thread, which may be the UI thread.
-        } catch (_: InterruptedException) {
-            Thread.currentThread().interrupt()
-        } catch (_: java.util.concurrent.ExecutionException) {
-            // best-effort
-        } catch (_: java.util.concurrent.TimeoutException) {
-            // best-effort
-        }
-    }
-
-    /**
-     * Mirror of [persistAdventureStateBlocking] for the terminal clear:
-     * submits a `commit()`-based clear to [autosaveExecutor] and waits
-     * briefly for it to flush, so a finished run can't be resurrected as
-     * "Resume Adventure" if the process is killed before an async
-     * `apply()` write reaches disk. Never invokes
-     * [AdventureStateStore.clearBlocking] on the calling thread.
-     */
-    private fun clearAdventureStateBlocking() {
-        try {
-            autosaveExecutor.submit { adventureStore.clearBlocking() }
-                .get(SAVE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
-        } catch (_: RejectedExecutionException) {
-            // Executor shut down — accept the loss rather than calling
-            // clearBlocking() (which does SharedPreferences.commit() disk
             // I/O) on the calling thread, which may be the UI thread.
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
@@ -419,6 +534,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun disableAutomatedMovement() {
+        if (controller.state.pendingReward != null || pendingCommit != null) return
         autoMovementEnabled = false
         controller.setCurrentPlayerPolicy(PlayerPolicyType.MANUAL)
         gameFragment()?.setPlayerPolicy(PlayerPolicyType.MANUAL)
@@ -428,6 +544,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun applyAutomatedPlayerPolicy(policy: PlayerPolicyType) {
+        if (controller.state.pendingReward != null || pendingCommit != null) return
         if (!controller.setCurrentPlayerPolicy(policy)) {
             autoMovementEnabled = false
             refreshAutoToggle()
@@ -442,6 +559,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun showAutomatedPolicySelector(revertToManualOnCancel: Boolean) {
+        if (controller.state.pendingReward != null || pendingCommit != null) return
         val policies = availableAutomatedPlayerPolicies()
         if (policies.isEmpty()) {
             autoMovementEnabled = false
@@ -467,6 +585,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun promptForAutomatedPolicyIfNeeded() {
+        if (controller.state.pendingReward != null || pendingCommit != null) return
         val policies = availableAutomatedPlayerPolicies()
         if (automatedPolicyPromptShown || autoMovementEnabled || policies.isEmpty()) return
         if (gameFragment() == null) return
@@ -481,7 +600,9 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         if (autoMovementEnabled && validateAndUpdateSelectedAutomatedPolicy() == null) {
             autoMovementEnabled = false
         }
-        autoToggle.isEnabled = available.isNotEmpty()
+        val deciding = controller.state.pendingReward != null || pendingCommit != null
+        autoToggle.isEnabled = available.isNotEmpty() && !deciding
+        menuButton.isEnabled = !deciding
         autoToggle.isChecked = autoMovementEnabled && autoToggle.isEnabled
     }
 
@@ -497,6 +618,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         automatedPlayerPolicies(controller.state.unlockedPlayerPolicies)
 
     private fun showMenu() {
+        if (controller.state.pendingReward != null || pendingCommit != null) return
         // Lightweight menu with: Pause/Resume, Legend, Switch player strategy,
         // Pause & Exit. Restart is intentionally omitted in Adventure mode
         // because restarting the engine without going through the controller
@@ -517,12 +639,15 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         AlertDialog.Builder(this)
             .setTitle(R.string.adventure_menu_title)
             .setItems(items) { _, which ->
-                entries[which].action()
+                if (controller.state.pendingReward == null && pendingCommit == null) {
+                    entries[which].action()
+                }
             }
             .show()
     }
 
     private fun showSwitchPlayerStrategy() {
+        if (controller.state.pendingReward != null || pendingCommit != null) return
         val unlocked = controller.state.unlockedPlayerPolicies.toList()
         if (unlocked.size < 2) return
         val items = unlocked.map { it.label }.toTypedArray()
@@ -530,6 +655,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         AlertDialog.Builder(this)
             .setTitle(R.string.adventure_pick_player_strategy)
             .setSingleChoiceItems(items, current) { dialog, which ->
+                if (controller.state.pendingReward != null || pendingCommit != null) {
+                    dialog.dismiss()
+                    return@setSingleChoiceItems
+                }
                 val chosen = unlocked[which]
                 if (controller.setCurrentPlayerPolicy(chosen)) {
                     if (chosen == PlayerPolicyType.MANUAL) {
@@ -549,6 +678,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun onPauseAndExit() {
+        if (controller.state.pendingReward != null || pendingCommit != null) return
         val frag = gameFragment()
         val hud = frag?.hudState()
         if (hud?.status == GameStatus.RUNNING) {
@@ -576,6 +706,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun moveUntilBlocked(direction: Direction) {
+        if (controller.state.pendingReward != null || pendingCommit != null) return
         val fragment = gameFragment()
         if (inertiaMovementEnabled) {
             fragment?.queueManualMoveUntilBlocked(direction)
@@ -586,6 +717,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     /** Polls the engine status to detect WIN/LOSE transitions exactly once. */
     private fun pollEngineStatus() {
+        if (controller.state.pendingReward != null || pendingCommit != null) return
         val hud = gameFragment()?.hudState() ?: return
         val status = hud.status
         refreshStatusBar()
@@ -617,17 +749,25 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         // [hud] is the same non-null snapshot that detected the WIN in
         // [pollEngineStatus], so time/steps are always the real values —
         // we never silently record a 0-time run or a bogus 00:00 best time.
-        val outcome = controller.onMazeWon(elapsedSeconds = hud.elapsedSeconds, steps = hud.steps)
-        // Intentionally do NOT persist controller state here. The controller
-        // has advanced (mazeIndex / lives / streak), but if the run is
-        // continuing the player still has to confirm the win dialog and,
-        // when applicable, pick a starting power-up. Persisting now would mean a
-        // process death while the dialogs are visible drops the power-up
-        // choice while keeping the advanced state. Instead we persist
-        // only after the user-driven follow-ups commit: [advanceToNextMaze]
-        // or [showStartingPowerUpChooser]'s positive button.
-        // If the process dies before either fires, on resume the persisted
-        // state is still at the previous maze and the player simply replays it.
+        val completedRoute = controller.state.activeRoute
+        val outcome = controller.completeMaze(elapsedSeconds = hud.elapsedSeconds, steps = hud.steps)
+        if (!outcome.runComplete) {
+            commitTransition {
+                completedRoute?.let {
+                    routeTelemetry.outcome(it.choiceId, true, hud.elapsedSeconds, hud.steps, 0)
+                }
+                val pending = controller.state.pendingReward
+                if (pending != null && pending.routeChoices.isNotEmpty()) {
+                    routeTelemetry.offered(
+                        controller.config.difficulty.name, pending.mazeIndexCompleted,
+                        pending.routeChoices.map { it.id },
+                        pending.routeChoices.map { it.category.name.lowercase(java.util.Locale.ROOT) }
+                    )
+                }
+                showPendingReward()
+            }
+            return
+        }
 
         val title = if (outcome.runComplete) {
             getString(R.string.adventure_run_complete_title)
@@ -675,7 +815,6 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             // End of adventure — clear store (blocking via autosave
             // executor so a process-kill before navigation can't
             // resurrect the finished run), then finish to setup screen.
-            clearAdventureStateBlocking()
             builder.setPositiveButton(R.string.adventure_finish) { _, _ ->
                 // Keep [transitionPending] latched and leave [lastObservedStatus]
                 // as the terminal WIN value so a stray tick before [onPause]
@@ -683,33 +822,136 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 // [controller.onMazeWon] a second time during teardown.
                 returnToSetup()
             }
-            builder.show()
+            commitTransition {
+                completedRoute?.let {
+                    routeTelemetry.outcome(it.choiceId, true, hud.elapsedSeconds, hud.steps, 0)
+                }
+                rewardDialog = builder.show()
+            }
             return
         }
-
-        builder.setPositiveButton(R.string.adventure_continue) { _, _ ->
-            showStartingPowerUpChooser(outcome.startingPowerUpCandidates)
-        }
-        builder.show()
     }
 
-    private fun showStartingPowerUpChooser(candidates: List<PowerUpType>) {
-        val items = candidates.map { it.label }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(R.string.adventure_powerup_prompt)
-            .setCancelable(false)
-            .setSingleChoiceItems(items, 0, null)
-            .setPositiveButton(R.string.adventure_continue) { dialog, _ ->
-                val listView = (dialog as AlertDialog).listView
-                val picked = listView.checkedItemPosition.coerceAtLeast(0)
-                controller.applyStartingPowerUp(candidates[picked])
-                persistAdventureStateAsync()
-                advanceToNextMaze()
+    private fun showPendingReward() {
+        if (!foreground || pendingCommit != null || isFinishing || isDestroyed) return
+        val pending = controller.state.pendingReward ?: return
+        val generation = stateGeneration
+        rewardDialog?.dismiss()
+        val mazeIndex = pending.mazeIndexCompleted
+        val builder = AlertDialog.Builder(this).setCancelable(false)
+        when (pending.stage) {
+            RewardStage.WIN_ACKNOWLEDGEMENT -> {
+                val bonus = if (pending.bonusLifeAwarded) {
+                    "\n" + getString(R.string.adventure_bonus_life, controller.state.livesRemaining)
+                } else ""
+                builder.setTitle(getString(
+                    R.string.adventure_maze_won_title, mazeIndex, controller.config.totalMazes
+                )).setMessage(getString(R.string.adventure_powerup_prompt) + bonus)
+                    .setPositiveButton(R.string.adventure_continue) { _, _ ->
+                        if (!acceptRewardCallback(generation, pending)) return@setPositiveButton
+                        if (controller.acknowledgeMazeWin(mazeIndex)) {
+                            commitTransition { showPendingReward() }
+                        }
+                    }
             }
-            .show()
+            RewardStage.ROUTE_CHOICE -> {
+                val choices = pending.routeChoices
+                val labels = choices.map { choice ->
+                    getString(
+                        R.string.adventure_route_choice_accessibility,
+                        routeName(choice.id), routeCategory(choice.category), routeDescription(choice.id)
+                    )
+                }.toTypedArray()
+                builder.setTitle(R.string.adventure_route_chooser_title)
+                    .setSingleChoiceItems(labels, 0, null)
+                    .setPositiveButton(R.string.adventure_continue) { dialog, _ ->
+                        if (!acceptRewardCallback(generation, pending)) return@setPositiveButton
+                        val index = (dialog as AlertDialog).listView.checkedItemPosition
+                        val choice = choices.getOrNull(index) ?: return@setPositiveButton
+                        if (controller.chooseRoute(mazeIndex, choice.id)) {
+                            val route = controller.state.activeRoute
+                            commitTransition {
+                                routeTelemetry.chosen(
+                                    controller.config.difficulty.name, mazeIndex, choice.id,
+                                    choice.category.name.lowercase(java.util.Locale.ROOT),
+                                    controller.state.livesRemaining, controller.state.deathsThisRun
+                                )
+                                route?.let {
+                                    routeTelemetry.applied(
+                                        it.mazeIndexAppliedTo, it.choiceId,
+                                        it.npcCountDelta, it.rewardOptionDelta
+                                    )
+                                }
+                                showPendingReward()
+                            }
+                        }
+                    }
+            }
+            RewardStage.POWER_UP_CHOICE -> {
+                val candidates = pending.powerUpCandidates
+                val preview = pending.preview?.let {
+                    getString(
+                        R.string.adventure_route_preview,
+                        it.npcCount, it.nextEventMazeIndex,
+                        it.categories.joinToString(", ") { category -> routeCategory(category) }
+                    ) + "\n"
+                } ?: ""
+                val title = if (pending.selectedRouteId == "supply_cache") {
+                    getString(R.string.adventure_route_supply_cache_name)
+                } else getString(R.string.adventure_powerup_prompt)
+                builder.setTitle(preview + title)
+                    .setSingleChoiceItems(candidates.map { it.label }.toTypedArray(), 0, null)
+                    .setPositiveButton(R.string.adventure_continue) { dialog, _ ->
+                        if (!acceptRewardCallback(generation, pending)) return@setPositiveButton
+                        val index = (dialog as AlertDialog).listView.checkedItemPosition
+                        val choice = candidates.getOrNull(index) ?: return@setPositiveButton
+                        if (controller.chooseStartingPowerUp(mazeIndex, choice)) {
+                            advanceToNextMaze()
+                        }
+                    }
+                if (controller.state.rewardRerolls > 0) {
+                    builder.setNeutralButton(R.string.adventure_route_reroll) { _, _ ->
+                        if (!acceptRewardCallback(generation, pending)) return@setNeutralButton
+                        if (controller.rerollStartingPowerUps(mazeIndex)) {
+                            commitTransition { showPendingReward() }
+                        }
+                    }
+                }
+            }
+        }
+        rewardDialog = builder.show()
     }
+
+    private fun acceptRewardCallback(generation: Long, reward: PendingAdventureReward): Boolean =
+        !isDestroyed && !isFinishing && pendingCommit == null &&
+            generation == stateGeneration && controller.state.pendingReward == reward
+
+    private fun routeCategory(category: RouteEventCategory): String = getString(when (category) {
+        RouteEventCategory.SAFE -> R.string.adventure_route_category_safe
+        RouteEventCategory.RISKY -> R.string.adventure_route_category_risky
+        RouteEventCategory.UTILITY -> R.string.adventure_route_category_utility
+    })
+
+    private fun routeName(id: String): String = getString(when (id) {
+        "quiet_corridor" -> R.string.adventure_route_quiet_corridor_name
+        "ambush_shortcut" -> R.string.adventure_route_ambush_shortcut_name
+        "supply_cache" -> R.string.adventure_route_supply_cache_name
+        "scout_map" -> R.string.adventure_route_scout_map_name
+        "cursed_gate" -> R.string.adventure_route_cursed_gate_name
+        else -> error("Unknown route $id")
+    })
+
+    private fun routeDescription(id: String): String = getString(when (id) {
+        "quiet_corridor" -> R.string.adventure_route_quiet_corridor_description
+        "ambush_shortcut" -> R.string.adventure_route_ambush_shortcut_description
+        "supply_cache" -> R.string.adventure_route_supply_cache_description
+        "scout_map" -> R.string.adventure_route_scout_map_description
+        "cursed_gate" -> R.string.adventure_route_cursed_gate_description
+        else -> error("Unknown route $id")
+    })
 
     private fun advanceToNextMaze() {
+        if (pendingCommit != null) return
         val spec = controller.prepareCurrentMaze()
         if (spec == null) {
             // Defensive: controller already terminal, return to setup.
@@ -717,27 +959,35 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             returnToSetup()
             return
         }
-        gameFragment()?.configureAdventureMaze(
-            seed = spec.seed,
-            difficulty = spec.difficulty.name,
-            playerPolicy = spec.playerPolicy,
-            npcCount = spec.npcCount,
-            npcPolicies = spec.npcPolicies,
-            startingPowerUp = spec.startingPowerUp
-        )
-        persistAdventureStateAsync()
+        commitTransition {
+            val fragment = gameFragment()
+            if (fragment == null) {
+                attachMaze(spec)
+            } else {
+                fragment.configureAdventureMaze(
+                    seed = spec.seed,
+                    difficulty = spec.difficulty.name,
+                    playerPolicy = spec.playerPolicy,
+                    npcCount = spec.npcCount,
+                    npcPolicies = spec.npcPolicies,
+                    startingPowerUp = spec.startingPowerUp,
+                    pickupLifetimeSeconds = spec.pickupLifetimeSeconds
+                )
+            }
+            refreshStatusBar()
+            refreshAutoToggle()
+            promptForAutomatedPolicyIfNeeded()
+        }
         // transitionPending stays `true` until pollEngineStatus observes
         // a non-terminal status (i.e. the GL thread has applied the
         // restart command). This prevents the engine's still-WIN status
         // from re-triggering the win handler on the next poll.
-        refreshStatusBar()
-        refreshAutoToggle()
-        promptForAutomatedPolicyIfNeeded()
     }
 
     private fun handleMazeLost() {
+        val route = controller.state.activeRoute
+        val hud = gameFragment()?.hudState()
         val outcome = controller.onPlayerDied()
-        persistAdventureStateAsync()
         val title = if (outcome.runOver)
             getString(R.string.adventure_run_lost_title)
         else
@@ -761,7 +1011,6 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             // Run lost — clear store (blocking via autosave executor so
             // a process-kill before navigation can't resurrect the lost
             // run), then finish to setup screen.
-            clearAdventureStateBlocking()
             builder.setPositiveButton(R.string.adventure_finish) { _, _ ->
                 // Keep [transitionPending] latched and leave [lastObservedStatus]
                 // as the terminal LOSE value so a stray tick before [onPause]
@@ -775,7 +1024,14 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 advanceToNextMaze()
             }
         }
-        builder.show()
+        commitTransition {
+            route?.let {
+                routeTelemetry.outcome(
+                    it.choiceId, false, hud?.elapsedSeconds ?: 0f, hud?.steps ?: 0, 1
+                )
+            }
+            rewardDialog = builder.show()
+        }
     }
 
     private fun returnToSetup() {

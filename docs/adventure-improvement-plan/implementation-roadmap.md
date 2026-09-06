@@ -57,12 +57,27 @@
 
 ### Tasks
 
-- [ ] Define `RouteEventChoice`, `RouteEventEffect`, category/effect enums, and seeded offer generator.
-- [ ] Extend `AdventureRunState` and `AdventureRunStateSnapshot` for pending effects/history.
-- [ ] Add `WinOutcome` route-offer data or a dedicated pending-offer query.
-- [ ] Insert the route-event chooser in `AdventureActivity` before existing reward dialogs.
-- [ ] Apply selected route effects to `MazeStartupSpec` and next-maze setup.
-- [ ] Add telemetry hooks and JVM tests for determinism, guardrails, and persistence.
+- [x] Define `RouteEventChoice`, `RouteEventEffect`, category/effect enums, and seeded offer generator.
+- [x] Extend `AdventureRunState` and `AdventureRunStateSnapshot` for pending effects/history.
+- [x] Add `WinOutcome` route-offer data or a dedicated pending-offer query.
+- [x] Insert the route-event chooser in `AdventureActivity` before existing reward dialogs.
+- [x] Apply selected route effects to `MazeStartupSpec` and next-maze setup.
+- [x] Add telemetry hooks and JVM tests for determinism, guardrails, and persistence.
+
+### Implementation notes
+
+- The pending-offer query is `AdventureRunState.pendingReward`;
+  `AdventureRunController.completeMaze()` owns the resumable win sequence.
+- Five routes are implemented; Training Room and elites remain deferred.
+  See [the Phase 1 contract](01-route-events.md#phase-1-implementation-contract)
+  for exact values, Scout semantics, and Supply Cache's neutral reward.
+- Adventure schema 3 and engine schema 6 intentionally invalidate older saves.
+- Generation remains default-off. When enabled in the Android host, the first
+  exposure is Medium only; compatible saved decisions still work with the
+  generation flag off.
+- Code and test coverage do not constitute balance/copy approval. Dogfood,
+  device/accessibility checks, and production telemetry review remain rollout
+  requirements.
 
 ### Dependencies
 

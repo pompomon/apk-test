@@ -70,7 +70,14 @@ data class AdventureRunState(
     /** Accumulated step count from all completed mazes this run. */
     var totalSteps: Int = 0,
     /** Number of player deaths this run, including the run-ending death. */
-    var deathsThisRun: Int = 0
+    var deathsThisRun: Int = 0,
+    var currentMazeNpcCount: Int? = currentMazeSeed?.let { currentMazeNpcPolicies.size },
+    var pendingReward: PendingAdventureReward? = null,
+    var activeRoute: PendingRouteEvent? = null,
+    var routeHistory: List<RouteEventHistoryEntry> = emptyList(),
+    var nextRouteEventMazeIndex: Int = RouteEventGenerator.FIRST_EVENT_MAZE_INDEX,
+    var routeEventOrdinal: Int = 0,
+    var rewardRerolls: Int = 0
 )
 
 /**
@@ -92,7 +99,8 @@ data class MazeStartupSpec(
      * reward for the previous even-maze win). Applied once by the host
      * after engine restart; `null` for mazes with no starting bonus.
      */
-    val startingPowerUp: PowerUpType? = null
+    val startingPowerUp: PowerUpType? = null,
+    val pickupLifetimeSeconds: Float? = null
 )
 
 /**
@@ -142,8 +150,11 @@ data class DeathOutcome(
 class AdventureRunController(
     val config: AdventureConfig,
     initialState: AdventureRunState? = null,
-    private val runSeed: Long = System.currentTimeMillis()
+    private val runSeed: Long = System.currentTimeMillis(),
+    private val routesEnabled: Boolean = AdventureFeatureFlags.ROUTE_EVENTS_ENABLED &&
+        config.difficulty.name == DifficultyPresets.MEDIUM.name
 ) {
+    private val routeGenerator = RouteEventGenerator(config, runSeed)
     val state: AdventureRunState = initialState ?: AdventureRunState(
         difficultyName = config.difficulty.name,
         livesRemaining = config.initialLives
@@ -168,41 +179,126 @@ class AdventureRunController(
      * returns `null` — the host should show the terminal screen instead.
      */
     fun prepareCurrentMaze(): MazeStartupSpec? {
-        if (state.status != AdventureStatus.IN_PROGRESS) return null
+        if (state.status != AdventureStatus.IN_PROGRESS || state.pendingReward != null) return null
         if (state.currentMazeIndex >= config.totalMazes) {
             state.status = AdventureStatus.WON
             return null
         }
-        val mazeIndex1Based = state.currentMazeIndex + 1
-        val npcCount = config.npcCountForMaze(mazeIndex1Based)
-
-        // Lock seed + per-NPC policy list on first entry so a death replay
-        // returns the same maze layout and same NPC strategies. We derive
-        // both from the run seed mixed with the maze index so reproducing
-        // the run from scratch yields the same per-maze choices.
-        if (state.currentMazeSeed == null) {
-            state.currentMazeSeed = deriveMazeSeed(mazeIndex1Based)
-        }
-        if (state.currentMazeNpcPolicies.isEmpty()) {
-            // First entry for this maze: draw a deterministic per-NPC policy
-            // list from the run seed. Once locked, the list is preserved
-            // verbatim on rehydration so a death replay reuses identical
-            // NPC strategies even if [npcCount] disagrees with the stored
-            // list length (e.g. a JSON tampering or schema-evolution edge).
-            val rng = Random(deriveNpcPolicySeed(mazeIndex1Based))
-            val pool = NpcPolicyType.entries
-            state.currentMazeNpcPolicies = List(npcCount) { pool[rng.nextInt(pool.size)] }
-        }
+        lockCurrentMaze()
         return MazeStartupSpec(
             seed = state.currentMazeSeed!!,
             difficulty = config.difficulty,
-            npcCount = npcCount,
-            npcPolicies = state.currentMazeNpcPolicies,
+            npcCount = state.currentMazeNpcCount!!,
+            npcPolicies = state.currentMazeNpcPolicies.toList(),
             playerPolicy = state.currentPlayerPolicy,
             midMazeSnapshot = state.currentMazeSnapshot,
-            startingPowerUp = state.pendingStartingPowerUp
+            startingPowerUp = state.pendingStartingPowerUp,
+            pickupLifetimeSeconds = state.activeRoute?.pickupLifetimeSeconds
         )
     }
+
+    private fun lockCurrentMaze() {
+        val target = state.currentMazeIndex + 1
+        if (state.currentMazeSeed == null) state.currentMazeSeed = deriveMazeSeed(target)
+        if (state.currentMazeNpcCount == null) {
+            val count = state.activeRoute?.npcCount ?: config.npcCountForMaze(target)
+            state.currentMazeNpcCount = count
+            val rng = Random(deriveNpcPolicySeed(target))
+            val pool = NpcPolicyType.entries
+            state.currentMazeNpcPolicies = List(count) { pool[rng.nextInt(pool.size)] }
+        }
+    }
+
+    /**
+     * Durable host entry point. The old [onMazeWon] remains available to baseline
+     * simulations that intentionally bypass reward dialogs. Repeated host win
+     * notifications while any reward stage is pending cannot advance the run.
+     */
+    fun completeMaze(elapsedSeconds: Float = 0f, steps: Int = 0): WinOutcome {
+        state.pendingReward?.let { return pendingWinOutcome(it) }
+        val outcome = onMazeWon(elapsedSeconds, steps)
+        if (outcome.runComplete) return outcome
+        val choices = if (routesEnabled && outcome.mazeIndexCompleted == state.nextRouteEventMazeIndex) {
+            routeGenerator.offer(outcome.mazeIndexCompleted, state.routeEventOrdinal).also {
+                state.nextRouteEventMazeIndex = routeGenerator.nextEventMazeIndex(
+                    outcome.mazeIndexCompleted, state.routeEventOrdinal
+                )
+                state.routeEventOrdinal += 1
+            }
+        } else emptyList()
+        state.pendingReward = PendingAdventureReward(
+            mazeIndexCompleted = outcome.mazeIndexCompleted,
+            stage = RewardStage.WIN_ACKNOWLEDGEMENT,
+            routeChoices = choices,
+            powerUpCandidates = outcome.startingPowerUpCandidates.toList(),
+            bonusLifeAwarded = outcome.bonusLifeAwarded
+        )
+        return outcome
+    }
+
+    fun acknowledgeMazeWin(mazeIndexCompleted: Int): Boolean {
+        val reward = rewardAt(mazeIndexCompleted, RewardStage.WIN_ACKNOWLEDGEMENT) ?: return false
+        state.pendingReward = reward.copy(stage = if (reward.routeChoices.isEmpty()) {
+            RewardStage.POWER_UP_CHOICE
+        } else RewardStage.ROUTE_CHOICE)
+        return true
+    }
+
+    fun chooseRoute(mazeIndexCompleted: Int, choiceId: String): Boolean {
+        val reward = rewardAt(mazeIndexCompleted, RewardStage.ROUTE_CHOICE) ?: return false
+        val choice = reward.routeChoices.firstOrNull { it.id == choiceId } ?: return false
+        val route = routeGenerator.resolve(choice, state.currentMazeIndex + 1)
+        state.activeRoute = route
+        state.routeHistory = state.routeHistory + RouteEventHistoryEntry(mazeIndexCompleted, choiceId)
+        lockCurrentMaze()
+        val preview = if (choiceId == RouteEventGenerator.SCOUT_MAP) {
+            RoutePreview(
+                state.nextRouteEventMazeIndex,
+                routeGenerator.offer(state.nextRouteEventMazeIndex, state.routeEventOrdinal)
+                    .map { it.category },
+                state.currentMazeNpcCount!!
+            )
+        } else null
+        state.pendingReward = reward.copy(
+            stage = RewardStage.POWER_UP_CHOICE,
+            selectedRouteId = choiceId,
+            powerUpCandidates = reward.powerUpCandidates.take(REWARD_SAMPLE_SIZE + route.rewardOptionDelta),
+            preview = preview
+        )
+        return true
+    }
+
+    fun chooseStartingPowerUp(mazeIndexCompleted: Int, type: PowerUpType): Boolean {
+        val reward = rewardAt(mazeIndexCompleted, RewardStage.POWER_UP_CHOICE) ?: return false
+        if (type !in reward.powerUpCandidates) return false
+        state.pendingStartingPowerUp = type
+        state.pendingReward = null
+        return true
+    }
+
+    fun rerollStartingPowerUps(mazeIndexCompleted: Int): Boolean {
+        val reward = rewardAt(mazeIndexCompleted, RewardStage.POWER_UP_CHOICE) ?: return false
+        if (state.rewardRerolls <= 0 || reward.rerollIndex != 0) return false
+        val rng = Random(derivePowerUpRewardSeed(mazeIndexCompleted) xor POWERUP_REROLL_SEED_MIX)
+        val pool = PowerUpType.entries.filter { it != PowerUpType.GHOST_MODE }
+        state.pendingReward = reward.copy(
+            powerUpCandidates = pool.shuffled(rng).take(reward.powerUpCandidates.size),
+            rerollIndex = reward.rerollIndex + 1
+        )
+        state.rewardRerolls -= 1
+        return true
+    }
+
+    private fun rewardAt(index: Int, stage: RewardStage): PendingAdventureReward? =
+        state.pendingReward?.takeIf {
+            state.status == AdventureStatus.IN_PROGRESS && it.mazeIndexCompleted == index && it.stage == stage
+        }
+
+    private fun pendingWinOutcome(reward: PendingAdventureReward): WinOutcome = WinOutcome(
+        state.livesRemaining, reward.bonusLifeAwarded, reward.powerUpCandidates.toList(),
+        reward.mazeIndexCompleted, config.totalMazes, false, state.totalElapsedSeconds,
+        state.totalSteps, state.deathsThisRun
+    )
 
     /**
      * Record a maze win. Increments the maze index, advances the win
@@ -217,6 +313,7 @@ class AdventureRunController(
      * If this was the final maze sets [AdventureStatus.WON].
      */
     fun onMazeWon(elapsedSeconds: Float = 0f, steps: Int = 0): WinOutcome {
+        state.pendingReward?.let { return pendingWinOutcome(it) }
         check(state.status == AdventureStatus.IN_PROGRESS) {
             "onMazeWon called in terminal state ${state.status}"
         }
@@ -228,22 +325,33 @@ class AdventureRunController(
         if (newIndex == 1) {
             unlockAllAutomatedPlayerPolicies()
         }
-        state.winStreakSinceLastBonus += 1
+        val route = state.activeRoute?.takeIf { it.mazeIndexAppliedTo == newIndex }
+        state.winStreakSinceLastBonus += 1 + (route?.effects?.firstOrNull {
+            it.type == RouteEventEffectType.STREAK_PROGRESS_DELTA
+        }?.intValue ?: 0)
+        if (route?.effects?.any { it.type == RouteEventEffectType.REWARD_REROLL } == true) {
+            state.rewardRerolls = 1
+        }
         val bonus = state.winStreakSinceLastBonus >= AdventureConfig.STREAK_BONUS_THRESHOLD
         if (bonus) {
             state.livesRemaining += 1
             state.winStreakSinceLastBonus = 0
         }
         state.currentMazeSeed = null
+        state.currentMazeNpcCount = null
         state.currentMazeNpcPolicies = emptyList()
         state.currentMazeSnapshot = null
         // Locked starting power-up is per-maze: clear once we advance past
         // the maze it was reserved for. Death replays keep it so the same
         // reward is re-applied on the retry.
         state.pendingStartingPowerUp = null
+        state.activeRoute = null
 
         val runComplete = newIndex >= config.totalMazes
-        if (runComplete) state.status = AdventureStatus.WON
+        if (runComplete) {
+            state.status = AdventureStatus.WON
+            clearTerminalRouteState()
+        }
 
         val powerUpCandidates = if (runComplete) emptyList()
         else sampleStartingPowerUps(REWARD_SAMPLE_SIZE, newIndex)
@@ -327,15 +435,22 @@ class AdventureRunController(
      * Transitions to [AdventureStatus.LOST] when lives reach zero.
      */
     fun onPlayerDied(): DeathOutcome {
-        check(state.status == AdventureStatus.IN_PROGRESS) {
-            "onPlayerDied called in terminal state ${state.status}"
+        if (state.status != AdventureStatus.IN_PROGRESS || state.pendingReward != null) {
+            return DeathOutcome(state.livesRemaining, state.status != AdventureStatus.IN_PROGRESS)
         }
         state.deathsThisRun += 1
         state.livesRemaining = (state.livesRemaining - 1).coerceAtLeast(0)
         state.winStreakSinceLastBonus = 0
         state.currentMazeSnapshot = null
         val runOver = state.livesRemaining <= 0
-        if (runOver) state.status = AdventureStatus.LOST
+        if (runOver) {
+            state.status = AdventureStatus.LOST
+            state.currentMazeSeed = null
+            state.currentMazeNpcCount = null
+            state.currentMazeNpcPolicies = emptyList()
+            state.pendingStartingPowerUp = null
+            clearTerminalRouteState()
+        }
         return DeathOutcome(livesRemaining = state.livesRemaining, runOver = runOver)
     }
 
@@ -346,6 +461,9 @@ class AdventureRunController(
      * from the GL thread.
      */
     fun recordMidMazeSnapshot(engineSnapshot: GameEngineSnapshot) {
+        if (state.status != AdventureStatus.IN_PROGRESS || state.pendingReward != null) return
+        if (!engineSnapshot.matchesAdventureMaze(state.difficultyName, state.currentMazeSeed,
+                state.currentMazeNpcCount, state.currentMazeNpcPolicies, state.activeRoute?.pickupLifetimeSeconds)) return
         state.currentMazeSnapshot = engineSnapshot
     }
 
@@ -378,6 +496,15 @@ class AdventureRunController(
         }
     }
 
+    private fun clearTerminalRouteState() {
+        state.pendingReward = null
+        state.activeRoute = null
+        state.routeHistory = emptyList()
+        state.rewardRerolls = 0
+        state.routeEventOrdinal = 0
+        state.nextRouteEventMazeIndex = RouteEventGenerator.FIRST_EVENT_MAZE_INDEX
+    }
+
     private fun deriveMazeSeed(mazeIndex1Based: Int): Long =
         runSeed xor (mazeIndex1Based.toLong() * MAZE_SEED_STRIDE) xor MAZE_SEED_MIX
 
@@ -400,6 +527,7 @@ class AdventureRunController(
         // deriveRewardSeed(mazeIndex1Based, REWARD_KIND_POWERUP) formula so that
         // the power-up candidate sequence is identical to the pre-refactor output.
         private const val POWERUP_REWARD_SEED_MIX: Long = -0x5E3B0C1D6E7F4051L
+        private const val POWERUP_REROLL_SEED_MIX: Long = 0x73AE8150DB4906FL
 
         /** Maximum number of choices offered to the player on a non-final maze win. */
         const val REWARD_SAMPLE_SIZE = 3
