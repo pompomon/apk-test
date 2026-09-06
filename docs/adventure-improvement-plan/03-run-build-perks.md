@@ -12,6 +12,54 @@ Adventure currently grants player-policy unlocks and one-maze starting power-ups
 - Deterministic fairness: offer generation and stacking outcomes must be seed-locked and persisted.
 - Compatibility: perks should enhance existing power-ups/effects rather than replacing them.
 
+## Phase 3 implementation contract
+
+- New perk offers follow completed mazes **1, 3, 5, and 7**, excluding the final
+  win. Existing automated-policy unlocks and every-non-final-win starting
+  power-up rewards are unchanged.
+- The durable reward sequence is win acknowledgement → optional route choice →
+  optional perk choice → starting-power-up choice. All decisions use the existing
+  pending reward and save-before-continuing flow. Exact offer order and offer
+  history survive recreation; a failed save cannot advance to gameplay.
+- Six perks are implemented. **First Shield is deferred and excluded from offers
+  and acquired state**: its original condition is ineffective because every
+  post-acquisition maze already has a locked starting reward. A possible two-second
+  shield alongside non-SHIELD rewards requires separate approval.
+- Quick Feet adds up to 15% player speed, multiplicatively with SPEED_UP
+  (at most 2.30× preset speed). NPC and Adventurer speeds are unchanged.
+- Longer Charge affects only beneficial timed effects from player-collected
+  pickups, including magnet collection. It adds at most three seconds per
+  activation, preserves refresh semantics, and does not extend selected starting
+  rewards, Adventurer effects, NPC-induced player freeze, or Second Wind's pulse.
+- Pocket Magnet changes only the player's active MAGNET radius: two to at most
+  four Chebyshev cells. Existing collection ordering and teleport interruption
+  remain unchanged; no new wall/reachability restriction is introduced.
+- Scout Sense previews the actual next-maze NPC and elite counts after route
+  resolution and before starting-reward selection. Capacity truncation is
+  reflected without discarding the full locked restart roster.
+- Risk Dividend adds one **starting-power-up option**, not another selection or
+  a fourth perk option. It is earned only by owning the perk before winning the
+  affected risky maze. Normal rewards have four options; choosing Quiet Corridor
+  reduces that to three. Rerolls preserve the count; deaths and final wins pay
+  nothing. Supply Cache still uses exactly one power-up chooser.
+- Second Wind prevents a player capture once per run, not a loss caused by an
+  Adventurer reaching the exit. It preserves exit-win precedence and existing
+  immunity/debuff behavior. Its one-second protective freeze does not elapse
+  while the engine awaits durable consumption acknowledgement.
+- Adventure schema **5** and engine schema **8** intentionally invalidate older
+  saves, including Classic engine saves. The run snapshot owns perk stacks and
+  reward decisions; the engine snapshot also persists derived effects and the
+  pending consumption marker. A discarded embedded engine snapshot must never
+  replenish a consumed perk.
+- Production generation remains default-off. The initial enabled exposure is
+  common-only on Medium; uncommon/rare mechanics are available for explicit
+  testing, not implicitly approved for rollout. Compatible saved decisions and
+  effects remain honored with generation disabled.
+
+Tests and implementation are not balance or accessibility approval. Device
+validation, copy review, and Easy/Medium/Hard max-stack dogfood remain rollout
+requirements; production telemetry remains a no-op until separately reviewed.
+
 ## Perk pool, tiers, and stacking rules
 
 | Perk | Tier | Effect | Stack cap | Notes |
@@ -19,10 +67,10 @@ Adventure currently grants player-policy unlocks and one-maze starting power-ups
 | Quick Feet | Common | +5% player movement speed. | 3 | Cap at +15%; avoid trivializing NPC speed balance. |
 | Longer Charge | Common | +1s timed power-up duration. | 3 | Applies only to beneficial effects activated from player-collected SPEED_UP, FREEZE, SHIELD, SLOW_TIME, MAGNET, INVISIBILITY, and GHOST_MODE; it never extends hostile NPC-collected FREEZE applied to the player. |
 | Pocket Magnet | Common | +1 cell magnet pickup radius while MAGNET is active. | 2 | No effect without MAGNET; label clearly. |
-| First Shield | Uncommon | Start each maze with a short SHIELD if no other starting power-up is pending. | 1 | Avoid stacking with selected starting SHIELD reward. |
+| First Shield (deferred) | Uncommon | Original proposal: short starting SHIELD when no starting reward is pending. | 1 | Excluded until a useful activation condition and duration are approved. |
 | Scout Sense | Uncommon | Show next maze's NPC count and elite count before reward choice. | 1 | Best paired with Route Events/Elites. |
 | Second Wind | Rare | Once per run, survive a capture with 1s freeze pulse and consume the perk. | 1 | Must be highly visible and logged. |
-| Risk Dividend | Rare | Risky route completion offers one extra reward option. | 1 | Requires Route Events. |
+| Risk Dividend | Rare | Risky route completion offers one extra starting-power-up option. | 1 | Requires Route Events; must already be owned when the affected maze is won. |
 
 Tier guidance:
 
@@ -33,12 +81,15 @@ Tier guidance:
 ## Offer generation algorithm
 
 - Offer exactly 3 choices when at least 3 eligible perks exist; otherwise offer all eligible perks.
-- Eligibility removes perks at stack cap and perks whose dependencies are disabled.
+- Eligibility removes perks at stack cap, deferred perks, unavailable rollout
+  tiers, and perks whose dependencies are disabled. Consumed one-shots remain
+  owned at cap and cannot be acquired again.
 - Use an independent RNG derived from run seed, maze index, and reward count.
 - Apply rarity weights after eligibility filtering:
   - Common: 70
   - Uncommon: 25
   - Rare: 5
+- These are per-eligible-perk weights, not guaranteed proportions of offers.
 - Anti-duplication:
   - Do not show a perk already chosen at cap.
   - Avoid showing the same perk in consecutive perk offers unless fewer than 3 alternatives exist.
@@ -69,54 +120,51 @@ persist offer ids until player chooses or replay intentionally returns to previo
 | Starting power-up reward | Perks that grant start-of-maze effects should not overwrite `pendingStartingPowerUp`; define precedence and show copy. |
 | Timed effects | Duration perks adjust activation duration once, when a beneficial player-collected effect is applied, not every tick. Collector/source context must reach this shared activation path so hostile effects such as NPC-collected FREEZE remain unmodified. |
 | Instant effects | TELEPORT and BLAST usually should not receive duration bonuses. |
-| MAGNET | Radius perks should use the same safety/reachability checks as current magnet collection. |
+| MAGNET | Preserve current Chebyshev-radius collection, deterministic ordering, and stop-after-teleport behavior; do not add new safety/reachability filters. |
 | SHIELD/FREEZE/INVISIBILITY | Avoid perk combinations that grant permanent safety; use duration caps and per-maze limits. |
 | Automated policies | Movement-speed perks must not break policy tie-breaker determinism; they should affect cadence, not path ranking. |
 
-## Data model and persistence updates
+## Data model and persistence
 
-```kotlin
-enum class RunPerkId { QUICK_FEET, LONGER_CHARGE, POCKET_MAGNET, FIRST_SHIELD, SCOUT_SENSE, SECOND_WIND, RISK_DIVIDEND }
-
-enum class RunPerkTier { COMMON, UNCOMMON, RARE }
-
-data class RunPerkDefinition(
-    val id: RunPerkId,
-    val tier: RunPerkTier,
-    val maxStacks: Int
-)
-
-data class RunPerkStack(
-    val id: RunPerkId,
-    val stacks: Int,
-    val consumed: Boolean = false
-)
-
-data class PendingPerkOffer(
-    val mazeIndexCompleted: Int,
-    val offeredPerks: List<RunPerkId>
-)
-```
+- `RunPerkId` supplies stable lower-snake-case IDs; `RunPerkCatalogue` owns tiers,
+  caps, availability, and dependencies.
+- `RunPerkStack` records ownership and consumption. Consuming a one-shot does
+  not remove its stack.
+- `PendingPerkOffer` records ordered choices, completed-maze index, ordinal, and
+  the generation context, including prior ownership, prior offered IDs, available
+  tiers, and route availability.
+- The offer belongs to `PendingAdventureReward.perkOffer`, alongside the selected
+  perk, Scout preview, and any earned reward-option bonus. It is not a second
+  independent reward flow.
+- `RunPerkHistoryEntry` retains the offer and selected ID. Run state also retains
+  the previous offer and ordinal so future choices stay deterministic.
+- `RunPerkEffects` is the immutable, bounded engine configuration derived from
+  owned stacks. Controller-only perks do not add engine runtime fields.
 
 Core definitions carry stable IDs and mechanics only. Android UI maps IDs to
 the provisional `adventure_perk_*` string resources so player-facing labels
 and descriptions remain localizable.
 
-`AdventureRunStateSnapshot` should add:
+`AdventureRunStateSnapshot` persists:
 
 - `runPerks: List<RunPerkStack>`
-- `pendingPerkOffer: PendingPerkOffer?` when a chooser can survive process death
-- `previousPerkOffer: List<RunPerkId>` (empty before the first offer) so consecutive-offer anti-duplication survives process death
+- the nested pending reward, including its exact perk offer and resolved choices
+- perk history, offer ordinal, and `previousPerkOffer` (empty before the first
+  offer) so consecutive-offer anti-duplication survives process death
 
-If a perk adds active in-maze runtime state, persist it in `GameEngineSnapshot` too.
+`GameEngineSnapshot` persists derived effects and `pendingConsumedRunPerk` in
+addition to the existing remaining active-effect timers. Both snapshot layers
+validate their relationship before accepting paused progress.
 
 ## Integration points
 
 - `AdventureRunController`
-  - Generate perk offers in the reward phase, likely after Route Events and before/after current unlock/power-up rewards depending on final cadence.
+  - Generate perk offers at the specified non-final milestones and present them
+    after Route Events, before the existing starting-power-up reward.
   - Apply selected stacks and expose derived effects in `MazeStartupSpec`.
 - `GameEngine.configureAdventureMaze(...)`
-  - Accept derived gameplay knobs such as player speed multiplier, power-up duration bonus, or start-of-maze shield request.
+  - Accept bounded derived player speed, pickup-duration, magnet-radius, and
+    Second Wind availability configuration; First Shield remains deferred.
 - `GameEngine` / `GameFragment`
   - When Second Wind triggers on the GL thread, atomically set a
     `pendingConsumedRunPerk` engine field (also persisted in
@@ -161,6 +209,11 @@ If a perk adds active in-maze runtime state, persist it in `GameEngineSnapshot` 
 These names come from the shared telemetry allowlists. Do not add raw or hashed
 seeds, positions, snapshot data, free-form text, or user/device identifiers.
 
+`current_stacks` is an integer aggregate stack count, including owned consumed
+one-shots. `amount` uses integer percentage points, seconds, cells, or reward
+options as identified by `affected_system`; neither field contains a serialized
+build or free-form text. Events are best-effort and are not a durable outbox.
+
 Guardrails:
 
 - No single common perk should dominate choices above a target threshold once alternatives are available.
@@ -195,4 +248,7 @@ Guardrails:
 2. Enable common-only perks on Medium internal builds.
 3. Add uncommon perks after HUD summary exists.
 4. Add rare perks only after telemetry or manual balance confirms common/uncommon caps.
-5. Roll back by disabling perk offer generation and ignoring derived effects; preserve saved stacks if schema-compatible, or bump `AdventureRunStateSnapshot` schema for incompatible changes.
+5. Roll back by disabling new perk offer generation while continuing to honor
+   compatible saved offers, acquired stacks, effects, and one-shot consumption.
+   Bump the relevant snapshot schemas when saved mechanics are incompatible;
+   never silently ignore earned effects.

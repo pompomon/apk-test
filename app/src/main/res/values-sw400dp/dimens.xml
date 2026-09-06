@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <dimen name="adventure_perk_summary_padding">6dp</dimen>
+    <dimen name="adventure_perk_summary_text_size">13sp</dimen>
+    <dimen name="adventure_perk_menu_summary_height">200dp</dimen>
     <dimen name="maze_dpad_container_padding">10dp</dimen>
     <dimen name="maze_dpad_button_width">104dp</dimen>
     <dimen name="maze_dpad_button_height">68dp</dimen>

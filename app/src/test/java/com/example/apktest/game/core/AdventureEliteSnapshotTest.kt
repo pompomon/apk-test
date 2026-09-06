@@ -7,10 +7,10 @@ import org.junit.Test
 
 class AdventureEliteSnapshotTest {
     @Test
-    fun schemaFourWritesRequiredSpecsWithStableIdsAndExplicitNulls() {
+    fun currentSchemaWritesRequiredSpecsWithStableIdsAndExplicitNulls() {
         val snapshot = lockedSnapshot()
         val obj = JSONObject(snapshot.toJson())
-        assertEquals(4, obj.getInt("v"))
+        assertEquals(AdventureRunStateSnapshot.SCHEMA_VERSION, obj.getInt("v"))
         assertFalse(obj.has("mazeNpcPolicies"))
         val specs = obj.getJSONArray("mazeNpcSpawnSpecs")
         assertEquals("PATROL_GUARD", specs.getJSONObject(0).getString("policyType"))

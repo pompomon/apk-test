@@ -76,6 +76,16 @@ internal object AdventureRouteSnapshotCodec {
         } ?: JSONObject.NULL)
         put("bonusLifeAwarded", reward.bonusLifeAwarded)
         put("rerollIndex", reward.rerollIndex)
+        put("perkOffer", reward.perkOffer?.let { AdventurePerkSnapshotCodec.offerToJson(it) } ?: JSONObject.NULL)
+        put("selectedPerkId", reward.selectedPerkId?.id ?: JSONObject.NULL)
+        put("scoutPreview", reward.scoutPreview?.let {
+            JSONObject().apply {
+                put("npcCount", it.npcCount)
+                put("eliteCount", it.eliteCount)
+            }
+        } ?: JSONObject.NULL)
+        put("rewardOptionBonus", reward.rewardOptionBonus)
+        put("riskDividendRouteId", reward.riskDividendRouteId ?: JSONObject.NULL)
     }
 
     fun rewardFromJson(obj: JSONObject): PendingAdventureReward = PendingAdventureReward(
@@ -100,7 +110,20 @@ internal object AdventureRouteSnapshotCodec {
             }
         },
         bonusLifeAwarded = obj.requiredBoolean("bonusLifeAwarded"),
-        rerollIndex = obj.requiredInt("rerollIndex")
+        rerollIndex = obj.requiredInt("rerollIndex"),
+        perkOffer = obj.get("perkOffer").let {
+            if (it == JSONObject.NULL) null else AdventurePerkSnapshotCodec.offerFromJson(it as JSONObject)
+        },
+        selectedPerkId = obj.requiredNullableString("selectedPerkId")?.let {
+            requireNotNull(RunPerkId.fromId(it))
+        },
+        scoutPreview = obj.get("scoutPreview").let {
+            if (it == JSONObject.NULL) null else (it as JSONObject).let { preview ->
+                PerkScoutPreview(preview.requiredInt("npcCount"), preview.requiredInt("eliteCount"))
+            }
+        },
+        rewardOptionBonus = obj.requiredInt("rewardOptionBonus"),
+        riskDividendRouteId = obj.requiredNullableString("riskDividendRouteId")
     )
 
     fun activeToJson(route: PendingRouteEvent): JSONObject = JSONObject().apply {
@@ -239,7 +262,8 @@ internal object AdventureRouteSnapshotCodec {
         if (reward.rerollIndex !in 0..1 || (reward.rerollIndex == 1 && snapshot.rewardRerolls != 0)) return false
         if (reward.powerUpCandidates.distinct().size != reward.powerUpCandidates.size ||
             PowerUpType.GHOST_MODE in reward.powerUpCandidates) return false
-        val expectedCount = if (reward.selectedRouteId == RouteEventGenerator.QUIET_CORRIDOR) 2 else 3
+        val expectedCount = (if (reward.selectedRouteId == RouteEventGenerator.QUIET_CORRIDOR) 2 else 3) +
+            reward.rewardOptionBonus
         if (reward.powerUpCandidates.size != expectedCount) return false
         val choices = reward.routeChoices
         if (choices.isNotEmpty()) {
@@ -250,13 +274,15 @@ internal object AdventureRouteSnapshotCodec {
             if (choices.any { !generator.isEligible(it, index, snapshot.nextRouteEventMazeIndex) }) return false
         }
         if (reward.selectedRouteId != null) {
-            if (reward.stage != RewardStage.POWER_UP_CHOICE || route?.choiceId != reward.selectedRouteId ||
+            if ((reward.stage != RewardStage.POWER_UP_CHOICE && reward.stage != RewardStage.PERK_CHOICE) ||
+                route?.choiceId != reward.selectedRouteId ||
                 choices.none { it.id == reward.selectedRouteId }) return false
-        } else if (route != null || count != null) return false
+        } else if (route != null || (count != null && reward.scoutPreview == null)) return false
         when (reward.stage) {
             RewardStage.WIN_ACKNOWLEDGEMENT -> if (reward.rerollIndex != 0) return false
             RewardStage.ROUTE_CHOICE -> if (choices.isEmpty() || reward.rerollIndex != 0) return false
-            RewardStage.POWER_UP_CHOICE -> if (choices.isNotEmpty() && reward.selectedRouteId == null) return false
+            RewardStage.PERK_CHOICE, RewardStage.POWER_UP_CHOICE ->
+                if (choices.isNotEmpty() && reward.selectedRouteId == null) return false
         }
         if (reward.selectedRouteId == RouteEventGenerator.SCOUT_MAP) {
             val preview = reward.preview ?: return false

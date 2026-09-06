@@ -9,6 +9,10 @@ import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.NpcSpawnSpec
 import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.game.core.PowerUpType
+import com.example.apktest.game.core.RunPerkCallbackBridge
+import com.example.apktest.game.core.RunPerkEffectEvent
+import com.example.apktest.game.core.RunPerkEffects
+import com.example.apktest.game.core.RunPerkId
 import com.example.apktest.game.render.MazeRenderer
 import com.example.apktest.game.ui.HudState
 import java.util.concurrent.atomic.AtomicReference
@@ -16,6 +20,7 @@ import java.util.concurrent.atomic.AtomicReference
 class MazeGame : ApplicationAdapter() {
     private val renderer = MazeRenderer()
     private val engine = GameEngine(difficultyPreset = DifficultyPresets.MEDIUM)
+    private val runPerkCallbacks = RunPerkCallbackBridge(engine)
     private val commands = ArrayDeque<(GameEngine) -> Unit>()
 
     @Volatile
@@ -53,6 +58,7 @@ class MazeGame : ApplicationAdapter() {
             accumulator -= FIXED_TIMESTEP
             stepped = true
         }
+        runPerkCallbacks.dispatch()
 
         renderer.render(engine)
         if (stepped || ranCommand) {
@@ -65,6 +71,7 @@ class MazeGame : ApplicationAdapter() {
     }
 
     override fun dispose() {
+        runPerkCallbacks.dispose()
         renderer.dispose()
     }
 
@@ -96,20 +103,24 @@ class MazeGame : ApplicationAdapter() {
         startingPowerUp: PowerUpType? = null,
         pickupLifetimeSeconds: Float? = null,
         npcSpawnSpecs: List<NpcSpawnSpec>? = null,
+        runPerkEffects: RunPerkEffects = RunPerkEffects(),
         onStarted: ((List<NpcSpawnSpec>) -> Unit)? = null
     ) {
         val policies = npcPolicies.toList()
         val specs = npcSpawnSpecs?.toList()
         enqueue { engine ->
+            if (engine.pendingConsumedRunPerk != null) return@enqueue
             engine.applyDifficulty(DifficultyPresets.byName(difficulty))
             engine.setPlayerPolicy(playerPolicy)
             engine.configureAdventureMaze(
                 npcCount, policies, pickupLifetimeSeconds = pickupLifetimeSeconds,
-                npcSpawnSpecs = specs
+                npcSpawnSpecs = specs,
+                runPerkEffects = runPerkEffects
             )
             engine.restart(seed)
             engine.applyStartingPowerUp(startingPowerUp)
             engine.startCountdown()
+            runPerkCallbacks.onMazeStarted()
             onStarted?.invoke(engine.npcs.map { NpcSpawnSpec(it.policyType, it.eliteModifier) })
         }
     }
@@ -134,8 +145,25 @@ class MazeGame : ApplicationAdapter() {
      */
     fun restoreSnapshot(snapshot: GameEngineSnapshot) {
         restorePending = true
-        enqueue { it.restore(snapshot) }
+        enqueue {
+            it.restore(snapshot)
+            runPerkCallbacks.onRestored()
+        }
     }
+
+    fun setRunPerkCallbacks(
+        onConsumed: ((GameEngineSnapshot) -> Unit)?,
+        onEffectApplied: ((RunPerkEffectEvent) -> Unit)?
+    ) {
+        runPerkCallbacks.setCallbacks(onConsumed, onEffectApplied)
+        enqueue { runPerkCallbacks.dispatch() }
+    }
+
+    fun acknowledgeRunPerkConsumption(seed: Long, perkId: RunPerkId) = enqueue {
+        it.acknowledgeRunPerkConsumption(seed, perkId)
+    }
+
+    fun detachRunPerkCallbacks() = runPerkCallbacks.dispose()
 
     /**
      * Captures the engine's current snapshot on the GL thread and returns

@@ -138,6 +138,15 @@ class GameEngine(
     var powerUpPickupLifetimeOverrideSeconds: Float? = null
         private set
 
+    var runPerkEffects: RunPerkEffects = RunPerkEffects()
+        private set
+
+    /** Durable consumption marker; gameplay remains blocked until its save is acknowledged. */
+    var pendingConsumedRunPerk: RunPerkId? = null
+        private set
+
+    var onRunPerkEffectApplied: ((RunPerkEffectEvent) -> Unit)? = null
+
     private val effectivePowerUpPickupLifetimeSeconds: Float
         get() = powerUpPickupLifetimeOverrideSeconds ?: difficulty.powerUpPickupLifetimeSeconds
 
@@ -172,6 +181,7 @@ class GameEngine(
     }
 
     fun restart(seed: Long = System.currentTimeMillis()) {
+        if (pendingConsumedRunPerk != null) return
         currentSeed = seed
         maze = MazeGenerator.generate(difficulty.mazeWidth, difficulty.mazeHeight, seed)
         navigator = MazeNavigator(maze)
@@ -219,6 +229,7 @@ class GameEngine(
      * GL thread that the subsequent restart immediately discards.
      */
     fun applyDifficulty(newDifficulty: DifficultyPreset) {
+        if (pendingConsumedRunPerk != null) return
         difficulty = newDifficulty
         // Changing difficulty discards any per-maze Adventure overrides so a
         // user who flips difficulty mid-session gets the preset's NPC count and pickup lifetime.
@@ -226,9 +237,11 @@ class GameEngine(
         npcSpawnSpecs = null
         npcs.forEach { it.eliteModifier = null }
         powerUpPickupLifetimeOverrideSeconds = null
+        runPerkEffects = RunPerkEffects()
     }
 
     fun setPlayerPolicy(type: PlayerPolicyType) {
+        if (pendingConsumedRunPerk != null) return
         playerPolicyType = type
         playerPolicy = PolicyFactory.player(type)
         manualQueue.clear()
@@ -246,6 +259,7 @@ class GameEngine(
     }
 
     fun setNpcPolicy(type: NpcPolicyType) {
+        if (pendingConsumedRunPerk != null) return
         npcPolicyType = type
         npcPolicy = PolicyFactory.npc(type, npcRandom)
         npcPolicy.reset()
@@ -256,6 +270,7 @@ class GameEngine(
         // policy instead of the persisted per-NPC list.
         npcCountOverride = null
         npcSpawnSpecs = null
+        runPerkEffects = RunPerkEffects()
         // Single-maze re-assignment: NPCs that were spawned with an
         // Adventure-supplied per-NPC policy follow the new uniform policy.
         npcs.forEach {
@@ -281,8 +296,10 @@ class GameEngine(
         npcCount: Int,
         policies: List<NpcPolicyType>,
         pickupLifetimeSeconds: Float? = null,
-        npcSpawnSpecs: List<NpcSpawnSpec>? = null
+        npcSpawnSpecs: List<NpcSpawnSpec>? = null,
+        runPerkEffects: RunPerkEffects = RunPerkEffects()
     ) {
+        if (pendingConsumedRunPerk != null) return
         require(npcCount >= 0) { "npcCount must be >= 0 (was $npcCount)" }
         require(
             pickupLifetimeSeconds == null ||
@@ -302,6 +319,7 @@ class GameEngine(
         npcCountOverride = npcCount
         this.npcSpawnSpecs = specs
         powerUpPickupLifetimeOverrideSeconds = pickupLifetimeSeconds
+        this.runPerkEffects = runPerkEffects
     }
 
     /**
@@ -310,10 +328,12 @@ class GameEngine(
      * preset's NPC count, pickup lifetime and the uniform [npcPolicyType].
      */
     fun clearAdventureMazeConfig() {
+        if (pendingConsumedRunPerk != null) return
         npcCountOverride = null
         npcSpawnSpecs = null
         npcs.forEach { it.eliteModifier = null }
         powerUpPickupLifetimeOverrideSeconds = null
+        runPerkEffects = RunPerkEffects()
     }
 
     /**
@@ -327,8 +347,8 @@ class GameEngine(
      * once. No-op when [type] is `null`.
      */
     fun applyStartingPowerUp(type: PowerUpType?) {
-        if (type == null) return
-        activatePlayerPowerUp(type)
+        if (type == null || pendingConsumedRunPerk != null) return
+        activatePlayerPowerUp(type, PowerUpActivationSource.STARTING_REWARD)
         if (type == PowerUpType.MAGNET) {
             collectMagnetPowerUps()
         }
@@ -377,7 +397,11 @@ class GameEngine(
         activeEffects = activeEffectsByType.values.map { e ->
             GameEngineSnapshot.ActiveEffectSnapshot(
                 type = e.type,
-                remainingSeconds = e.endsAtSeconds?.let { (it - elapsedSeconds).coerceAtLeast(0f) }
+                // The pending barrier proves this pulse has not aged. Subtracting
+                // Float timestamps across an exponent boundary can lose that fact.
+                remainingSeconds = if (
+                    pendingConsumedRunPerk == RunPerkId.SECOND_WIND && e.type == PowerUpType.FREEZE
+                ) 1f else e.endsAtSeconds?.let { (it - elapsedSeconds).coerceAtLeast(0f) }
             )
         },
         npcInducedPlayerFreezeRemainingSeconds = npcInducedPlayerFreeze?.endsAtSeconds
@@ -392,7 +416,9 @@ class GameEngine(
         // is just a uniform list of [npcPolicyType] — small and harmless.
         npcPolicies = npcs.sortedBy { it.id }.map { it.policyType },
         npcSpawnSpecs = npcSpawnSpecs?.toList(),
-        powerUpPickupLifetimeOverrideSeconds = powerUpPickupLifetimeOverrideSeconds
+        powerUpPickupLifetimeOverrideSeconds = powerUpPickupLifetimeOverrideSeconds,
+        runPerkEffects = runPerkEffects,
+        pendingConsumedRunPerk = pendingConsumedRunPerk
     )
 
     /**
@@ -436,6 +462,7 @@ class GameEngine(
      * already saw the layout before saving.
      */
     fun restore(snapshot: GameEngineSnapshot) {
+        if (pendingConsumedRunPerk != null) return
         // Validate the snapshot before installing any state: an unknown
         // difficulty name would silently fall back to MEDIUM via
         // DifficultyPresets.byName and regenerate a differently-sized
@@ -468,6 +495,9 @@ class GameEngine(
         require(snapshot.hasValidNpcConfiguration()) {
             "Snapshot has inconsistent NPC assignments"
         }
+        require(snapshot.hasValidRunPerkConfiguration()) {
+            "Snapshot has inconsistent run perk state"
+        }
         difficulty = preset
         playerPolicyType = snapshot.playerPolicy
         npcPolicyType = snapshot.npcPolicy
@@ -498,6 +528,8 @@ class GameEngine(
         npcCountOverride = snapshot.npcCountOverride
         powerUpPickupLifetimeOverrideSeconds = snapshot.powerUpPickupLifetimeOverrideSeconds
         npcSpawnSpecs = snapshot.npcSpawnSpecs?.toList()
+        runPerkEffects = snapshot.runPerkEffects
+        pendingConsumedRunPerk = snapshot.pendingConsumedRunPerk
 
         status = snapshot.status
         elapsedSeconds = snapshot.elapsedSeconds
@@ -628,10 +660,12 @@ class GameEngine(
      * to assess the layout before NPCs start moving.
      */
     fun startCountdown(seconds: Float = COUNTDOWN_DEFAULT_SECONDS) {
+        if (pendingConsumedRunPerk != null) return
         countdownRemainingSeconds = seconds.coerceAtLeast(0f)
     }
 
     fun togglePause() {
+        if (pendingConsumedRunPerk != null) return
         status = when (status) {
             GameStatus.RUNNING -> GameStatus.PAUSED
             GameStatus.PAUSED -> GameStatus.RUNNING
@@ -640,7 +674,7 @@ class GameEngine(
     }
 
     fun update(deltaSeconds: Float) {
-        if (status != GameStatus.RUNNING) return
+        if (status != GameStatus.RUNNING || pendingConsumedRunPerk != null) return
 
         // Pre-game countdown: consume the delta but freeze the simulation so
         // the player has time to read the maze before NPCs move. We
@@ -700,6 +734,7 @@ class GameEngine(
 
         val playerInterval = 1f / effectivePlayerMovesPerSecond()
         processQueuedManualMoves(playerInterval)
+        if (pendingConsumedRunPerk != null) return
 
         while (
             !isPlayerFrozenByNpc() &&
@@ -709,6 +744,7 @@ class GameEngine(
             playerAccumulator -= playerInterval
             updatePlayer()
             evaluateEndConditions()
+            if (pendingConsumedRunPerk != null) return
         }
 
         while (
@@ -729,6 +765,7 @@ class GameEngine(
                 npcAccumulator -= npcInterval
                 updateNpcs()
                 evaluateEndConditions()
+                if (pendingConsumedRunPerk != null) return
             }
         }
     }
@@ -804,6 +841,7 @@ class GameEngine(
 
     private fun canAcceptManualInput(): Boolean {
         return status == GameStatus.RUNNING &&
+            pendingConsumedRunPerk == null &&
             countdownRemainingSeconds <= 0f &&
             !isPlayerFrozenByNpc()
     }
@@ -876,6 +914,12 @@ class GameEngine(
             npc.animationFrame = (npc.animationFrame + 1) % ANIMATION_FRAMES
             npc.lastMoveAtSeconds = elapsedSeconds
             collectPowerUpAtNpc(npc)
+            // Classic keeps its existing batch evaluation; an armed safety perk
+            // must intercept capture before another NPC or Adventurer can advance.
+            if (runPerkEffects.secondWindAvailable) {
+                evaluateEndConditions()
+                if (pendingConsumedRunPerk != null || status != GameStatus.RUNNING) return
+            }
             eliminateAdventurersAt(npc.position)
         }
     }
@@ -974,7 +1018,9 @@ class GameEngine(
         val powerUp = powerUpsByCell[npc.position] ?: return
         if (powerUp.type != PowerUpType.FREEZE) return
         powerUpsByCell.remove(npc.position)
-        activateNpcInducedPlayerFreeze()
+        activateTimedEffect(
+            PowerUpType.FREEZE, PowerUpCollector.NPC, PowerUpActivationSource.PICKUP
+        )
     }
 
     /**
@@ -1012,20 +1058,6 @@ class GameEngine(
         adventurerAccumulatorsById.clear()
     }
 
-    private fun activateNpcInducedPlayerFreeze() {
-        val duration = PowerUpType.FREEZE.metadata.defaultDurationSeconds
-        if (duration <= 0f) return
-        val startedAt = npcInducedPlayerFreeze?.startedAtSeconds ?: elapsedSeconds
-        // FREEZE uses REFRESH_DURATION stack policy: re-pickup extends the end
-        // time but keeps the original start so HUD remaining-time math stays
-        // monotonic.
-        npcInducedPlayerFreeze = ActivePowerUpEffect(
-            type = PowerUpType.FREEZE,
-            startedAtSeconds = startedAt,
-            endsAtSeconds = elapsedSeconds + duration
-        )
-    }
-
     private fun isPlayerFrozenByNpc(): Boolean {
         val effect = npcInducedPlayerFreeze ?: return false
         val endsAt = effect.endsAtSeconds ?: return true
@@ -1033,6 +1065,7 @@ class GameEngine(
     }
 
     private fun evaluateEndConditions() {
+        if (pendingConsumedRunPerk != null || status != GameStatus.RUNNING) return
         if (player.position == maze.exit) {
             status = GameStatus.WIN
             return
@@ -1042,8 +1075,28 @@ class GameEngine(
             isEffectActive(PowerUpType.FREEZE) ||
             isEffectActive(PowerUpType.SHIELD)
         if (!collisionImmune && npcs.any { it.position == player.position }) {
-            status = GameStatus.LOSE
+            if (runPerkEffects.secondWindAvailable) {
+                runPerkEffects = runPerkEffects.copy(secondWindAvailable = false)
+                pendingConsumedRunPerk = RunPerkId.SECOND_WIND
+                activateTimedEffect(
+                    PowerUpType.FREEZE,
+                    PowerUpCollector.PLAYER,
+                    PowerUpActivationSource.RUN_PERK,
+                    durationOverrideSeconds = 1f
+                )
+                onRunPerkEffectApplied?.invoke(
+                    RunPerkEffectEvent(RunPerkId.SECOND_WIND, "freeze_pulse_seconds", 1)
+                )
+            } else {
+                status = GameStatus.LOSE
+            }
         }
+    }
+
+    fun acknowledgeRunPerkConsumption(seed: Long, perkId: RunPerkId): Boolean {
+        if (seed != currentSeed || pendingConsumedRunPerk != perkId) return false
+        pendingConsumedRunPerk = null
+        return true
     }
 
     private fun spawnNpcs() {
@@ -1271,28 +1324,34 @@ class GameEngine(
         activateAdventurerPowerUp(adventurer, powerUp.type)
     }
 
-    private fun activatePlayerPowerUp(type: PowerUpType) {
+    private fun activatePlayerPowerUp(
+        type: PowerUpType,
+        source: PowerUpActivationSource = PowerUpActivationSource.PICKUP
+    ) {
         when (type) {
-            PowerUpType.INVISIBILITY -> activateTimedEffect(PowerUpType.INVISIBILITY)
             PowerUpType.TELEPORT -> applyTeleport()
-            PowerUpType.SPEED_UP -> activateTimedEffect(PowerUpType.SPEED_UP)
-            PowerUpType.FREEZE -> activateTimedEffect(PowerUpType.FREEZE)
-            PowerUpType.SHIELD -> activateTimedEffect(PowerUpType.SHIELD)
-            PowerUpType.SLOW_TIME -> activateTimedEffect(PowerUpType.SLOW_TIME)
-            PowerUpType.MAGNET -> activateTimedEffect(PowerUpType.MAGNET)
             PowerUpType.BLAST -> applyBlast()
-            PowerUpType.GHOST_MODE -> activateTimedEffect(PowerUpType.GHOST_MODE)
+            PowerUpType.INVISIBILITY,
+            PowerUpType.SPEED_UP,
+            PowerUpType.FREEZE,
+            PowerUpType.SHIELD,
+            PowerUpType.SLOW_TIME,
+            PowerUpType.MAGNET,
+            PowerUpType.GHOST_MODE -> activateTimedEffect(type, PowerUpCollector.PLAYER, source)
         }
     }
 
     private fun activateAdventurerPowerUp(adventurer: Adventurer, type: PowerUpType) {
         when (type) {
-            PowerUpType.FREEZE, PowerUpType.SLOW_TIME -> activateTimedEffect(type)
+            PowerUpType.FREEZE,
+            PowerUpType.SLOW_TIME,
             PowerUpType.INVISIBILITY,
             PowerUpType.SPEED_UP,
             PowerUpType.SHIELD,
             PowerUpType.MAGNET,
-            PowerUpType.GHOST_MODE -> activateAdventurerTimedEffect(adventurer.id, type)
+            PowerUpType.GHOST_MODE -> activateTimedEffect(
+                type, PowerUpCollector.ADVENTURER, PowerUpActivationSource.PICKUP, adventurer.id
+            )
             PowerUpType.TELEPORT -> applyTeleport(adventurer)
             PowerUpType.BLAST -> applyBlast(adventurer.position)
         }
@@ -1300,22 +1359,27 @@ class GameEngine(
 
     private fun collectMagnetPowerUps() {
         if (!isEffectActive(PowerUpType.MAGNET)) return
-        collectMagnetPowerUps(player, ::activatePlayerPowerUp)
+        collectMagnetPowerUps(player, MAGNET_PICKUP_RADIUS + runPerkEffects.magnetRadiusBonus) {
+            activatePlayerPowerUp(it)
+        }
     }
 
     private fun collectMagnetPowerUps(adventurer: Adventurer) {
         if (!isAdventurerEffectActive(adventurer.id, PowerUpType.MAGNET)) return
-        collectMagnetPowerUps(adventurer) { type -> activateAdventurerPowerUp(adventurer, type) }
+        collectMagnetPowerUps(adventurer, MAGNET_PICKUP_RADIUS) { type ->
+            activateAdventurerPowerUp(adventurer, type)
+        }
     }
 
     private fun collectMagnetPowerUps(
         runner: MazeRunner,
+        radius: Int,
         activate: (PowerUpType) -> Unit
     ) {
         val runnerPos = runner.position
         val nearby = ArrayList<SpawnedPowerUp>()
         for (powerUp in powerUpsByCell.values) {
-            if (chebyshevDistance(runnerPos, powerUp.position) <= MAGNET_PICKUP_RADIUS) {
+            if (chebyshevDistance(runnerPos, powerUp.position) <= radius) {
                 nearby.add(powerUp)
             }
         }
@@ -1341,24 +1405,35 @@ class GameEngine(
     private fun chebyshevDistance(a: GridPos, b: GridPos): Int =
         maxOf(abs(a.x - b.x), abs(a.y - b.y))
 
-    private fun activateTimedEffect(type: PowerUpType) {
-        val duration = type.metadata.defaultDurationSeconds
+    private fun activateTimedEffect(
+        type: PowerUpType,
+        collector: PowerUpCollector,
+        source: PowerUpActivationSource,
+        adventurerId: Int? = null,
+        durationOverrideSeconds: Float? = null
+    ) {
+        val bonus = if (
+            collector == PowerUpCollector.PLAYER &&
+            source == PowerUpActivationSource.PICKUP &&
+            type.metadata.kind == PowerUpEffectKind.TIMED
+        ) runPerkEffects.durationBonusSeconds else 0f
+        val duration = (durationOverrideSeconds ?: type.metadata.defaultDurationSeconds) + bonus
         if (duration <= 0f) return
 
-        val existing = activeEffectsByType[type]
-        if (existing != null && type.metadata.stackPolicy == PowerUpStackPolicy.IGNORE_IF_ACTIVE) return
-
-        activeEffectsByType[type] = ActivePowerUpEffect(
-            type = type,
-            startedAtSeconds = elapsedSeconds,
-            endsAtSeconds = elapsedSeconds + duration
-        )
-    }
-
-    private fun activateAdventurerTimedEffect(adventurerId: Int, type: PowerUpType) {
-        val duration = type.metadata.defaultDurationSeconds
-        if (duration <= 0f) return
-        val effects = activeEffectsByAdventurerId.getOrPut(adventurerId) { mutableMapOf() }
+        if (collector == PowerUpCollector.NPC) {
+            npcInducedPlayerFreeze = ActivePowerUpEffect(
+                type = type,
+                startedAtSeconds = npcInducedPlayerFreeze?.startedAtSeconds ?: elapsedSeconds,
+                endsAtSeconds = elapsedSeconds + duration
+            )
+            return
+        }
+        val effects = if (
+            collector == PowerUpCollector.ADVENTURER &&
+            type != PowerUpType.FREEZE && type != PowerUpType.SLOW_TIME
+        ) {
+            activeEffectsByAdventurerId.getOrPut(requireNotNull(adventurerId)) { mutableMapOf() }
+        } else activeEffectsByType
         val existing = effects[type]
         if (existing != null && type.metadata.stackPolicy == PowerUpStackPolicy.IGNORE_IF_ACTIVE) return
         effects[type] = ActivePowerUpEffect(
@@ -1366,6 +1441,13 @@ class GameEngine(
             startedAtSeconds = elapsedSeconds,
             endsAtSeconds = elapsedSeconds + duration
         )
+        if (bonus > 0f) {
+            onRunPerkEffectApplied?.invoke(
+                RunPerkEffectEvent(
+                    RunPerkId.LONGER_CHARGE, "power_up_duration_seconds", bonus.toInt()
+                )
+            )
+        }
     }
 
     private fun applyTeleport(runner: MazeRunner = player) {
@@ -1441,7 +1523,7 @@ class GameEngine(
 
     private fun effectivePlayerMovesPerSecond(): Float {
         val speedMultiplier = if (isEffectActive(PowerUpType.SPEED_UP)) SPEED_UP_MULTIPLIER else 1f
-        return difficulty.playerMovesPerSecond * speedMultiplier
+        return difficulty.playerMovesPerSecond * speedMultiplier * runPerkEffects.playerSpeedMultiplier
     }
 
     private fun effectiveNpcMovesPerSecond(): Float {

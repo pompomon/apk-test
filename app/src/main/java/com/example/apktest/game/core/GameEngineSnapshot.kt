@@ -69,7 +69,9 @@ data class GameEngineSnapshot(
     /** Full restart override by spawn id; explicit null preserves Classic policy selection. */
     val npcSpawnSpecs: List<NpcSpawnSpec>? = null,
     /** Finite-positive per-maze pickup lifetime; `null` uses the difficulty preset. */
-    val powerUpPickupLifetimeOverrideSeconds: Float? = null
+    val powerUpPickupLifetimeOverrideSeconds: Float? = null,
+    val runPerkEffects: RunPerkEffects = RunPerkEffects(),
+    val pendingConsumedRunPerk: RunPerkId? = null
 ) {
     data class PlayerSnapshot(val x: Int, val y: Int, val facing: Direction)
     data class NpcSnapshot(
@@ -157,6 +159,20 @@ data class GameEngineSnapshot(
             ) return false
         }
         return true
+    }
+
+    internal fun hasValidRunPerkConfiguration(): Boolean {
+        if (runPerkEffects.quickFeetStacks !in 0..3 ||
+            runPerkEffects.longerChargeStacks !in 0..3 ||
+            runPerkEffects.pocketMagnetStacks !in 0..2
+        ) return false
+        if (pendingConsumedRunPerk == null) return true
+        if (pendingConsumedRunPerk != RunPerkId.SECOND_WIND ||
+            runPerkEffects.secondWindAvailable || status != GameStatus.RUNNING ||
+            !elapsedSeconds.isFinite() || elapsedSeconds < 0f
+        ) return false
+        val pulse = activeEffects.filter { it.type == PowerUpType.FREEZE }
+        return pulse.size == 1 && pulse.single().remainingSeconds == 1f
     }
 
     fun toJson(): String = JSONObject().apply {
@@ -253,10 +269,17 @@ data class GameEngineSnapshot(
         if (powerUpPickupLifetimeOverrideSeconds != null) {
             put(KEY_PICKUP_LIFETIME_OVERRIDE, powerUpPickupLifetimeOverrideSeconds.toDouble())
         }
+        put(KEY_RUN_PERK_EFFECTS, JSONObject().apply {
+            put("quickFeetStacks", runPerkEffects.quickFeetStacks)
+            put("longerChargeStacks", runPerkEffects.longerChargeStacks)
+            put("pocketMagnetStacks", runPerkEffects.pocketMagnetStacks)
+            put("secondWindAvailable", runPerkEffects.secondWindAvailable)
+        })
+        put(KEY_PENDING_CONSUMED_PERK, pendingConsumedRunPerk?.id ?: JSONObject.NULL)
     }.toString()
 
     companion object {
-        const val SCHEMA_VERSION = 7
+        const val SCHEMA_VERSION = 8
 
         private const val KEY_VERSION = "v"
         private const val KEY_DIFFICULTY = "difficulty"
@@ -281,6 +304,26 @@ data class GameEngineSnapshot(
         private const val KEY_NPC_SPAWN_SPECS = "npcSpawnSpecs"
         private const val KEY_ELITE_MODIFIER = "eliteModifier"
         private const val KEY_PICKUP_LIFETIME_OVERRIDE = "powerUpPickupLifetimeOverrideSeconds"
+        private const val KEY_RUN_PERK_EFFECTS = "runPerkEffects"
+        private const val KEY_PENDING_CONSUMED_PERK = "pendingConsumedRunPerk"
+
+        private fun readRunPerkEffects(obj: JSONObject): RunPerkEffects {
+            fun stacks(key: String, max: Int): Int {
+                val value = obj.get(key)
+                require(value is Int || value is Long) { "Invalid perk stack count" }
+                val count = (value as Number).toLong()
+                require(count in 0L..max.toLong()) { "Perk stack count out of bounds" }
+                return count.toInt()
+            }
+            require(obj.length() == 4) { "Unexpected run perk effects fields" }
+            return RunPerkEffects(
+                quickFeetStacks = stacks("quickFeetStacks", 3),
+                longerChargeStacks = stacks("longerChargeStacks", 3),
+                pocketMagnetStacks = stacks("pocketMagnetStacks", 2),
+                secondWindAvailable = obj.get("secondWindAvailable") as? Boolean
+                    ?: throw IllegalArgumentException("Invalid Second Wind availability")
+            )
+        }
 
         private fun readEliteModifier(obj: JSONObject): EliteNpcModifier? {
             require(obj.has(KEY_ELITE_MODIFIER)) { "Missing elite modifier" }
@@ -294,8 +337,14 @@ data class GameEngineSnapshot(
         fun fromJson(json: String): GameEngineSnapshot? {
             return try {
                 val obj = JSONObject(json)
-                val version = obj.optInt(KEY_VERSION, 0)
+                val version = obj.opt(KEY_VERSION) as? Int ?: return null
                 if (version != SCHEMA_VERSION) return null
+                val runPerkEffects = readRunPerkEffects(obj.getJSONObject(KEY_RUN_PERK_EFFECTS))
+                if (!obj.has(KEY_PENDING_CONSUMED_PERK)) return null
+                val pendingConsumedRunPerk = if (obj.isNull(KEY_PENDING_CONSUMED_PERK)) null else {
+                    val id = obj.get(KEY_PENDING_CONSUMED_PERK) as? String ?: return null
+                    RunPerkId.entries.firstOrNull { it.id == id } ?: return null
+                }
                 val player = obj.getJSONObject(KEY_PLAYER).let { p ->
                     PlayerSnapshot(
                         x = p.getInt("x"),
@@ -436,10 +485,13 @@ data class GameEngineSnapshot(
                     npcCountOverride = npcCountOverride,
                     npcPolicies = npcPolicies,
                     npcSpawnSpecs = npcSpawnSpecs,
-                    powerUpPickupLifetimeOverrideSeconds = pickupLifetimeOverride
+                    powerUpPickupLifetimeOverrideSeconds = pickupLifetimeOverride,
+                    runPerkEffects = runPerkEffects,
+                    pendingConsumedRunPerk = pendingConsumedRunPerk
                 )
                 val preset = snapshot.resolvePreset() ?: return null
                 if (!snapshot.hasValidNpcConfiguration()) return null
+                if (!snapshot.hasValidRunPerkConfiguration()) return null
                 val adventurerIds = adventurers.map { it.id }
                 if (adventurerIds.toSet().size != adventurerIds.size) return null
                 if (adventurerIds.any { it !in 0 until preset.adventurerCount }) return null

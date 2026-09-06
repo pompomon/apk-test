@@ -13,6 +13,9 @@ import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.NpcSpawnSpec
 import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.game.core.PowerUpType
+import com.example.apktest.game.core.RunPerkEffectEvent
+import com.example.apktest.game.core.RunPerkEffects
+import com.example.apktest.game.core.RunPerkId
 import com.example.apktest.game.ui.HudState
 
 class GameFragment : AndroidFragmentApplication() {
@@ -22,6 +25,9 @@ class GameFragment : AndroidFragmentApplication() {
     private var pendingNpcPolicy: NpcPolicyType = NpcPolicyType.DIRECT_CHASE
     private var pendingDifficulty: String = DifficultyPresets.MEDIUM.name
     private var pendingSnapshot: GameEngineSnapshot? = null
+    private var pendingAdventureConfiguration: ((MazeGame) -> Unit)? = null
+    private var onRunPerkConsumed: ((GameEngineSnapshot) -> Unit)? = null
+    private var onRunPerkEffectApplied: ((RunPerkEffectEvent) -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,8 +72,13 @@ class GameFragment : AndroidFragmentApplication() {
 
         val gameInstance = MazeGame()
         game = gameInstance
+        gameInstance.setRunPerkCallbacks(onRunPerkConsumed, onRunPerkEffectApplied)
         val snapshot = pendingSnapshot
-        if (snapshot != null) {
+        val adventureConfiguration = pendingAdventureConfiguration
+        if (adventureConfiguration != null) {
+            pendingAdventureConfiguration = null
+            adventureConfiguration(gameInstance)
+        } else if (snapshot != null) {
             // Apply the snapshot before the first render so the engine boots
             // straight into the resumed state (and so the fresh-game
             // countdown is suppressed by MazeGame).
@@ -82,6 +93,10 @@ class GameFragment : AndroidFragmentApplication() {
     }
 
     override fun onDestroyView() {
+        game?.detachRunPerkCallbacks()
+        onRunPerkConsumed = null
+        onRunPerkEffectApplied = null
+        pendingAdventureConfiguration = null
         game = null
         super.onDestroyView()
     }
@@ -121,16 +136,38 @@ class GameFragment : AndroidFragmentApplication() {
         startingPowerUp: PowerUpType? = null,
         pickupLifetimeSeconds: Float? = null,
         npcSpawnSpecs: List<NpcSpawnSpec>? = null,
+        runPerkEffects: RunPerkEffects = RunPerkEffects(),
         onStarted: ((List<NpcSpawnSpec>) -> Unit)? = null
     ) {
         pendingDifficulty = difficulty
         pendingPlayerPolicy = playerPolicy
-        game?.configureAdventureMaze(
-            seed, difficulty, playerPolicy, npcCount, npcPolicies, startingPowerUp,
-            pickupLifetimeSeconds = pickupLifetimeSeconds,
-            npcSpawnSpecs = npcSpawnSpecs,
-            onStarted = onStarted
-        )
+        pendingSnapshot = null
+        val policies = npcPolicies.toList()
+        val specs = npcSpawnSpecs?.toList()
+        val configuration: (MazeGame) -> Unit = { instance ->
+            instance.configureAdventureMaze(
+                seed, difficulty, playerPolicy, npcCount, policies, startingPowerUp,
+                pickupLifetimeSeconds = pickupLifetimeSeconds,
+                npcSpawnSpecs = specs,
+                runPerkEffects = runPerkEffects,
+                onStarted = onStarted
+            )
+        }
+        val instance = game
+        if (instance == null) pendingAdventureConfiguration = configuration else configuration(instance)
+    }
+
+    fun setRunPerkCallbacks(
+        onConsumed: ((GameEngineSnapshot) -> Unit)?,
+        onEffectApplied: ((RunPerkEffectEvent) -> Unit)?
+    ) {
+        onRunPerkConsumed = onConsumed
+        onRunPerkEffectApplied = onEffectApplied
+        game?.setRunPerkCallbacks(onConsumed, onEffectApplied)
+    }
+
+    fun acknowledgeRunPerkConsumption(seed: Long, perkId: RunPerkId) {
+        game?.acknowledgeRunPerkConsumption(seed, perkId)
     }
 
     fun queueManualMove(direction: Direction) {

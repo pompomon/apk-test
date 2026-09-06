@@ -20,6 +20,22 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <TextView
+        android:id="@+id/adventurePerkStatusBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:background="@color/maze_menu_popover_background"
+        android:gravity="center"
+        android:padding="@dimen/adventure_perk_summary_padding"
+        android:textColor="@color/maze_status_text"
+        android:textSize="@dimen/adventure_perk_summary_text_size"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/adventureStatusBar" />
+
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/fragmentGameHost"
         android:layout_width="0dp"
@@ -27,7 +43,7 @@
         app:layout_constraintBottom_toTopOf="@id/bottomControls"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/adventureStatusBar" />
+        app:layout_constraintTop_toBottomOf="@id/adventurePerkStatusBar" />
 
     <ImageButton
         android:id="@+id/buttonMenu"

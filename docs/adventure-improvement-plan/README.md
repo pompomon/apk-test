@@ -71,9 +71,17 @@ records the conservative default-off rollout and intentional save invalidation.
 
 ### Phase 3 — Run Build Perks
 
-- [ ] Add persistent perk state, offer generation, and reward-phase selection.
-- [ ] Apply perk effects through engine configuration and power-up timing hooks.
-- [ ] Summarize active perks in HUD/menu popovers and completion screens.
+- [x] Add persistent perk state, offer generation, and reward-phase selection.
+- [x] Apply perk effects through engine configuration and power-up timing hooks.
+- [x] Summarize active perks in HUD/menu popovers and completion screens.
+- [ ] Complete successful JVM/build/instrumented execution and device/balance approval before rollout.
+
+The [Phase 3 contract](03-run-build-perks.md#phase-3-implementation-contract)
+specifies fixed non-final perk milestones, player-pickup-only duration bonuses,
+durable one-shot consumption, and generation-only rollback. First Shield remains
+deferred pending design approval. The initial rollout is default-off and
+common-only Medium when explicitly enabled; uncommon/rare exposure requires
+separate balance approval.
 
 ## Definition of Done
 
