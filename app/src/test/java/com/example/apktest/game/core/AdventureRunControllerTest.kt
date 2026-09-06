@@ -288,7 +288,8 @@ class AdventureRunControllerTest {
             manualQueue = emptyList(),
             manualOverrideRemainingSeconds = 0f,
             npcCountOverride = c.state.currentMazeNpcCount,
-            npcPolicies = c.state.currentMazeNpcPolicies
+            npcPolicies = c.state.currentMazeNpcPolicies,
+            npcSpawnSpecs = c.state.currentMazeNpcSpawnSpecs
         )
         c.recordMidMazeSnapshot(fakeSnapshot)
         assertNotNull(c.state.currentMazeSnapshot)

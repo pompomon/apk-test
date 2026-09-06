@@ -5,6 +5,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONObject
 
 /**
  * CI enforcement test that fails loudly if a field on [GameEngineSnapshot]
@@ -96,6 +97,18 @@ class GameEngineSnapshotSchemaCoverageTest {
         }
     }
 
+    @Test
+    fun nestedNpcModifierHasExplicitNullAndStableIdJsonWitnesses() {
+        val snapshot = witnessSnapshot()
+        val encoded = JSONObject(snapshot.toJson()).getJSONArray("npcs")
+        assertTrue(encoded.getJSONObject(0).has("eliteModifier"))
+        assertTrue(encoded.getJSONObject(0).isNull("eliteModifier"))
+        assertEquals("tracker", encoded.getJSONObject(1).getString("eliteModifier"))
+        val decoded = GameEngineSnapshot.fromJson(snapshot.toJson())!!
+        assertEquals(null, decoded.npcs[0].eliteModifier)
+        assertEquals(EliteNpcModifier.TRACKER, decoded.npcs[1].eliteModifier)
+    }
+
     /**
      * A Kotlin data class compiles every primary-constructor parameter
      * into a private instance field with the same name. Walk those
@@ -134,7 +147,10 @@ class GameEngineSnapshotSchemaCoverageTest {
         player = GameEngineSnapshot.PlayerSnapshot(x = 3, y = 5, facing = Direction.NORTH),
         npcs = listOf(
             GameEngineSnapshot.NpcSnapshot(id = 0, x = 2, y = 4, facing = Direction.SOUTH),
-            GameEngineSnapshot.NpcSnapshot(id = 1, x = 6, y = 8, facing = Direction.WEST)
+            GameEngineSnapshot.NpcSnapshot(
+                id = 1, x = 6, y = 8, facing = Direction.WEST,
+                eliteModifier = EliteNpcModifier.TRACKER
+            )
         ),
         adventurers = listOf(
             GameEngineSnapshot.AdventurerSnapshot(id = 0, x = 4, y = 5, facing = Direction.EAST)
@@ -169,6 +185,12 @@ class GameEngineSnapshotSchemaCoverageTest {
         ),
         npcCountOverride = 4,
         npcPolicies = listOf(NpcPolicyType.DIRECT_CHASE, NpcPolicyType.PATROL_GUARD),
+        npcSpawnSpecs = listOf(
+            NpcSpawnSpec(NpcPolicyType.DIRECT_CHASE),
+            NpcSpawnSpec(NpcPolicyType.PATROL_GUARD, EliteNpcModifier.TRACKER),
+            NpcSpawnSpec(NpcPolicyType.PREDICTIVE_CHASE),
+            NpcSpawnSpec(NpcPolicyType.PATROL_GUARD)
+        ),
         powerUpPickupLifetimeOverrideSeconds = 35f
     )
 
@@ -229,8 +251,9 @@ class GameEngineSnapshotSchemaCoverageTest {
             GameEngineSnapshot.RemovedWallSnapshot(x = 1, y = 1, direction = Direction.SOUTH),
             GameEngineSnapshot.RemovedWallSnapshot(x = 2, y = 0, direction = Direction.WEST)
         ),
-        npcCountOverride = 7,
+        npcCountOverride = null,
         npcPolicies = listOf(NpcPolicyType.PREDICTIVE_CHASE),
+        npcSpawnSpecs = null,
         powerUpPickupLifetimeOverrideSeconds = null
     )
 }

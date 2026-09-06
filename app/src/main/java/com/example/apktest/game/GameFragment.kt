@@ -10,6 +10,7 @@ import com.example.apktest.game.core.DifficultyPresets
 import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameEngineSnapshot
 import com.example.apktest.game.core.NpcPolicyType
+import com.example.apktest.game.core.NpcSpawnSpec
 import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.game.core.PowerUpType
 import com.example.apktest.game.ui.HudState
@@ -118,13 +119,17 @@ class GameFragment : AndroidFragmentApplication() {
         npcCount: Int,
         npcPolicies: List<NpcPolicyType>,
         startingPowerUp: PowerUpType? = null,
-        pickupLifetimeSeconds: Float? = null
+        pickupLifetimeSeconds: Float? = null,
+        npcSpawnSpecs: List<NpcSpawnSpec>? = null,
+        onStarted: ((List<NpcSpawnSpec>) -> Unit)? = null
     ) {
         pendingDifficulty = difficulty
         pendingPlayerPolicy = playerPolicy
         game?.configureAdventureMaze(
             seed, difficulty, playerPolicy, npcCount, npcPolicies, startingPowerUp,
-            pickupLifetimeSeconds = pickupLifetimeSeconds
+            pickupLifetimeSeconds = pickupLifetimeSeconds,
+            npcSpawnSpecs = npcSpawnSpecs,
+            onStarted = onStarted
         )
     }
 

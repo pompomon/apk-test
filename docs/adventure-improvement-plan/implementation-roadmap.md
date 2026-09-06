@@ -103,14 +103,34 @@
 
 ### Tasks
 
-- [ ] Define `EliteNpcModifier` metadata and initial `Tracker` modifier.
-- [ ] Replace or supplement per-maze `List<NpcPolicyType>` with spawn specs carrying modifier metadata.
-- [ ] Lock modifier assignments in `AdventureRunController` and persist in `AdventureRunStateSnapshot`.
-- [ ] Persist every NPC modifier assignment in `GameEngineSnapshot.NpcSnapshot`
+- [x] Define `EliteNpcModifier` metadata and initial `Tracker` modifier.
+- [x] Replace or supplement per-maze `List<NpcPolicyType>` with spawn specs carrying modifier metadata.
+- [x] Lock modifier assignments in `AdventureRunController` and persist in `AdventureRunStateSnapshot`.
+- [x] Persist every NPC modifier assignment in `GameEngineSnapshot.NpcSnapshot`
       and bump `GameEngineSnapshot.SCHEMA_VERSION`.
-- [ ] Add modifier hooks in NPC target selection/movement logic.
-- [ ] Add renderer accent and legend rows using precomputed lookup data.
-- [ ] Add tests for null-modifier regression, deterministic assignment, snapshot round-trip, and mechanics.
+- [x] Add Tracker acquisition/ranking hooks; movement-cadence modifiers remain deferred.
+- [x] Add renderer accent and legend rows using precomputed lookup data.
+- [x] Add tests for null-modifier regression, deterministic assignment, snapshot round-trip, and mechanics.
+
+### Implementation notes
+
+- Tracker only, restricted to Patrol Guard: +2 Manhattan acquisition range and
+  preference for the reachable visible player. Existing power-up and cadence
+  semantics remain unchanged.
+- Full spawn specs are locked before gameplay, using shared placement information
+  and an independent assignment stream. Unsafe/incompatible candidates are skipped,
+  not relocated. Policy-only callers continue to produce normal NPCs.
+- Adventure schema 4 and engine schema 7 intentionally invalidate older saves,
+  including Classic engine saves. Full restart rosters survive capacity truncation.
+- Generation stays default-off. Initial Medium/Hard exposure is limited to one
+  Tracker, excluding count-ramp/final mazes and risky routes. Wider documented caps
+  and Easy exposure require separate approval. Ambush remains +1 NPC.
+- Compatible saved elites survive flag rollback and retain their legend entries.
+  Spawn/outcome hooks use the existing no-op telemetry infrastructure; capture
+  attribution and production analytics remain deferred.
+- Added tests are not balance approval. JVM/build/instrumented execution,
+  internal dogfood, and device/accessibility checks must pass before rollout.
+  See the [Phase 2 contract](02-elite-npc-modifiers.md#phase-2-implementation-contract).
 
 ### Dependencies
 
@@ -123,7 +143,7 @@
 | --- | --- |
 | Visuals become hard to parse when policy and modifier both matter | Use base policy tint plus a consistent elite accent, and add legend explanations. |
 | Existing NPC behavior regresses | Keep `null` modifier path byte-for-byte equivalent where possible and cover with regression tests. |
-| New movement cadence creates unavoidable captures | Cap extra moves and evaluate terminal status after each move, matching existing game-loop discipline. |
+| New movement cadence creates unavoidable captures | Cadence modifiers are deferred; future support must add per-substep terminal checks because the current loop checks after an NPC batch. |
 
 ### Acceptance criteria
 

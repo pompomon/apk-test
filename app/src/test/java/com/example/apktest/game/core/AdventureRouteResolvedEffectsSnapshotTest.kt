@@ -15,7 +15,7 @@ class AdventureRouteResolvedEffectsSnapshotTest {
         assertEquals(1, snapshot.currentMazeNpcCount)
         val impossible = snapshot.copy(
             currentMazeNpcCount = 0,
-            currentMazeNpcPolicies = emptyList(),
+            currentMazeNpcSpawnSpecs = emptyList(),
             activeRoute = snapshot.activeRoute!!.copy(npcCount = 0)
         )
         assertNull(AdventureRunStateSnapshot.fromJson(impossible.toJson()))
@@ -29,7 +29,7 @@ class AdventureRouteResolvedEffectsSnapshotTest {
         for (count in listOf(1, 3, 100)) {
             val impossible = snapshot.copy(
                 currentMazeNpcCount = count,
-                currentMazeNpcPolicies = List(count) { NpcPolicyType.DIRECT_CHASE },
+                currentMazeNpcSpawnSpecs = List(count) { NpcSpawnSpec(NpcPolicyType.DIRECT_CHASE) },
                 activeRoute = snapshot.activeRoute!!.copy(npcCount = count)
             )
             assertNull(AdventureRunStateSnapshot.fromJson(impossible.toJson()))

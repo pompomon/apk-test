@@ -126,15 +126,13 @@ class GameEngine(
     var npcCountOverride: Int? = null
         private set
 
-    /**
-     * Adventure-mode override assigning a [NpcPolicyType] per NPC by spawn
-     * index. When `null` every NPC uses the engine's configured
-     * [npcPolicyType] (single-maze behaviour). When non-null
-     * [spawnNpcs] sets each `Npc.policyType` from this list, padding with
-     * [npcPolicyType] if the list is shorter than the spawn count.
-     */
-    var npcPolicies: List<NpcPolicyType>? = null
+    /** Full restart roster by spawn id, including assignments beyond maze capacity. */
+    var npcSpawnSpecs: List<NpcSpawnSpec>? = null
         private set
+
+    /** Compatibility view; [npcSpawnSpecs] is the only restart-assignment source of truth. */
+    val npcPolicies: List<NpcPolicyType>?
+        get() = npcSpawnSpecs?.map { it.policyType }
 
     /** Per-maze pickup lifetime; null preserves the preset, including infinite Easy pickups. */
     var powerUpPickupLifetimeOverrideSeconds: Float? = null
@@ -225,7 +223,8 @@ class GameEngine(
         // Changing difficulty discards any per-maze Adventure overrides so a
         // user who flips difficulty mid-session gets the preset's NPC count and pickup lifetime.
         npcCountOverride = null
-        npcPolicies = null
+        npcSpawnSpecs = null
+        npcs.forEach { it.eliteModifier = null }
         powerUpPickupLifetimeOverrideSeconds = null
     }
 
@@ -256,10 +255,13 @@ class GameEngine(
         // a subsequent restart/spawnNpcs uses the freshly selected
         // policy instead of the persisted per-NPC list.
         npcCountOverride = null
-        npcPolicies = null
+        npcSpawnSpecs = null
         // Single-maze re-assignment: NPCs that were spawned with an
         // Adventure-supplied per-NPC policy follow the new uniform policy.
-        npcs.forEach { it.policyType = type }
+        npcs.forEach {
+            it.policyType = type
+            it.eliteModifier = null
+        }
         resetNpcPolicyState()
     }
 
@@ -272,11 +274,14 @@ class GameEngine(
      * falls back to the engine's configured [npcPolicyType] for any
      * unassigned NPC index. [pickupLifetimeSeconds] overrides only map-pickup
      * lifetime, not active-effect durations; `null` preserves the preset.
+     * When supplied, [npcSpawnSpecs] is authoritative and must cover the
+     * entire requested count; [policies] is used only by the legacy path.
      */
     fun configureAdventureMaze(
         npcCount: Int,
         policies: List<NpcPolicyType>,
-        pickupLifetimeSeconds: Float? = null
+        pickupLifetimeSeconds: Float? = null,
+        npcSpawnSpecs: List<NpcSpawnSpec>? = null
     ) {
         require(npcCount >= 0) { "npcCount must be >= 0 (was $npcCount)" }
         require(
@@ -285,8 +290,17 @@ class GameEngine(
         ) {
             "pickupLifetimeSeconds must be finite and positive, or null"
         }
+        require(npcSpawnSpecs == null || npcSpawnSpecs.size == npcCount) {
+            "npcSpawnSpecs must have exactly npcCount entries"
+        }
+        require(npcSpawnSpecs?.all { it.eliteModifier?.supports(it.policyType) != false } != false) {
+            "Elite modifier is incompatible with NPC policy"
+        }
+        val specs = npcSpawnSpecs?.toList() ?: List(npcCount) {
+            NpcSpawnSpec(policies.getOrNull(it) ?: npcPolicyType)
+        }
         npcCountOverride = npcCount
-        npcPolicies = policies.toList()
+        this.npcSpawnSpecs = specs
         powerUpPickupLifetimeOverrideSeconds = pickupLifetimeSeconds
     }
 
@@ -297,7 +311,8 @@ class GameEngine(
      */
     fun clearAdventureMazeConfig() {
         npcCountOverride = null
-        npcPolicies = null
+        npcSpawnSpecs = null
+        npcs.forEach { it.eliteModifier = null }
         powerUpPickupLifetimeOverrideSeconds = null
     }
 
@@ -334,7 +349,7 @@ class GameEngine(
         steps = steps,
         player = GameEngineSnapshot.PlayerSnapshot(player.position.x, player.position.y, player.facing),
         npcs = npcs.map {
-            GameEngineSnapshot.NpcSnapshot(it.id, it.position.x, it.position.y, it.facing)
+            GameEngineSnapshot.NpcSnapshot(it.id, it.position.x, it.position.y, it.facing, it.eliteModifier)
         },
         adventurers = adventurers.map {
             GameEngineSnapshot.AdventurerSnapshot(it.id, it.position.x, it.position.y, it.facing)
@@ -375,7 +390,8 @@ class GameEngine(
         // [Npc.id]) so a resume on a snapshot taken mid-Adventure-maze
         // restores each NPC's individual policy. For single-maze runs this
         // is just a uniform list of [npcPolicyType] — small and harmless.
-        npcPolicies = npcs.map { it.policyType },
+        npcPolicies = npcs.sortedBy { it.id }.map { it.policyType },
+        npcSpawnSpecs = npcSpawnSpecs?.toList(),
         powerUpPickupLifetimeOverrideSeconds = powerUpPickupLifetimeOverrideSeconds
     )
 
@@ -446,6 +462,12 @@ class GameEngine(
         require(pickupLifetime == null || (pickupLifetime.isFinite() && pickupLifetime > 0f)) {
             "Snapshot pickup lifetime override must be finite and positive, or null"
         }
+        require(snapshot.schemaVersion == GameEngineSnapshot.SCHEMA_VERSION) {
+            "Unsupported snapshot schema version"
+        }
+        require(snapshot.hasValidNpcConfiguration()) {
+            "Snapshot has inconsistent NPC assignments"
+        }
         difficulty = preset
         playerPolicyType = snapshot.playerPolicy
         npcPolicyType = snapshot.npcPolicy
@@ -471,28 +493,11 @@ class GameEngine(
         playerPolicy.reset()
         npcPolicy.reset()
 
-        // Re-install Adventure-mode overrides (if any) from the snapshot.
-        // These drive subsequent restarts so a paused-mid-maze resume that
-        // later hits restart still gets the right NPC count + per-NPC
-        // policies. The per-NPC `policyType` field below is what governs
-        // the *current* spawned NPCs.
-        //
-        // Single-maze snapshots also persist `npcPolicies` (a uniform list
-        // of `snapshot.npcPolicy`) so each NPC's `policyType` can be
-        // restored individually. Re-installing that uniform list as an
-        // override would then make a later [setNpcPolicy] ineffective on
-        // restart, because [spawnNpcs] would keep preferring the persisted
-        // list. Treat the snapshot as an Adventure override only when it
-        // explicitly carries a count override or a non-uniform policy list.
+        // Active assignments and restart assignments are separate: Classic's
+        // active roster must not accidentally become an Adventure override.
         npcCountOverride = snapshot.npcCountOverride
         powerUpPickupLifetimeOverrideSeconds = snapshot.powerUpPickupLifetimeOverrideSeconds
-        npcPolicies = snapshot.npcPolicies
-            .takeIf { list ->
-                list.isNotEmpty() && (
-                    snapshot.npcCountOverride != null ||
-                        list.any { it != snapshot.npcPolicy }
-                )
-            }
+        npcSpawnSpecs = snapshot.npcSpawnSpecs?.toList()
 
         status = snapshot.status
         elapsedSeconds = snapshot.elapsedSeconds
@@ -510,10 +515,8 @@ class GameEngine(
                 position = GridPos(n.x, n.y),
                 facing = n.facing,
                 patrolRoute = patrolRouteFrom(GridPos(n.x, n.y)),
-                // Restore each NPC's per-NPC policy, defaulting to the
-                // engine-wide [npcPolicyType] when the snapshot did not
-                // record one (single-maze snapshots).
-                policyType = snapshot.npcPolicies.getOrNull(n.id) ?: npcPolicyType
+                policyType = snapshot.npcPolicies[n.id],
+                eliteModifier = n.eliteModifier
             )
         }.toMutableList()
         adventurers = snapshot.adventurers.map { adventurer ->
@@ -1044,21 +1047,19 @@ class GameEngine(
     }
 
     private fun spawnNpcs() {
-        val candidates = npcSpawnCandidates()
+        val candidates = NpcSpawnPlanner.plan(maze, navigator, difficulty, random).candidates
         val requestedCount = npcCountOverride ?: difficulty.npcCount
         val spawnCount = requestedCount.coerceAtMost(candidates.size).coerceAtLeast(0)
-        val policies = npcPolicies
         repeat(spawnCount) { index ->
             val candidate = candidates[index]
             val route = patrolRouteFrom(candidate)
-            // Per-NPC policy: fall back to engine-wide [npcPolicyType] if no
-            // override entry was supplied for this spawn index.
-            val perNpcPolicy = policies?.getOrNull(index) ?: npcPolicyType
+            val spec = npcSpawnSpecs?.get(index)
             npcs += Npc(
                 id = index,
                 position = candidate,
                 patrolRoute = route,
-                policyType = perNpcPolicy
+                policyType = spec?.policyType ?: npcPolicyType,
+                eliteModifier = spec?.eliteModifier
             )
         }
     }
@@ -1141,43 +1142,6 @@ class GameEngine(
             }
         }
         return candidates
-    }
-
-    private fun npcSpawnCandidates(): List<GridPos> {
-        val reserved = setOf(maze.start, maze.exit)
-        val shuffled = ArrayList<GridPos>(maze.width * maze.height - reserved.size)
-        for (y in 0 until maze.height) {
-            for (x in 0 until maze.width) {
-                val pos = GridPos(x, y)
-                if (pos !in reserved) shuffled += pos
-            }
-        }
-        shuffled.shuffle(random)
-
-        val directPath = navigator.bfsPath(maze.start, maze.exit)
-        // Generated mazes are connected; keep a fallback for restored/test
-        // mazes that may be malformed so spawning still produces NPCs.
-        if (directPath.isEmpty()) return shuffled
-
-        val bufferedPathCells = directPathBufferCells(directPath, difficulty.npcDirectPathSpawnBuffer)
-        val preferred = shuffled.filter { pos -> pos !in bufferedPathCells }
-        if (preferred.size == shuffled.size) return preferred
-
-        val preferredSet = preferred.toSet()
-        return preferred + shuffled.filter { it !in preferredSet }
-    }
-
-    private fun directPathBufferCells(directPath: List<GridPos>, buffer: Int): Set<GridPos> {
-        val cells = mutableSetOf<GridPos>()
-        directPath.forEach { pathCell ->
-            for (dy in -buffer..buffer) {
-                for (dx in -buffer..buffer) {
-                    val pos = GridPos(pathCell.x + dx, pathCell.y + dy)
-                    if (maze.inBounds(pos)) cells += pos
-                }
-            }
-        }
-        return cells
     }
 
     private fun patrolRouteFrom(origin: GridPos): List<GridPos> {

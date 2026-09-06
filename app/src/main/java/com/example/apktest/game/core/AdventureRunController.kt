@@ -33,9 +33,9 @@ enum class AdventureStatus {
  *   maze. Locked on first [AdventureRunController.prepareCurrentMaze]
  *   call so a death replay uses the same maze layout. Cleared on win
  *   so the next maze regenerates fresh.
- * @property currentMazeNpcPolicies Per-NPC `NpcPolicyType` list for the
+ * @property currentMazeNpcSpawnSpecs Per-NPC policy and modifier list for the
  *   currently-active maze (indexed by spawn `Npc.id`). Locked alongside
- *   [currentMazeSeed] so a death replay keeps the same NPC strategies.
+ *   [currentMazeSeed] so a death replay keeps the same NPC strategies and modifiers.
  * @property currentMazeSnapshot In-flight engine snapshot from a
  *   paused-mid-maze save. Restored verbatim into the engine on the next
  *   resume. Cleared on death (the replay starts from the maze's locked
@@ -51,7 +51,7 @@ data class AdventureRunState(
     var lastAutomatedPlayerPolicy: PlayerPolicyType? = null,
     var automatedPolicyPromptShown: Boolean = false,
     var currentMazeSeed: Long? = null,
-    var currentMazeNpcPolicies: List<NpcPolicyType> = emptyList(),
+    var currentMazeNpcSpawnSpecs: List<NpcSpawnSpec> = emptyList(),
     var currentMazeSnapshot: GameEngineSnapshot? = null,
     var status: AdventureStatus = AdventureStatus.IN_PROGRESS,
     /**
@@ -71,19 +71,22 @@ data class AdventureRunState(
     var totalSteps: Int = 0,
     /** Number of player deaths this run, including the run-ending death. */
     var deathsThisRun: Int = 0,
-    var currentMazeNpcCount: Int? = currentMazeSeed?.let { currentMazeNpcPolicies.size },
+    var currentMazeNpcCount: Int? = currentMazeSeed?.let { currentMazeNpcSpawnSpecs.size },
     var pendingReward: PendingAdventureReward? = null,
     var activeRoute: PendingRouteEvent? = null,
     var routeHistory: List<RouteEventHistoryEntry> = emptyList(),
     var nextRouteEventMazeIndex: Int = RouteEventGenerator.FIRST_EVENT_MAZE_INDEX,
     var routeEventOrdinal: Int = 0,
     var rewardRerolls: Int = 0
-)
+) {
+    val currentMazeNpcPolicies: List<NpcPolicyType>
+        get() = currentMazeNpcSpawnSpecs.map { it.policyType }
+}
 
 /**
  * Returned from [AdventureRunController.prepareCurrentMaze] to describe
  * how the host should configure the next maze: the seed to use, the
- * desired NPC count, the per-NPC policy list, the player policy to apply,
+ * desired NPC count, the per-NPC spawn specs, the player policy to apply,
  * the difficulty preset, and (if non-null) a mid-maze snapshot to restore
  * instead of starting fresh.
  */
@@ -91,7 +94,7 @@ data class MazeStartupSpec(
     val seed: Long,
     val difficulty: DifficultyPreset,
     val npcCount: Int,
-    val npcPolicies: List<NpcPolicyType>,
+    val npcSpawnSpecs: List<NpcSpawnSpec>,
     val playerPolicy: PlayerPolicyType,
     val midMazeSnapshot: GameEngineSnapshot?,
     /**
@@ -101,7 +104,10 @@ data class MazeStartupSpec(
      */
     val startingPowerUp: PowerUpType? = null,
     val pickupLifetimeSeconds: Float? = null
-)
+) {
+    val npcPolicies: List<NpcPolicyType>
+        get() = npcSpawnSpecs.map { it.policyType }
+}
 
 /**
  * Returned from [AdventureRunController.onMazeWon] to communicate what
@@ -152,7 +158,10 @@ class AdventureRunController(
     initialState: AdventureRunState? = null,
     private val runSeed: Long = System.currentTimeMillis(),
     private val routesEnabled: Boolean = AdventureFeatureFlags.ROUTE_EVENTS_ENABLED &&
-        config.difficulty.name == DifficultyPresets.MEDIUM.name
+        config.difficulty.name == DifficultyPresets.MEDIUM.name,
+    private val elitesEnabled: Boolean = AdventureFeatureFlags.ELITE_NPC_MODIFIERS_ENABLED &&
+        (config.difficulty.name == DifficultyPresets.MEDIUM.name ||
+            config.difficulty.name == DifficultyPresets.HARD.name)
 ) {
     private val routeGenerator = RouteEventGenerator(config, runSeed)
     val state: AdventureRunState = initialState ?: AdventureRunState(
@@ -171,7 +180,7 @@ class AdventureRunController(
 
     /**
      * Prepare the maze the player should now play. Locks [AdventureRunState.currentMazeSeed]
-     * and [AdventureRunState.currentMazeNpcPolicies] on the first call for a
+     * and [AdventureRunState.currentMazeNpcSpawnSpecs] on the first call for a
      * given maze (so a death replay returns the *same* spec); subsequent
      * calls before the next [onMazeWon] / [onPlayerDied] are idempotent.
      *
@@ -189,7 +198,7 @@ class AdventureRunController(
             seed = state.currentMazeSeed!!,
             difficulty = config.difficulty,
             npcCount = state.currentMazeNpcCount!!,
-            npcPolicies = state.currentMazeNpcPolicies.toList(),
+            npcSpawnSpecs = state.currentMazeNpcSpawnSpecs.toList(),
             playerPolicy = state.currentPlayerPolicy,
             midMazeSnapshot = state.currentMazeSnapshot,
             startingPowerUp = state.pendingStartingPowerUp,
@@ -205,7 +214,13 @@ class AdventureRunController(
             state.currentMazeNpcCount = count
             val rng = Random(deriveNpcPolicySeed(target))
             val pool = NpcPolicyType.entries
-            state.currentMazeNpcPolicies = List(count) { pool[rng.nextInt(pool.size)] }
+            val policies = List(count) { pool[rng.nextInt(pool.size)] }
+            state.currentMazeNpcSpawnSpecs = if (elitesEnabled) {
+                val seed = state.currentMazeSeed!!
+                val maze = MazeGenerator.generate(config.difficulty.mazeWidth, config.difficulty.mazeHeight, seed)
+                val plan = NpcSpawnPlanner.plan(maze, MazeNavigator(maze), config.difficulty, Random(seed))
+                AdventureEliteAssignment.assign(config, target, seed, policies, plan, state.activeRoute?.choiceId)
+            } else policies.map { NpcSpawnSpec(it) }
         }
     }
 
@@ -307,7 +322,7 @@ class AdventureRunController(
      * Record a maze win. Increments the maze index, advances the win
      * streak (awarding +1 life every [AdventureConfig.STREAK_BONUS_THRESHOLD]),
      * clears the locked per-maze fields so the next [prepareCurrentMaze]
-     * draws a fresh seed and per-NPC policies, clears any mid-maze
+     * draws a fresh seed and per-NPC spawn specs, clears any mid-maze
      * snapshot, and returns a [WinOutcome] describing the new state.
      *
      * Accumulates [elapsedSeconds] and [steps] (clamped to ≥ 0) into the
@@ -342,7 +357,7 @@ class AdventureRunController(
         }
         state.currentMazeSeed = null
         state.currentMazeNpcCount = null
-        state.currentMazeNpcPolicies = emptyList()
+        state.currentMazeNpcSpawnSpecs = emptyList()
         state.currentMazeSnapshot = null
         // Locked starting power-up is per-maze: clear once we advance past
         // the maze it was reserved for. Death replays keep it so the same
@@ -429,7 +444,7 @@ class AdventureRunController(
      * Record a player death on the current maze. Decrements lives, resets
      * the win-streak counter, and clears the mid-maze snapshot so the
      * replay starts from the locked initial layout. Locked
-     * [AdventureRunState.currentMazeSeed] and [AdventureRunState.currentMazeNpcPolicies]
+     * [AdventureRunState.currentMazeSeed] and [AdventureRunState.currentMazeNpcSpawnSpecs]
      * are deliberately preserved so the same maze is replayed.
      *
      * Increments [AdventureRunState.deathsThisRun] on every death, including
@@ -450,7 +465,7 @@ class AdventureRunController(
             state.status = AdventureStatus.LOST
             state.currentMazeSeed = null
             state.currentMazeNpcCount = null
-            state.currentMazeNpcPolicies = emptyList()
+            state.currentMazeNpcSpawnSpecs = emptyList()
             state.pendingStartingPowerUp = null
             clearTerminalRouteState()
         }
@@ -466,7 +481,7 @@ class AdventureRunController(
     fun recordMidMazeSnapshot(engineSnapshot: GameEngineSnapshot) {
         if (state.status != AdventureStatus.IN_PROGRESS || state.pendingReward != null) return
         if (!engineSnapshot.matchesAdventureMaze(state.difficultyName, state.currentMazeSeed,
-                state.currentMazeNpcCount, state.currentMazeNpcPolicies, state.activeRoute?.pickupLifetimeSeconds)) return
+                state.currentMazeNpcCount, state.currentMazeNpcSpawnSpecs, state.activeRoute?.pickupLifetimeSeconds)) return
         state.currentMazeSnapshot = engineSnapshot
     }
 

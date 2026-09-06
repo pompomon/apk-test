@@ -15,7 +15,7 @@ Scope is planning, sequencing, validation, and rollback guidance. This folder do
 Adventure mode is a run controller layered above the single-maze `GameEngine`:
 
 - `AdventureConfig` defines difficulty-specific run length, lives, and NPC count scaling: Easy 5 mazes / 5 lives / base 1 NPC, Medium 7 / 3 / base 1, Hard 9 / 1 / base 2.
-- `AdventureRunController` chains mazes, locks each maze seed and per-NPC policy list for deterministic retries, tracks lives, win streak, unlocked player policies, pending starting power-up rewards, run time, steps, and deaths.
+- `AdventureRunController` chains mazes, locks each maze seed and per-NPC policy/modifier spawn specs for deterministic retries, tracks lives, win streak, unlocked player policies, pending starting power-up rewards, run time, steps, and deaths.
 - `AdventureRunStateSnapshot` persists run-level state separately from single-maze `GameEngineSnapshot` through `AdventureStateStore`.
 - `AdventureActivity` hosts overlays for maze win/loss, automated-policy selection, starting power-up choices, best-time completion, and restart/continue flow.
 - `GameEngine.configureAdventureMaze(...)` applies per-maze NPC count and NPC policy overrides; `GameFragment.configureAdventureMaze(...)` also applies a chosen starting power-up before countdown.
@@ -61,9 +61,13 @@ invalidation.
 
 ### Phase 2 — Elite NPC Modifiers
 
-- [ ] Add modifier metadata and deterministic assignment per maze.
-- [ ] Wire modifiers into NPC behavior hooks and renderer/legend labeling.
-- [ ] Cap elite density and verify fairness across Easy/Medium/Hard.
+- [x] Add Tracker metadata and deterministic assignment per maze.
+- [x] Wire Tracker into NPC behavior hooks and renderer/legend labeling.
+- [x] Enforce eligibility, spawn safety, and bounded elite density.
+- [ ] Complete device/accessibility validation and balance approval before rollout.
+
+The [Phase 2 contract](02-elite-npc-modifiers.md#phase-2-implementation-contract)
+records the conservative default-off rollout and intentional save invalidation.
 
 ### Phase 3 — Run Build Perks
 

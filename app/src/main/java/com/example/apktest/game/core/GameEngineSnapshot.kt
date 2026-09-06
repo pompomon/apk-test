@@ -57,20 +57,28 @@ data class GameEngineSnapshot(
      * NPC: in single-maze runs every entry is the engine's configured uniform
      * `npcPolicyType` (uniform list), and in Adventure mode each entry is the
      * NPC's individually-assigned type. On restore, each NPC is re-assigned
-     * its individual policy; if the list is non-empty it is also re-installed
-     * as an Adventure override so a follow-up `restart` re-spawns NPCs with
-     * the same per-NPC policies. An empty list is valid in v3+ when zero
+     * its individual policy. Restart assignments live separately in
+     * [npcSpawnSpecs], which can exceed the active roster's maze capacity.
+     * An empty list is valid when zero
      * NPCs are spawned (e.g. `npcCountOverride = 0`, or no available spawn
      * candidates); otherwise this list has exactly one entry per spawned
      * NPC. Older schema versions that pre-date this field are rejected by
      * `fromJson`.
      */
     val npcPolicies: List<NpcPolicyType> = emptyList(),
+    /** Full restart override by spawn id; explicit null preserves Classic policy selection. */
+    val npcSpawnSpecs: List<NpcSpawnSpec>? = null,
     /** Finite-positive per-maze pickup lifetime; `null` uses the difficulty preset. */
     val powerUpPickupLifetimeOverrideSeconds: Float? = null
 ) {
     data class PlayerSnapshot(val x: Int, val y: Int, val facing: Direction)
-    data class NpcSnapshot(val id: Int, val x: Int, val y: Int, val facing: Direction)
+    data class NpcSnapshot(
+        val id: Int,
+        val x: Int,
+        val y: Int,
+        val facing: Direction,
+        val eliteModifier: EliteNpcModifier? = null
+    )
     data class AdventurerSnapshot(val id: Int, val x: Int, val y: Int, val facing: Direction)
     data class AdventurerEffectsSnapshot(
         val adventurerId: Int,
@@ -130,6 +138,27 @@ data class GameEngineSnapshot(
 
     private fun roundUpToEven(value: Int): Int = if (value % 2 == 0) value else value + 1
 
+    /** Shared by disk decoding and programmatic restore before engine state is changed. */
+    internal fun hasValidNpcConfiguration(): Boolean {
+        if ((npcCountOverride == null) != (npcSpawnSpecs == null)) return false
+        if (npcSpawnSpecs == null && npcs.any { it.eliteModifier != null }) return false
+        if (npcCountOverride != null && npcCountOverride < npcs.size) return false
+        if (npcPolicies.size != npcs.size) return false
+        val ids = npcs.map { it.id }
+        if (ids.toSet().size != ids.size || ids.any { it !in npcs.indices }) return false
+        if (npcs.any { it.eliteModifier?.supports(npcPolicies[it.id]) == false }) return false
+        npcSpawnSpecs?.let { specs ->
+            if (npcCountOverride == null || specs.size != npcCountOverride) return false
+            if (specs.any { it.eliteModifier?.supports(it.policyType) == false }) return false
+            if (npcs.any {
+                    specs[it.id].policyType != npcPolicies[it.id] ||
+                        specs[it.id].eliteModifier != it.eliteModifier
+                }
+            ) return false
+        }
+        return true
+    }
+
     fun toJson(): String = JSONObject().apply {
         put(KEY_VERSION, schemaVersion)
         put(KEY_DIFFICULTY, difficultyName)
@@ -146,6 +175,7 @@ data class GameEngineSnapshot(
             npcs.forEach { n ->
                 put(JSONObject().apply {
                     put("id", n.id); put("x", n.x); put("y", n.y); put("facing", n.facing.name)
+                    put(KEY_ELITE_MODIFIER, n.eliteModifier?.id ?: JSONObject.NULL)
                 })
             }
         })
@@ -210,13 +240,23 @@ data class GameEngineSnapshot(
         put(KEY_NPC_POLICIES, JSONArray().apply {
             npcPolicies.forEach { put(it.name) }
         })
+        put(KEY_NPC_SPAWN_SPECS, npcSpawnSpecs?.let { specs ->
+            JSONArray().apply {
+                specs.forEach { spec ->
+                    put(JSONObject().apply {
+                        put("policyType", spec.policyType.name)
+                        put(KEY_ELITE_MODIFIER, spec.eliteModifier?.id ?: JSONObject.NULL)
+                    })
+                }
+            }
+        } ?: JSONObject.NULL)
         if (powerUpPickupLifetimeOverrideSeconds != null) {
             put(KEY_PICKUP_LIFETIME_OVERRIDE, powerUpPickupLifetimeOverrideSeconds.toDouble())
         }
     }.toString()
 
     companion object {
-        const val SCHEMA_VERSION = 6
+        const val SCHEMA_VERSION = 7
 
         private const val KEY_VERSION = "v"
         private const val KEY_DIFFICULTY = "difficulty"
@@ -238,7 +278,18 @@ data class GameEngineSnapshot(
         private const val KEY_REMOVED_WALLS = "removedWalls"
         private const val KEY_NPC_COUNT_OVERRIDE = "npcCountOverride"
         private const val KEY_NPC_POLICIES = "npcPolicies"
+        private const val KEY_NPC_SPAWN_SPECS = "npcSpawnSpecs"
+        private const val KEY_ELITE_MODIFIER = "eliteModifier"
         private const val KEY_PICKUP_LIFETIME_OVERRIDE = "powerUpPickupLifetimeOverrideSeconds"
+
+        private fun readEliteModifier(obj: JSONObject): EliteNpcModifier? {
+            require(obj.has(KEY_ELITE_MODIFIER)) { "Missing elite modifier" }
+            if (obj.isNull(KEY_ELITE_MODIFIER)) return null
+            val id = obj.get(KEY_ELITE_MODIFIER) as? String
+                ?: throw IllegalArgumentException("Invalid elite modifier")
+            return EliteNpcModifier.fromId(id)
+                ?: throw IllegalArgumentException("Unknown elite modifier")
+        }
 
         fun fromJson(json: String): GameEngineSnapshot? {
             return try {
@@ -259,7 +310,8 @@ data class GameEngineSnapshot(
                             id = n.getInt("id"),
                             x = n.getInt("x"),
                             y = n.getInt("y"),
-                            facing = Direction.valueOf(n.getString("facing"))
+                            facing = Direction.valueOf(n.getString("facing")),
+                            eliteModifier = readEliteModifier(n)
                         )
                     }
                 }
@@ -338,6 +390,18 @@ data class GameEngineSnapshot(
                         List(arr.length()) { i -> NpcPolicyType.valueOf(arr.getString(i)) }
                     }
                 } else emptyList()
+                if (!obj.has(KEY_NPC_SPAWN_SPECS)) return null
+                val npcSpawnSpecs = if (obj.isNull(KEY_NPC_SPAWN_SPECS)) null else {
+                    obj.getJSONArray(KEY_NPC_SPAWN_SPECS).let { arr ->
+                        List(arr.length()) { i ->
+                            val spec = arr.getJSONObject(i)
+                            NpcSpawnSpec(
+                                policyType = NpcPolicyType.valueOf(spec.getString("policyType")),
+                                eliteModifier = readEliteModifier(spec)
+                            )
+                        }
+                    }
+                }
                 val pickupLifetimeOverride = if (
                     !obj.has(KEY_PICKUP_LIFETIME_OVERRIDE) || obj.isNull(KEY_PICKUP_LIFETIME_OVERRIDE)
                 ) {
@@ -371,27 +435,11 @@ data class GameEngineSnapshot(
                     removedWalls = removedWalls,
                     npcCountOverride = npcCountOverride,
                     npcPolicies = npcPolicies,
+                    npcSpawnSpecs = npcSpawnSpecs,
                     powerUpPickupLifetimeOverrideSeconds = pickupLifetimeOverride
                 )
                 val preset = snapshot.resolvePreset() ?: return null
-                // Reject snapshots whose NPC metadata is internally
-                // inconsistent or obviously corrupt. Snapshots produced by
-                // snapshot() always carry one per-NPC policy entry for each
-                // serialized NPC, and any explicit count override cannot be
-                // smaller than the number of serialized NPCs.
-                if (npcCountOverride != null && npcCountOverride < 0) return null
-                if (npcPolicies.size != npcs.size) return null
-                if (npcCountOverride != null && npcCountOverride < npcs.size) return null
-                // `npcPolicies` is keyed by spawn id (`Npc.id`), and
-                // `GameEngine.restore()` looks each policy up via
-                // `npcPolicies.getOrNull(n.id)`. Reject snapshots whose
-                // NPC ids aren't a unique, 0-based contiguous range
-                // (`0 until npcs.size`); otherwise a corrupted/tampered
-                // payload could silently drop or misapply per-NPC
-                // policies on restore.
-                val npcIds = npcs.map { it.id }
-                if (npcIds.toSet().size != npcIds.size) return null
-                if (npcIds.any { it < 0 || it >= npcs.size }) return null
+                if (!snapshot.hasValidNpcConfiguration()) return null
                 val adventurerIds = adventurers.map { it.id }
                 if (adventurerIds.toSet().size != adventurerIds.size) return null
                 if (adventurerIds.any { it !in 0 until preset.adventurerCount }) return null

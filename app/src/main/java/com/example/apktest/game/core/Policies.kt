@@ -467,10 +467,14 @@ class PredictiveChasePolicy(private val random: Random = Random.Default) : NpcPo
 class PatrolGuardPolicy : NpcPolicy {
     override fun nextMove(npc: Npc, context: NpcPolicyContext): Direction? {
         if (context.npcsFrozen) return null
+        val tracker = npc.eliteModifier == EliteNpcModifier.TRACKER &&
+            npc.policyType == NpcPolicyType.PATROL_GUARD
         val visibleTarget = selectEnemyTarget(
             npc = npc,
             context = context,
-            maxManhattanDistance = context.visionRange
+            maxManhattanDistance = context.visionRange +
+                if (tracker) EliteNpcModifier.TRACKER.visionRangeBonus else 0,
+            preferReachablePlayer = tracker
         )
 
         if (visibleTarget != null) {
@@ -789,12 +793,14 @@ private data class EnemyTarget(
 /**
  * Selects the nearest visible runner by maze-path distance. The player wins
  * exact-distance ties; Adventurers then tie-break by id for deterministic
- * multi-target behaviour.
+ * multi-target behaviour. Tracker acquisition prefers a reachable player,
+ * without changing the legacy policies' unreachable-player fallback.
  */
 private fun selectEnemyTarget(
     npc: Npc,
     context: NpcPolicyContext,
-    maxManhattanDistance: Int? = null
+    maxManhattanDistance: Int? = null,
+    preferReachablePlayer: Boolean = false
 ): EnemyTarget? {
     val playerEligible = context.playerVisible &&
         (
@@ -809,6 +815,7 @@ private fun selectEnemyTarget(
     if (playerEligible) {
         val path = context.navigator.bfsPath(npc.position, context.player.position)
         if (path.isNotEmpty()) {
+            if (preferReachablePlayer) return EnemyTarget(context.player, path)
             bestRunner = context.player
             bestPath = path
             bestDistance = path.size - 1
@@ -841,7 +848,7 @@ private fun selectEnemyTarget(
     }
 
     return bestRunner?.let { EnemyTarget(it, bestPath) }
-        ?: if (playerEligible) EnemyTarget(context.player, emptyList()) else null
+        ?: if (playerEligible && !preferReachablePlayer) EnemyTarget(context.player, emptyList()) else null
 }
 
 /**

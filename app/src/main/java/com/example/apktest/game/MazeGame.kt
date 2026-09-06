@@ -6,6 +6,7 @@ import com.example.apktest.game.core.Direction
 import com.example.apktest.game.core.GameEngine
 import com.example.apktest.game.core.GameEngineSnapshot
 import com.example.apktest.game.core.NpcPolicyType
+import com.example.apktest.game.core.NpcSpawnSpec
 import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.game.core.PowerUpType
 import com.example.apktest.game.render.MazeRenderer
@@ -93,14 +94,24 @@ class MazeGame : ApplicationAdapter() {
         npcCount: Int,
         npcPolicies: List<NpcPolicyType>,
         startingPowerUp: PowerUpType? = null,
-        pickupLifetimeSeconds: Float? = null
-    ) = enqueue { engine ->
-        engine.applyDifficulty(DifficultyPresets.byName(difficulty))
-        engine.setPlayerPolicy(playerPolicy)
-        engine.configureAdventureMaze(npcCount, npcPolicies, pickupLifetimeSeconds = pickupLifetimeSeconds)
-        engine.restart(seed)
-        engine.applyStartingPowerUp(startingPowerUp)
-        engine.startCountdown()
+        pickupLifetimeSeconds: Float? = null,
+        npcSpawnSpecs: List<NpcSpawnSpec>? = null,
+        onStarted: ((List<NpcSpawnSpec>) -> Unit)? = null
+    ) {
+        val policies = npcPolicies.toList()
+        val specs = npcSpawnSpecs?.toList()
+        enqueue { engine ->
+            engine.applyDifficulty(DifficultyPresets.byName(difficulty))
+            engine.setPlayerPolicy(playerPolicy)
+            engine.configureAdventureMaze(
+                npcCount, policies, pickupLifetimeSeconds = pickupLifetimeSeconds,
+                npcSpawnSpecs = specs
+            )
+            engine.restart(seed)
+            engine.applyStartingPowerUp(startingPowerUp)
+            engine.startCountdown()
+            onStarted?.invoke(engine.npcs.map { NpcSpawnSpec(it.policyType, it.eliteModifier) })
+        }
     }
 
     fun queueManualMove(direction: Direction) = enqueue { it.queueManualMove(direction) }

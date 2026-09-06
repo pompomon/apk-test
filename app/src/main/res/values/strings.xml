@@ -125,10 +125,10 @@
     <string name="adventure_save_failed_body">Your decision is waiting to be saved. Retry before continuing.</string>
     <string name="adventure_save_retry">Retry save</string>
 
-    <!-- Adventure elite NPC modifiers (provisional; unused while the feature is disabled) -->
+    <!-- Adventure elite NPC modifiers; only active modifiers appear in the legend. -->
     <string name="adventure_elite_summary_title">Elite modifiers</string>
     <string name="adventure_elite_tracker_name">Tracker</string>
-    <string name="adventure_elite_tracker_description">Patrol Guard gains +2 vision range and targets a visible player before an Adventurer.</string>
+    <string name="adventure_elite_tracker_description">Patrol Guard gains +2 vision range and prefers a visible, reachable player within range over an Adventurer. Invisibility hides you from Tracker; Freeze stops it.</string>
     <string name="adventure_elite_guardian_name">Guardian</string>
     <string name="adventure_elite_guardian_description">Stays near the exit until the player comes within its chase range.</string>
     <string name="adventure_elite_sprinter_name">Sprinter</string>

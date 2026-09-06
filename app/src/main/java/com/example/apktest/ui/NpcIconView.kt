@@ -7,12 +7,15 @@ import android.graphics.Paint
 import android.util.AttributeSet
 import android.util.SparseIntArray
 import android.view.View
+import com.example.apktest.game.core.EliteNpcModifier
 import com.example.apktest.game.core.NpcPolicyType
+import com.example.apktest.game.render.EliteNpcIcons
 import com.example.apktest.game.render.NpcIcons
 
 /**
  * Square Android view that renders the NPC pixel-art sprite tinted for a given
- * [NpcPolicyType]. Used by the legend dialog so the swatch always matches what
+ * [NpcPolicyType], with an optional shared elite badge. Used by the legend
+ * dialog so the swatch always matches what
  * the in-game renderer ([com.example.apktest.game.render.MazeRenderer]) draws.
  *
  * Mirrors [PowerUpIconView]'s structure: cached pattern + per-pixel paint
@@ -40,11 +43,22 @@ class NpcIconView @JvmOverloads constructor(
     private var cachedRows: Int = cachedPattern.size
     private var cachedCols: Int = if (cachedPattern.isNotEmpty()) cachedPattern[0].length else 0
     private var cachedColors: SparseIntArray = buildSparse(NpcIcons.androidColorsFor(type))
+    private var eliteModifier: EliteNpcModifier? = null
+    private var cachedEliteGeometry: EliteNpcIcons.Geometry? = null
+    private var cachedEliteColors: IntArray? = null
 
-    fun setNpcPolicyType(type: NpcPolicyType) {
-        if (this.type == type) return
+    /** The legacy policy-only setter also clears any previously displayed badge. */
+    fun setNpcPolicyType(type: NpcPolicyType) = setNpcPolicyType(type, null)
+
+    fun setNpcPolicyType(type: NpcPolicyType, eliteModifier: EliteNpcModifier?) {
+        if (this.type == type && this.eliteModifier == eliteModifier) return
+        if (this.type != type) {
+            cachedColors = buildSparse(NpcIcons.androidColorsFor(type))
+        }
         this.type = type
-        cachedColors = buildSparse(NpcIcons.androidColorsFor(type))
+        this.eliteModifier = eliteModifier
+        cachedEliteGeometry = eliteModifier?.let { EliteNpcIcons.geometryFor(it) }
+        cachedEliteColors = eliteModifier?.let { EliteNpcIcons.androidColorsFor(it) }
         invalidate()
     }
 
@@ -91,6 +105,21 @@ class NpcIconView @JvmOverloads constructor(
                 val top = originY + row * pixelH
                 canvas.drawRect(left, top, left + pixelW, top + pixelH, fillPaint)
             }
+        }
+
+        val geometry = cachedEliteGeometry ?: return
+        val eliteColors = cachedEliteColors ?: return
+        val rects = geometry.rects
+        for (index in geometry.colorIndices.indices) {
+            val offset = index * EliteNpcIcons.RECT_STRIDE
+            fillPaint.color = eliteColors[geometry.colorIndices[index]]
+            canvas.drawRect(
+                originX + inner * rects[offset + EliteNpcIcons.LEFT],
+                originY + inner * rects[offset + EliteNpcIcons.TOP],
+                originX + inner * rects[offset + EliteNpcIcons.RIGHT],
+                originY + inner * rects[offset + EliteNpcIcons.BOTTOM],
+                fillPaint
+            )
         }
     }
 

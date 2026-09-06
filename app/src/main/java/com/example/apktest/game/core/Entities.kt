@@ -50,7 +50,8 @@ data class Npc(
      * engine's configured [NpcPolicyType] (single-maze runs) or the
      * Adventure-mode per-NPC override (`configureAdventureMaze`).
      */
-    var policyType: NpcPolicyType = NpcPolicyType.DIRECT_CHASE
+    var policyType: NpcPolicyType = NpcPolicyType.DIRECT_CHASE,
+    var eliteModifier: EliteNpcModifier? = null
 )
 
 enum class GameStatus {

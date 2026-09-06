@@ -24,6 +24,7 @@ import com.example.apktest.game.core.AdventureRunStateSnapshot
 import com.example.apktest.game.core.AdventureStatus
 import com.example.apktest.game.core.DifficultyPresets
 import com.example.apktest.game.core.Direction
+import com.example.apktest.game.core.EliteNpcModifier
 import com.example.apktest.game.core.GameEngineSnapshot
 import com.example.apktest.game.core.GameStatus
 import com.example.apktest.game.core.PlayerPolicyType
@@ -38,6 +39,8 @@ import com.example.apktest.ui.GameInputController
 import com.example.apktest.ui.LegendDialog
 import com.example.apktest.ui.AdventureTimeFormatter
 import com.example.apktest.telemetry.AdventureRouteTelemetry
+import com.example.apktest.telemetry.AdventureEliteTelemetry
+import com.example.apktest.telemetry.AdventureTelemetrySink
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -89,6 +92,12 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     private var pendingCommit: (() -> Unit)? = null
     private var afterResume: (() -> Unit)? = null
     private val routeTelemetry = AdventureRouteTelemetry()
+    private var eliteTelemetry = AdventureEliteTelemetry()
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun setEliteTelemetrySinkForTesting(sink: AdventureTelemetrySink) {
+        eliteTelemetry = AdventureEliteTelemetry(sink)
+    }
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun adventureStatusBarTextForTesting(): CharSequence = statusBar.text
@@ -228,17 +237,37 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             .replace(R.id.fragmentGameHost, fragment)
             .commitNow()
         if (spec.midMazeSnapshot == null) {
-            fragment.configureAdventureMaze(
-                seed = spec.seed,
-                difficulty = spec.difficulty.name,
-                playerPolicy = spec.playerPolicy,
-                npcCount = spec.npcCount,
-                npcPolicies = spec.npcPolicies,
-                startingPowerUp = spec.startingPowerUp,
-                pickupLifetimeSeconds = spec.pickupLifetimeSeconds
-            )
+            configureFreshMaze(fragment, spec)
         }
     }
+
+    private fun configureFreshMaze(fragment: GameFragment, spec: MazeStartupSpec) {
+        val generation = stateGeneration
+        val mazeIndex = controller.state.currentMazeIndex + 1
+        fragment.configureAdventureMaze(
+            seed = spec.seed,
+            difficulty = spec.difficulty.name,
+            playerPolicy = spec.playerPolicy,
+            npcCount = spec.npcCount,
+            npcPolicies = spec.npcPolicies,
+            startingPowerUp = spec.startingPowerUp,
+            pickupLifetimeSeconds = spec.pickupLifetimeSeconds,
+            npcSpawnSpecs = spec.npcSpawnSpecs,
+            onStarted = if (spec.npcSpawnSpecs.any { it.eliteModifier != null }) {
+                { roster ->
+                    // The GL callback carries detached data; controller state stays on the UI thread.
+                    tickHandler.post {
+                        if (!isDestroyed && generation == stateGeneration) {
+                            eliteTelemetry.spawned(spec.difficulty.name, mazeIndex, roster, spec.playerPolicy)
+                        }
+                    }
+                }
+            } else null
+        )
+    }
+
+    private fun activeEliteModifiers(): Set<EliteNpcModifier> =
+        controller.state.currentMazeNpcSpawnSpecs.mapNotNull { it.eliteModifier }.toSet()
 
     private fun restoreAutomationUiState(savedInstanceState: Bundle?) {
         if (savedInstanceState != null) {
@@ -639,7 +668,9 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         data class MenuEntry(val labelRes: Int, val action: () -> Unit)
         val entries = buildList {
             add(MenuEntry(R.string.pause_resume) { gameFragment()?.togglePause() })
-            add(MenuEntry(R.string.legend) { LegendDialog.show(this@AdventureActivity) })
+            add(MenuEntry(R.string.legend) {
+                LegendDialog.show(this@AdventureActivity, activeEliteModifiers())
+            })
             // Only show the strategy switcher when the player has unlocked
             // more than just MANUAL.
             if (controller.state.unlockedPlayerPolicies.size > 1) {
@@ -764,9 +795,14 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         // No engine pause needed: GameEngine.update() early-returns when
         // status != RUNNING, and we only get here after observing WIN.
         val completedRoute = controller.state.activeRoute
+        val completedElites = activeEliteModifiers()
         val outcome = controller.completeMaze(elapsedSeconds = elapsedSeconds, steps = steps)
         if (!outcome.runComplete) {
             commitTransition {
+                eliteTelemetry.outcome(
+                    controller.config.difficulty.name, outcome.mazeIndexCompleted, completedElites,
+                    true, elapsedSeconds, steps, outcome.deathsThisRun
+                )
                 completedRoute?.let {
                     routeTelemetry.outcome(it.choiceId, true, elapsedSeconds, steps, 0)
                 }
@@ -837,6 +873,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 returnToSetup()
             }
             commitTransition {
+                eliteTelemetry.outcome(
+                    controller.config.difficulty.name, outcome.mazeIndexCompleted, completedElites,
+                    true, elapsedSeconds, steps, outcome.deathsThisRun
+                )
                 completedRoute?.let {
                     routeTelemetry.outcome(it.choiceId, true, elapsedSeconds, steps, 0)
                 }
@@ -978,15 +1018,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             if (fragment == null) {
                 attachMaze(spec)
             } else {
-                fragment.configureAdventureMaze(
-                    seed = spec.seed,
-                    difficulty = spec.difficulty.name,
-                    playerPolicy = spec.playerPolicy,
-                    npcCount = spec.npcCount,
-                    npcPolicies = spec.npcPolicies,
-                    startingPowerUp = spec.startingPowerUp,
-                    pickupLifetimeSeconds = spec.pickupLifetimeSeconds
-                )
+                configureFreshMaze(fragment, spec)
             }
             refreshStatusBar()
             refreshAutoToggle()
@@ -1000,6 +1032,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     private fun handleMazeLost(elapsedSeconds: Float, steps: Int) {
         val route = controller.state.activeRoute
+        val elites = activeEliteModifiers()
+        val mazeIndex = controller.state.currentMazeIndex + 1
         val outcome = controller.onPlayerDied()
         val title = if (outcome.runOver)
             getString(R.string.adventure_run_lost_title)
@@ -1038,6 +1072,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             }
         }
         commitTransition {
+            eliteTelemetry.outcome(
+                controller.config.difficulty.name, mazeIndex, elites, false, elapsedSeconds,
+                steps, controller.state.deathsThisRun
+            )
             route?.let {
                 routeTelemetry.outcome(
                     it.choiceId, false, elapsedSeconds, steps, 1
