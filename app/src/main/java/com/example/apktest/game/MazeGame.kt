@@ -92,11 +92,12 @@ class MazeGame : ApplicationAdapter() {
         playerPolicy: PlayerPolicyType,
         npcCount: Int,
         npcPolicies: List<NpcPolicyType>,
-        startingPowerUp: PowerUpType? = null
+        startingPowerUp: PowerUpType? = null,
+        pickupLifetimeSeconds: Float? = null
     ) = enqueue { engine ->
         engine.applyDifficulty(DifficultyPresets.byName(difficulty))
         engine.setPlayerPolicy(playerPolicy)
-        engine.configureAdventureMaze(npcCount, npcPolicies)
+        engine.configureAdventureMaze(npcCount, npcPolicies, pickupLifetimeSeconds = pickupLifetimeSeconds)
         engine.restart(seed)
         engine.applyStartingPowerUp(startingPowerUp)
         engine.startCountdown()

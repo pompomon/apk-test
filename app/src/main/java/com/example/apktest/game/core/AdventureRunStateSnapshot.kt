@@ -34,7 +34,14 @@ data class AdventureRunStateSnapshot(
     val pendingStartingPowerUp: PowerUpType? = null,
     val totalElapsedSeconds: Float = 0f,
     val totalSteps: Int = 0,
-    val deathsThisRun: Int = 0
+    val deathsThisRun: Int = 0,
+    val currentMazeNpcCount: Int? = currentMazeSeed?.let { currentMazeNpcPolicies.size },
+    val pendingReward: PendingAdventureReward? = null,
+    val activeRoute: PendingRouteEvent? = null,
+    val routeHistory: List<RouteEventHistoryEntry> = emptyList(),
+    val nextRouteEventMazeIndex: Int = RouteEventGenerator.FIRST_EVENT_MAZE_INDEX,
+    val routeEventOrdinal: Int = 0,
+    val rewardRerolls: Int = 0
 ) {
     fun toJson(): String = JSONObject().apply {
         put(KEY_VERSION, schemaVersion)
@@ -67,25 +74,21 @@ data class AdventureRunStateSnapshot(
         put(KEY_TOTAL_ELAPSED_SECONDS, totalElapsedSeconds.toDouble())
         put(KEY_TOTAL_STEPS, totalSteps)
         put(KEY_DEATHS_THIS_RUN, deathsThisRun)
+        put(KEY_MAZE_NPC_COUNT, currentMazeNpcCount ?: JSONObject.NULL)
+        put(KEY_PENDING_REWARD, pendingReward?.let { AdventureRouteSnapshotCodec.rewardToJson(it) } ?: JSONObject.NULL)
+        put(KEY_ACTIVE_ROUTE, activeRoute?.let { AdventureRouteSnapshotCodec.activeToJson(it) } ?: JSONObject.NULL)
+        put(KEY_ROUTE_HISTORY, AdventureRouteSnapshotCodec.historyToJson(routeHistory))
+        put(KEY_NEXT_ROUTE_INDEX, nextRouteEventMazeIndex)
+        put(KEY_ROUTE_ORDINAL, routeEventOrdinal)
+        put(KEY_REWARD_REROLLS, rewardRerolls)
     }.toString()
 
     companion object {
-        // Was previously kept at v1. The automation fields
-        // (lastAutomatedPlayerPolicy, automatedPolicyPromptShown) and the
-        // per-maze starting power-up state (pendingStartingPowerUp) are
-        // additive and backward-compatible:
-        // older payloads simply omit them and fromJson falls back to the
-        // defaults, while older builds ignore the unknown keys. Bumping this
-        // version invalidates every existing in-progress run via the
-        // exact-match check in fromJson, so only bump it for a breaking
-        // change that genuinely cannot be read by the previous schema.
-        // v2: adds totalElapsedSeconds, totalSteps, deathsThisRun. This bump
-        // is not strictly required for readability — v1 payloads simply omit
-        // these keys and fromJson would default them to 0. It is an
-        // intentional breaking bump: invalidating in-progress v1 runs is
-        // preferred over silently resuming them with zeroed run stats, which
-        // would misrepresent already-earned time/steps/death counts.
-        const val SCHEMA_VERSION = 2
+        // v3 requires exact pending reward stages/offers, route effects and locked NPC counts.
+        // Older saves cannot establish which reward decisions have already committed.
+        // Route mechanics/balance changes need a schema bump: resolved effects are
+        // checked against the supplied configuration, not silently reinterpreted.
+        const val SCHEMA_VERSION = 3
 
         private const val KEY_VERSION = "v"
         private const val KEY_RUN_SEED = "runSeed"
@@ -105,6 +108,13 @@ data class AdventureRunStateSnapshot(
         private const val KEY_TOTAL_ELAPSED_SECONDS = "totalElapsedSeconds"
         private const val KEY_TOTAL_STEPS = "totalSteps"
         private const val KEY_DEATHS_THIS_RUN = "deathsThisRun"
+        private const val KEY_MAZE_NPC_COUNT = "mazeNpcCount"
+        private const val KEY_PENDING_REWARD = "pendingReward"
+        private const val KEY_ACTIVE_ROUTE = "activeRoute"
+        private const val KEY_ROUTE_HISTORY = "routeHistory"
+        private const val KEY_NEXT_ROUTE_INDEX = "nextRouteEventMazeIndex"
+        private const val KEY_ROUTE_ORDINAL = "routeEventOrdinal"
+        private const val KEY_REWARD_REROLLS = "rewardRerolls"
 
         fun fromState(state: AdventureRunState, runSeed: Long): AdventureRunStateSnapshot =
             AdventureRunStateSnapshot(
@@ -118,19 +128,31 @@ data class AdventureRunStateSnapshot(
                 lastAutomatedPlayerPolicy = state.lastAutomatedPlayerPolicy,
                 automatedPolicyPromptShown = state.automatedPolicyPromptShown,
                 currentMazeSeed = state.currentMazeSeed,
-                currentMazeNpcPolicies = state.currentMazeNpcPolicies,
+                currentMazeNpcPolicies = state.currentMazeNpcPolicies.toList(),
                 currentMazeSnapshot = state.currentMazeSnapshot,
                 status = state.status,
                 pendingStartingPowerUp = state.pendingStartingPowerUp,
                 totalElapsedSeconds = state.totalElapsedSeconds,
                 totalSteps = state.totalSteps,
-                deathsThisRun = state.deathsThisRun
+                deathsThisRun = state.deathsThisRun,
+                currentMazeNpcCount = state.currentMazeNpcCount,
+                pendingReward = state.pendingReward?.detachedCopy(),
+                activeRoute = state.activeRoute?.detachedCopy(),
+                routeHistory = state.routeHistory.toList(),
+                nextRouteEventMazeIndex = state.nextRouteEventMazeIndex,
+                routeEventOrdinal = state.routeEventOrdinal,
+                rewardRerolls = state.rewardRerolls
             )
 
-        fun fromJson(json: String): AdventureRunStateSnapshot? {
+        fun fromJson(json: String): AdventureRunStateSnapshot? = parseJson(json, null)
+
+        /** Custom-run callers must supply their configuration rather than impersonating a shipped preset. */
+        fun fromJson(json: String, config: AdventureConfig): AdventureRunStateSnapshot? = parseJson(json, config)
+
+        private fun parseJson(json: String, expectedConfig: AdventureConfig?): AdventureRunStateSnapshot? {
             return try {
                 val obj = JSONObject(json)
-                val version = obj.optInt(KEY_VERSION, 0)
+                val version = obj.requiredInt(KEY_VERSION)
                 if (version != SCHEMA_VERSION) return null
                 // Silently drop unknown enum names from the unlocked-policies
                 // list so legacy payloads that referenced now-removed entries
@@ -162,7 +184,7 @@ data class AdventureRunStateSnapshot(
                     }
                 } else emptyList()
                 val mazeSeed = if (obj.has(KEY_MAZE_SEED) && !obj.isNull(KEY_MAZE_SEED)) {
-                    obj.getLong(KEY_MAZE_SEED)
+                    obj.requiredLong(KEY_MAZE_SEED)
                 } else null
                 val mazeSnapshotJson = if (obj.has(KEY_MAZE_SNAPSHOT) && !obj.isNull(KEY_MAZE_SNAPSHOT)) {
                     obj.getString(KEY_MAZE_SNAPSHOT)
@@ -175,16 +197,16 @@ data class AdventureRunStateSnapshot(
                 // is preserved.
                 val mazeSnapshot = mazeSnapshotJson?.let { GameEngineSnapshot.fromJson(it) }
                 val pendingPowerUp = if (obj.has(KEY_PENDING_POWERUP) && !obj.isNull(KEY_PENDING_POWERUP)) {
-                    runCatching { PowerUpType.valueOf(obj.getString(KEY_PENDING_POWERUP)) }.getOrNull()
+                    PowerUpType.valueOf(obj.requiredString(KEY_PENDING_POWERUP))
                 } else null
 
                 val snapshot = AdventureRunStateSnapshot(
                     schemaVersion = version,
-                    runSeed = obj.getLong(KEY_RUN_SEED),
+                    runSeed = obj.requiredLong(KEY_RUN_SEED),
                     difficultyName = obj.getString(KEY_DIFFICULTY),
-                    currentMazeIndex = obj.getInt(KEY_MAZE_INDEX),
-                    livesRemaining = obj.getInt(KEY_LIVES),
-                    winStreakSinceLastBonus = obj.getInt(KEY_STREAK),
+                    currentMazeIndex = obj.requiredInt(KEY_MAZE_INDEX),
+                    livesRemaining = obj.requiredInt(KEY_LIVES),
+                    winStreakSinceLastBonus = obj.requiredInt(KEY_STREAK),
                     unlockedPlayerPolicies = distinctUnlocked,
                     currentPlayerPolicy = currentPolicy,
                     lastAutomatedPlayerPolicy = lastAutoPolicy,
@@ -199,9 +221,20 @@ data class AdventureRunStateSnapshot(
                     // and fail the load (caller clears the blob) rather than
                     // silently resuming with zeroed run stats, which would
                     // misrepresent already-earned time/steps/death counts.
-                    totalElapsedSeconds = obj.getDouble(KEY_TOTAL_ELAPSED_SECONDS).toFloat(),
-                    totalSteps = obj.getInt(KEY_TOTAL_STEPS),
-                    deathsThisRun = obj.getInt(KEY_DEATHS_THIS_RUN)
+                    totalElapsedSeconds = obj.requiredFloat(KEY_TOTAL_ELAPSED_SECONDS),
+                    totalSteps = obj.requiredInt(KEY_TOTAL_STEPS),
+                    deathsThisRun = obj.requiredInt(KEY_DEATHS_THIS_RUN),
+                    currentMazeNpcCount = obj.requiredNullableInt(KEY_MAZE_NPC_COUNT),
+                    pendingReward = obj.get(KEY_PENDING_REWARD).let {
+                        if (it == JSONObject.NULL) null else AdventureRouteSnapshotCodec.rewardFromJson(it as JSONObject)
+                    },
+                    activeRoute = obj.get(KEY_ACTIVE_ROUTE).let {
+                        if (it == JSONObject.NULL) null else AdventureRouteSnapshotCodec.activeFromJson(it as JSONObject)
+                    },
+                    routeHistory = AdventureRouteSnapshotCodec.historyFromJson(obj.getJSONArray(KEY_ROUTE_HISTORY)),
+                    nextRouteEventMazeIndex = obj.requiredInt(KEY_NEXT_ROUTE_INDEX),
+                    routeEventOrdinal = obj.requiredInt(KEY_ROUTE_ORDINAL),
+                    rewardRerolls = obj.requiredInt(KEY_REWARD_REROLLS)
                 )
 
                 // Reject unknown difficulty names outright. The Adventure
@@ -212,15 +245,23 @@ data class AdventureRunStateSnapshot(
                 // [DifficultyPresets.byName] in the host and then crash
                 // the controller on construction; failing the load instead
                 // lets the host gracefully start a fresh run.
-                if (DifficultyPresets.all.none { it.name == snapshot.difficultyName }) return null
+                if (expectedConfig != null) {
+                    if (expectedConfig.difficulty.name != snapshot.difficultyName) return null
+                } else if (DifficultyPresets.all.none { it.name == snapshot.difficultyName }) return null
                 if (snapshot.currentMazeIndex < 0) return null
                 if (snapshot.livesRemaining < 0) return null
                 if (snapshot.winStreakSinceLastBonus < 0) return null
                 if (snapshot.totalElapsedSeconds < 0f || !snapshot.totalElapsedSeconds.isFinite()) return null
                 if (snapshot.totalSteps < 0) return null
                 if (snapshot.deathsThisRun < 0) return null
+                val config = expectedConfig ?: AdventureConfig.forDifficultyName(snapshot.difficultyName)
+                if (!AdventureRouteSnapshotCodec.isConsistent(snapshot, config)) return null
+                if (mazeSnapshotJson != null && snapshot.pendingReward == null &&
+                    snapshot.status == AdventureStatus.IN_PROGRESS && snapshot.currentMazeSeed == null) return null
                 // MANUAL invariant was enforced above by re-adding it if absent.
-                snapshot
+                if (mazeSnapshot != null && !snapshot.matchesLockedMaze(mazeSnapshot)) {
+                    snapshot.copy(currentMazeSnapshot = null)
+                } else snapshot
             } catch (_: Exception) {
                 // Same rationale as [GameEngineSnapshot.fromJson]: swallow
                 // Exception but let Errors propagate.
@@ -243,12 +284,36 @@ data class AdventureRunStateSnapshot(
         lastAutomatedPlayerPolicy = lastAutomatedPlayerPolicy,
         automatedPolicyPromptShown = automatedPolicyPromptShown,
         currentMazeSeed = currentMazeSeed,
-        currentMazeNpcPolicies = currentMazeNpcPolicies,
+        currentMazeNpcPolicies = currentMazeNpcPolicies.toList(),
         currentMazeSnapshot = currentMazeSnapshot,
         status = status,
         pendingStartingPowerUp = pendingStartingPowerUp,
         totalElapsedSeconds = totalElapsedSeconds,
         totalSteps = totalSteps,
-        deathsThisRun = deathsThisRun
+        deathsThisRun = deathsThisRun,
+        currentMazeNpcCount = currentMazeNpcCount,
+        pendingReward = pendingReward?.detachedCopy(),
+        activeRoute = activeRoute?.detachedCopy(),
+        routeHistory = routeHistory.toList(),
+        nextRouteEventMazeIndex = nextRouteEventMazeIndex,
+        routeEventOrdinal = routeEventOrdinal,
+        rewardRerolls = rewardRerolls
     )
+
+    private fun matchesLockedMaze(engine: GameEngineSnapshot): Boolean =
+        status == AdventureStatus.IN_PROGRESS && pendingReward == null &&
+            engine.matchesAdventureMaze(difficultyName, currentMazeSeed, currentMazeNpcCount,
+                currentMazeNpcPolicies, activeRoute?.pickupLifetimeSeconds)
 }
+
+internal fun GameEngineSnapshot.matchesAdventureMaze(
+    difficulty: String,
+    mazeSeed: Long?,
+    npcCount: Int?,
+    policies: List<NpcPolicyType>,
+    lifetime: Float?
+): Boolean =
+    mazeSeed != null && npcCount != null && (status == GameStatus.RUNNING || status == GameStatus.PAUSED) &&
+        difficultyName == difficulty && seed == mazeSeed && npcCountOverride == npcCount &&
+        powerUpPickupLifetimeOverrideSeconds == lifetime && npcPolicies.size == npcs.size &&
+        npcs.indices.all { npcPolicies[it] == policies.getOrNull(npcs[it].id) }

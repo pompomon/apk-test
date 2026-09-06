@@ -52,13 +52,16 @@ SetupActivity  ── Intent extras ──▶  MainActivity  ── Fragment arg
 - `GameStateStore` persists a JSON-serialized `GameEngineSnapshot` in `SharedPreferences`. Validated load only — never read raw JSON to drive UI.
 - `MainActivity.onPause` writes a snapshot via a **shared single-thread `ExecutorService`**. "Pause & Exit" *clears* the saved state when status is `WIN` or `LOSE` instead of saving.
 - `GameEngineSnapshot.fromJson` returns `null` on:
-  - schema-version mismatch (`SCHEMA_VERSION` is currently `4`),
+  - schema-version mismatch (`SCHEMA_VERSION` is currently `6`),
   - unknown `difficultyName` (does **not** silently fall back to MEDIUM the way `DifficultyPresets.byName` does),
   - any persisted coordinate (player, NPCs, Adventurers, spawned power-ups, or `removedWalls` cell) falling outside the maze bounds implied by the preset (rounded up to even, like the generator),
   - JSON / enum-value parse errors.
 - The snapshot persists `removedWalls` — walls destroyed during gameplay — so restore re-applies them on the regenerated baseline maze.
 - The snapshot persists surviving Adventurers; shipped presets spawn one in both Classic and Adventure modes.
 - The snapshot also persists Adventure-mode overrides — `npcCountOverride` (replaces the preset's `npcCount`) and `npcPolicies` (per-NPC policy by spawn id) — so a paused-mid-maze resume re-spawns the same set of NPCs with the same per-NPC strategies.
+- `powerUpPickupLifetimeOverrideSeconds` persists an optional finite Adventure
+  pickup lifetime. It applies to initial pickups and respawns, without changing
+  active-effect durations or baseline Easy's infinite lifetime.
 
 ## Adventure mode
 
@@ -82,6 +85,32 @@ SetupActivity ──▶ AdventureSetupActivity ──▶ AdventureActivity ─�
 - **`GameEngine.configureAdventureMaze(npcCount, policies)`** sets `npcCountOverride` + `npcPolicies`. Per-NPC `policyType` is resolved through a per-type policy cache with deterministic seeded RNG (`NPC_POLICY_TYPE_SEED_STRIDE`) — single-maze runs still go through the long-lived `npcPolicy` instance so behaviour is byte-for-byte unchanged.
 
 **Hard rule (Adventure):** every per-maze NPC policy assignment is locked into `AdventureRunState.currentMazeNpcPolicies` on first entry so death replays use the same set; reloading an in-progress run preserves the locked list verbatim regardless of any future change to the derivation function.
+
+### Route events and pending rewards
+
+- `AdventureRunController.completeMaze()` is the Android win entry point. It
+  records a win once and creates a persisted `PendingAdventureReward`; the
+  legacy `onMazeWon()` remains available for controller-only reward consumers.
+- Reward stages are win acknowledgement, optional route selection, and
+  starting-power-up selection. `prepareCurrentMaze()` cannot start a maze
+  while a reward is pending. `AdventureActivity` resumes the stage before
+  creating its `GameFragment`.
+- `RouteEventGenerator` uses independent deterministic cadence/offer streams.
+  The first event follows maze 2, followed by seeded two/three-maze intervals;
+  no offers follow the final win. Scout previews the categories of the next
+  seeded offer, independently of earlier selections.
+- The controller locks effective NPC count with the seed and policy list.
+  Selected route effects and starting power-ups survive deaths; completion
+  settles their reward once before clearing the per-maze effect.
+- Adventure schema 3 stores pending offers, route history, previews, rerolls,
+  cadence, active effects, and the locked count. Unknown active effects or
+  inconsistent combinations fail validation instead of silently losing a
+  decision.
+- Required transitions use `saveBlocking` on the activity's single executor
+  before continuing. `AdventureSaveSession` rejects obsolete activity writes;
+  generation/seed checks reject late GL snapshots from a previous maze.
+- Rollout flags gate new offers, not compatible saved decisions. Production
+  remains default-off; enabling the route flag initially exposes Medium only.
 
 ## Player policy hierarchy
 

@@ -50,9 +50,14 @@ Quick Wins contracts:
 
 ### Phase 1 — Route Events
 
-- [ ] Add route-event state, offer generation, choice application, and snapshot round-trip.
-- [ ] Insert route-event overlay before the existing reward chooser on eligible maze wins.
-- [ ] Gate event frequency to every 2-3 mazes and cap risk stacking.
+- [x] Add route-event state, offer generation, choice application, and snapshot round-trip.
+- [x] Insert route-event overlay before the existing reward chooser on eligible maze wins.
+- [x] Gate event frequency to every 2-3 mazes and cap risk stacking.
+
+Implementation is default-off pending rollout validation. The
+[Phase 1 contract](01-route-events.md#phase-1-implementation-contract) records
+the concrete mechanics, durable chooser behavior, and intentional save-version
+invalidation.
 
 ### Phase 2 — Elite NPC Modifiers
 

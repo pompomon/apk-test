@@ -1,10 +1,51 @@
 package com.example.apktest.game.core
 
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class GameEngineSnapshotTest {
     private val seed = 4321L
+
+    @Test
+    fun fromJson_roundTripsFiniteAndNullPickupLifetimeOverrides() {
+        val base = GameEngine(DifficultyPresets.MEDIUM, seed).snapshot()
+        for (lifetime in listOf(null, 35f, Float.MIN_VALUE, Float.MAX_VALUE)) {
+            val snapshot = base.copy(powerUpPickupLifetimeOverrideSeconds = lifetime)
+            assertEquals(snapshot, GameEngineSnapshot.fromJson(snapshot.toJson()))
+        }
+    }
+
+    @Test
+    fun fromJson_rejectsNonPositiveNonFiniteAndNonNumericPickupLifetimeOverrides() {
+        val base = GameEngine(DifficultyPresets.MEDIUM, seed).snapshot().toJson()
+        for (value in listOf<Any>(0, -1, 1e100, 1e-100, "NaN", "Infinity", "-Infinity", "35", true, JSONObject())) {
+            val json = JSONObject(base)
+                .put("powerUpPickupLifetimeOverrideSeconds", value)
+                .toString()
+            assertNull("Invalid pickup lifetime override: $value", GameEngineSnapshot.fromJson(json))
+        }
+    }
+
+    @Test
+    fun fromJson_acceptsExplicitNullPickupLifetimeOverride() {
+        val base = GameEngine(DifficultyPresets.MEDIUM, seed).snapshot()
+        val json = JSONObject(base.toJson())
+            .put("powerUpPickupLifetimeOverrideSeconds", JSONObject.NULL)
+            .toString()
+
+        assertEquals(base, GameEngineSnapshot.fromJson(json))
+    }
+
+    @Test
+    fun fromJson_rejectsSchemaBeforePickupLifetimeOverrides() {
+        val json = JSONObject(GameEngine(DifficultyPresets.MEDIUM, seed).snapshot().toJson())
+            .put("v", 5)
+            .toString()
+
+        assertNull(GameEngineSnapshot.fromJson(json))
+    }
 
     /**
      * A snapshot taken mid-game and applied to a freshly-constructed engine

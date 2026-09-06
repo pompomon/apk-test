@@ -459,6 +459,15 @@ class ExampleInstrumentedTest {
     @Test
     fun adventureAutoToggleEnabledAfterFirstMazeCompletion() {
         ActivityScenario.launch(AdventureActivity::class.java).use { scenario ->
+            val deadline = android.os.SystemClock.uptimeMillis() + 5_000
+            var attached = false
+            while (!attached && android.os.SystemClock.uptimeMillis() < deadline) {
+                scenario.onActivity {
+                    attached = it.supportFragmentManager.findFragmentById(R.id.fragmentGameHost) != null
+                }
+                if (!attached) android.os.SystemClock.sleep(20)
+            }
+            assertTrue("Initial Adventure save should finish before maze entry", attached)
             scenario.onActivity { activity ->
                 activity.controllerForTesting().run {
                     prepareCurrentMaze()

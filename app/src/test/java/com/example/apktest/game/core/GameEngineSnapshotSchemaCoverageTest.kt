@@ -168,7 +168,8 @@ class GameEngineSnapshotSchemaCoverageTest {
             GameEngineSnapshot.RemovedWallSnapshot(x = 0, y = 0, direction = Direction.EAST)
         ),
         npcCountOverride = 4,
-        npcPolicies = listOf(NpcPolicyType.DIRECT_CHASE, NpcPolicyType.PATROL_GUARD)
+        npcPolicies = listOf(NpcPolicyType.DIRECT_CHASE, NpcPolicyType.PATROL_GUARD),
+        powerUpPickupLifetimeOverrideSeconds = 35f
     )
 
     /**
@@ -229,6 +230,7 @@ class GameEngineSnapshotSchemaCoverageTest {
             GameEngineSnapshot.RemovedWallSnapshot(x = 2, y = 0, direction = Direction.WEST)
         ),
         npcCountOverride = 7,
-        npcPolicies = listOf(NpcPolicyType.PREDICTIVE_CHASE)
+        npcPolicies = listOf(NpcPolicyType.PREDICTIVE_CHASE),
+        powerUpPickupLifetimeOverrideSeconds = null
     )
 }

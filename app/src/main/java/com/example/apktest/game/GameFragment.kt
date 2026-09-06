@@ -117,11 +117,15 @@ class GameFragment : AndroidFragmentApplication() {
         playerPolicy: PlayerPolicyType,
         npcCount: Int,
         npcPolicies: List<NpcPolicyType>,
-        startingPowerUp: PowerUpType? = null
+        startingPowerUp: PowerUpType? = null,
+        pickupLifetimeSeconds: Float? = null
     ) {
         pendingDifficulty = difficulty
         pendingPlayerPolicy = playerPolicy
-        game?.configureAdventureMaze(seed, difficulty, playerPolicy, npcCount, npcPolicies, startingPowerUp)
+        game?.configureAdventureMaze(
+            seed, difficulty, playerPolicy, npcCount, npcPolicies, startingPowerUp,
+            pickupLifetimeSeconds = pickupLifetimeSeconds
+        )
     }
 
     fun queueManualMove(direction: Direction) {

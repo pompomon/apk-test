@@ -1,5 +1,7 @@
 package com.example.apktest.telemetry
 
+import kotlin.math.floor
+
 /**
  * Stable wire names reserved for Adventure telemetry.
  *
@@ -163,6 +165,7 @@ object AdventureTelemetryPropertyNames {
 private const val EASY_DIFFICULTY = "Easy"
 private const val MEDIUM_DIFFICULTY = "Medium"
 private const val HARD_DIFFICULTY = "Hard"
+private val SUPPORTED_DIFFICULTIES = setOf(EASY_DIFFICULTY, MEDIUM_DIFFICULTY, HARD_DIFFICULTY)
 
 private val CATALOGUE_ID = Regex("^[a-z][a-z0-9_]*$")
 private val CATALOGUE_ID_LIST = Regex("^(?:[a-z][a-z0-9_]*)(?:,[a-z][a-z0-9_]*)*$")
@@ -501,7 +504,7 @@ private fun validatePropertyValue(key: String, value: String): String {
             trimmed
         }
         AdventureTelemetryPropertyType.DIFFICULTY -> {
-            require(trimmed in setOf(EASY_DIFFICULTY, MEDIUM_DIFFICULTY, HARD_DIFFICULTY)) {
+            require(trimmed in SUPPORTED_DIFFICULTIES) {
                 "Property '$key' must be one of: Easy, Medium, Hard"
             }
             trimmed
@@ -515,4 +518,113 @@ fun interface AdventureTelemetrySink {
 
 object NoOpAdventureTelemetrySink : AdventureTelemetrySink {
     override fun record(event: AdventureTelemetryEvent) = Unit
+}
+
+/** Aggregate route events; callers dispatch only after the corresponding save succeeds. */
+class AdventureRouteTelemetry(
+    private val sink: AdventureTelemetrySink = NoOpAdventureTelemetrySink
+) {
+    fun offered(
+        difficulty: String,
+        mazeIndex: Int,
+        choiceIds: List<String>,
+        categories: List<String>
+    ) {
+        if (difficulty.trim() !in SUPPORTED_DIFFICULTIES) return
+        dispatch {
+            AdventureTelemetryEvent(
+                name = AdventureTelemetryEventNames.ROUTE_EVENT_OFFERED,
+                properties = mapOf(
+                    AdventureTelemetryPropertyNames.DIFFICULTY to difficulty,
+                    AdventureTelemetryPropertyNames.MAZE_INDEX to mazeIndex.coerceAtLeast(1).toString(),
+                    AdventureTelemetryPropertyNames.OFFERED_CHOICE_IDS to
+                        choiceIds.joinToString(",") { stableId(it) },
+                    AdventureTelemetryPropertyNames.OFFERED_CATEGORIES to
+                        categories.joinToString(",") { stableId(it) }
+                )
+            )
+        }
+    }
+
+    fun chosen(
+        difficulty: String,
+        mazeIndex: Int,
+        choiceId: String,
+        category: String,
+        lives: Int,
+        deaths: Int
+    ) {
+        if (difficulty.trim() !in SUPPORTED_DIFFICULTIES) return
+        dispatch {
+            AdventureTelemetryEvent(
+                name = AdventureTelemetryEventNames.ROUTE_EVENT_CHOSEN,
+                properties = mapOf(
+                    AdventureTelemetryPropertyNames.DIFFICULTY to difficulty,
+                    AdventureTelemetryPropertyNames.MAZE_INDEX to mazeIndex.coerceAtLeast(1).toString(),
+                    AdventureTelemetryPropertyNames.CHOICE_ID to stableId(choiceId),
+                    AdventureTelemetryPropertyNames.CATEGORY to stableId(category),
+                    AdventureTelemetryPropertyNames.LIVES_REMAINING to lives.coerceAtLeast(0).toString(),
+                    AdventureTelemetryPropertyNames.DEATHS_THIS_RUN to deaths.coerceAtLeast(0).toString()
+                )
+            )
+        }
+    }
+
+    fun applied(
+        nextMazeIndex: Int,
+        choiceId: String,
+        npcCountDelta: Int,
+        rewardOptionDelta: Int
+    ) {
+        dispatch {
+            AdventureTelemetryEvent(
+                name = AdventureTelemetryEventNames.ROUTE_EVENT_APPLIED,
+                properties = mapOf(
+                    AdventureTelemetryPropertyNames.NEXT_MAZE_INDEX to nextMazeIndex.coerceAtLeast(1).toString(),
+                    AdventureTelemetryPropertyNames.CHOICE_ID to stableId(choiceId),
+                    AdventureTelemetryPropertyNames.NPC_COUNT_DELTA to npcCountDelta.toString(),
+                    AdventureTelemetryPropertyNames.REWARD_OPTION_DELTA to rewardOptionDelta.toString(),
+                    AdventureTelemetryPropertyNames.ELITE_REQUESTED to false.toString()
+                )
+            )
+        }
+    }
+
+    fun outcome(
+        choiceId: String,
+        won: Boolean,
+        elapsedSeconds: Float,
+        steps: Int,
+        deathCountDelta: Int
+    ) {
+        dispatch {
+            val seconds = if (elapsedSeconds.isFinite()) {
+                floor(elapsedSeconds.toDouble()).coerceIn(0.0, Int.MAX_VALUE.toDouble()).toInt()
+            } else {
+                0
+            }
+            AdventureTelemetryEvent(
+                name = AdventureTelemetryEventNames.ROUTE_EVENT_OUTCOME,
+                properties = mapOf(
+                    AdventureTelemetryPropertyNames.CHOICE_ID to stableId(choiceId),
+                    AdventureTelemetryPropertyNames.NEXT_MAZE_WON to won.toString(),
+                    AdventureTelemetryPropertyNames.ELAPSED_SECONDS to seconds.toString(),
+                    AdventureTelemetryPropertyNames.STEPS to steps.coerceAtLeast(0).toString(),
+                    AdventureTelemetryPropertyNames.DEATH_COUNT_DELTA to deathCountDelta.coerceAtLeast(0).toString()
+                )
+            )
+        }
+    }
+
+    private fun stableId(value: String): String = value.trim().lowercase().also {
+        require(it.matches(CATALOGUE_ID)) { "Route telemetry requires a stable catalogue ID" }
+    }
+
+    private inline fun dispatch(event: () -> AdventureTelemetryEvent) {
+        try {
+            sink.record(event())
+        } catch (_: Exception) {
+            // Optional telemetry must not interrupt a saved gameplay transition.
+        }
+    }
 }

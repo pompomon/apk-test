@@ -246,6 +246,201 @@ class AdventureTelemetryTest {
         assertEquals(listOf(event), recordingSink.events)
     }
 
+    @Test
+    fun routeHelpers_recordOnlyDocumentedPropertiesWithStableIds() {
+        val sink = RecordingAdventureTelemetrySink()
+        val telemetry = AdventureRouteTelemetry(sink)
+
+        telemetry.offered("Medium", 2, listOf("QUIET_CORRIDOR", "guarded_cache"), listOf("SAFE", "risk"))
+        telemetry.chosen("Medium", 2, "QUIET_CORRIDOR", "SAFE", lives = 2, deaths = 1)
+        telemetry.applied(3, "QUIET_CORRIDOR", npcCountDelta = -1, rewardOptionDelta = -1)
+        telemetry.outcome("QUIET_CORRIDOR", won = true, elapsedSeconds = 42.9f, steps = 18, deathCountDelta = 1)
+
+        assertEquals(
+            listOf(
+                AdventureTelemetryEvent(
+                    AdventureTelemetryEventNames.ROUTE_EVENT_OFFERED,
+                    mapOf(
+                        "difficulty" to "Medium",
+                        "maze_index" to "2",
+                        "offered_choice_ids" to "quiet_corridor,guarded_cache",
+                        "offered_categories" to "safe,risk"
+                    )
+                ),
+                AdventureTelemetryEvent(
+                    AdventureTelemetryEventNames.ROUTE_EVENT_CHOSEN,
+                    mapOf(
+                        "difficulty" to "Medium",
+                        "maze_index" to "2",
+                        "choice_id" to "quiet_corridor",
+                        "category" to "safe",
+                        "lives_remaining" to "2",
+                        "deaths_this_run" to "1"
+                    )
+                ),
+                AdventureTelemetryEvent(
+                    AdventureTelemetryEventNames.ROUTE_EVENT_APPLIED,
+                    mapOf(
+                        "next_maze_index" to "3",
+                        "choice_id" to "quiet_corridor",
+                        "npc_count_delta" to "-1",
+                        "reward_option_delta" to "-1",
+                        "elite_requested" to "false"
+                    )
+                ),
+                AdventureTelemetryEvent(
+                    AdventureTelemetryEventNames.ROUTE_EVENT_OUTCOME,
+                    mapOf(
+                        "choice_id" to "quiet_corridor",
+                        "next_maze_won" to "true",
+                        "elapsed_seconds" to "42",
+                        "steps" to "18",
+                        "death_count_delta" to "1"
+                    )
+                )
+            ),
+            sink.events
+        )
+    }
+
+    @Test
+    fun routeHelpers_supportAllShippedDifficultiesAndSkipCustomDifficulties() {
+        val sink = RecordingAdventureTelemetrySink()
+        val telemetry = AdventureRouteTelemetry(sink)
+
+        for (difficulty in listOf("Easy", "Medium", "Hard", "Custom", "medium", "")) {
+            telemetry.offered(difficulty, 1, emptyList(), emptyList())
+            telemetry.chosen(difficulty, 1, "quiet_corridor", "safe", lives = 1, deaths = 0)
+        }
+
+        assertEquals(6, sink.events.size)
+        assertEquals(
+            listOf("Easy", "Easy", "Medium", "Medium", "Hard", "Hard"),
+            sink.events.map { it.properties.getValue("difficulty") }
+        )
+        assertTrue(
+            sink.events.filter { it.name == AdventureTelemetryEventNames.ROUTE_EVENT_OFFERED }.all {
+                it.properties.getValue("offered_choice_ids").isEmpty() &&
+                    it.properties.getValue("offered_categories").isEmpty()
+            }
+        )
+    }
+
+    @Test
+    fun routeHelpers_clampCountersButPreserveSignedEffectDeltas() {
+        val sink = RecordingAdventureTelemetrySink()
+        val telemetry = AdventureRouteTelemetry(sink)
+
+        telemetry.offered("Easy", Int.MIN_VALUE, emptyList(), emptyList())
+        telemetry.chosen("Easy", 0, "quiet_corridor", "safe", lives = Int.MIN_VALUE, deaths = -1)
+        telemetry.applied(0, "quiet_corridor", npcCountDelta = Int.MIN_VALUE, rewardOptionDelta = Int.MAX_VALUE)
+        telemetry.outcome("quiet_corridor", won = false, elapsedSeconds = -1f, steps = -1, deathCountDelta = -1)
+
+        assertEquals("1", sink.events[0].properties.getValue("maze_index"))
+        assertEquals("1", sink.events[1].properties.getValue("maze_index"))
+        assertEquals("0", sink.events[1].properties.getValue("lives_remaining"))
+        assertEquals("0", sink.events[1].properties.getValue("deaths_this_run"))
+        assertEquals("1", sink.events[2].properties.getValue("next_maze_index"))
+        assertEquals(Int.MIN_VALUE.toString(), sink.events[2].properties.getValue("npc_count_delta"))
+        assertEquals(Int.MAX_VALUE.toString(), sink.events[2].properties.getValue("reward_option_delta"))
+        assertEquals("false", sink.events[3].properties.getValue("next_maze_won"))
+        assertEquals("0", sink.events[3].properties.getValue("elapsed_seconds"))
+        assertEquals("0", sink.events[3].properties.getValue("steps"))
+        assertEquals("0", sink.events[3].properties.getValue("death_count_delta"))
+    }
+
+    @Test
+    fun routeOutcome_handlesNonFiniteOverflowAndFractionalElapsedSeconds() {
+        val sink = RecordingAdventureTelemetrySink()
+        val telemetry = AdventureRouteTelemetry(sink)
+        val cases = listOf(
+            Float.NaN to 0,
+            Float.POSITIVE_INFINITY to 0,
+            Float.NEGATIVE_INFINITY to 0,
+            -Float.MAX_VALUE to 0,
+            -0.1f to 0,
+            0f to 0,
+            Float.MIN_VALUE to 0,
+            0.99f to 0,
+            1.99f to 1,
+            42.9f to 42,
+            Int.MAX_VALUE.toFloat() to Int.MAX_VALUE,
+            Float.MAX_VALUE to Int.MAX_VALUE
+        )
+
+        for ((seconds, expected) in cases) {
+            telemetry.outcome("quiet_corridor", true, seconds, Int.MAX_VALUE, Int.MAX_VALUE)
+            assertEquals(expected.toString(), sink.events.last().properties.getValue("elapsed_seconds"))
+            assertEquals(Int.MAX_VALUE.toString(), sink.events.last().properties.getValue("steps"))
+            assertEquals(Int.MAX_VALUE.toString(), sink.events.last().properties.getValue("death_count_delta"))
+        }
+        assertEquals(cases.size, sink.events.size)
+    }
+
+    @Test
+    fun routeHelpers_isolateSinkFailuresAndContinueDispatching() {
+        val attemptedNames = mutableListOf<String>()
+        val telemetry = AdventureRouteTelemetry { event ->
+            attemptedNames += event.name
+            throw IllegalStateException("Sink unavailable")
+        }
+
+        telemetry.offered("Hard", 2, listOf("quiet_corridor"), listOf("safe"))
+        telemetry.chosen("Hard", 2, "quiet_corridor", "safe", lives = 1, deaths = 0)
+        telemetry.applied(3, "quiet_corridor", npcCountDelta = -1, rewardOptionDelta = 0)
+        telemetry.outcome("quiet_corridor", won = false, elapsedSeconds = Float.NaN, steps = 0, deathCountDelta = 1)
+
+        assertEquals(
+            listOf(
+                AdventureTelemetryEventNames.ROUTE_EVENT_OFFERED,
+                AdventureTelemetryEventNames.ROUTE_EVENT_CHOSEN,
+                AdventureTelemetryEventNames.ROUTE_EVENT_APPLIED,
+                AdventureTelemetryEventNames.ROUTE_EVENT_OUTCOME
+            ),
+            attemptedNames
+        )
+    }
+
+    @Test(expected = AssertionError::class)
+    fun routeHelpers_doNotSwallowJvmErrors() {
+        val telemetry = AdventureRouteTelemetry { throw AssertionError("Fatal sink failure") }
+
+        telemetry.applied(2, "quiet_corridor", npcCountDelta = 0, rewardOptionDelta = 0)
+    }
+
+    @Test
+    fun routeHelpers_dropInvalidIdsWithoutWeakeningStrictEventValidation() {
+        val sink = RecordingAdventureTelemetrySink()
+        val telemetry = AdventureRouteTelemetry(sink)
+
+        telemetry.offered("Easy", 1, listOf("quiet_corridor,guarded_cache"), listOf("safe"))
+        telemetry.chosen("Easy", 1, "quiet_corridor", "player-entered text", lives = 1, deaths = 0)
+        telemetry.applied(2, "bad;id", npcCountDelta = 0, rewardOptionDelta = 0)
+        telemetry.outcome("", won = true, elapsedSeconds = 1f, steps = 1, deathCountDelta = 0)
+
+        assertTrue(sink.events.isEmpty())
+        for ((property, value) in listOf("choice_id" to "QUIET_CORRIDOR", "elapsed_seconds" to "NaN")) {
+            assertIllegalArgument {
+                AdventureTelemetryEvent(
+                    AdventureTelemetryEventNames.ROUTE_EVENT_OUTCOME,
+                    mapOf(property to value)
+                )
+            }
+        }
+        telemetry.applied(2, "quiet_corridor", npcCountDelta = 0, rewardOptionDelta = 0)
+        assertEquals(1, sink.events.size)
+    }
+
+    @Test
+    fun routeHelpers_defaultToNoOpSink() {
+        val telemetry = AdventureRouteTelemetry()
+
+        telemetry.offered("Easy", 1, listOf("quiet_corridor"), listOf("safe"))
+        telemetry.chosen("Easy", 1, "quiet_corridor", "safe", lives = 1, deaths = 0)
+        telemetry.applied(2, "quiet_corridor", npcCountDelta = 0, rewardOptionDelta = 0)
+        telemetry.outcome("quiet_corridor", won = true, elapsedSeconds = 1f, steps = 1, deathCountDelta = 0)
+    }
+
     private fun assertIllegalArgument(block: () -> Unit) {
         try {
             block()
