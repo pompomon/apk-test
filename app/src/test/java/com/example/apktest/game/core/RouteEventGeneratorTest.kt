@@ -38,6 +38,7 @@ class RouteEventGeneratorTest {
                 val generator = RouteEventGenerator(config, seed.toLong())
                 val finalTarget = generator.offer(config.totalMazes - 1, 1)
                 assertFalse(finalTarget.any { it.id == RouteEventGenerator.AMBUSH_SHORTCUT })
+                assertFalse(finalTarget.any { it.id == RouteEventGenerator.CURSED_GATE })
                 assertFalse(finalTarget.any { it.id == RouteEventGenerator.SCOUT_MAP })
                 if (difficulty == DifficultyPresets.EASY) {
                     assertFalse(generator.offer(2, 0).any { it.id == RouteEventGenerator.CURSED_GATE })
@@ -77,6 +78,29 @@ class RouteEventGeneratorTest {
             repeat(16) { seed ->
                 assertFalse(RouteEventGenerator(infinite, seed.toLong()).offer(2, 0)
                     .any { it.id == RouteEventGenerator.CURSED_GATE })
+            }
+        }
+
+    }
+
+    @Test
+    fun shortCustomRunsWithZeroBaseNpcsNeverRequireAnImpossibleOffer() {
+        for (total in 1..8) {
+            for (lifetime in listOf(0f, 5f, 10f, 15f, 45f, Float.POSITIVE_INFINITY)) {
+                val config = AdventureConfig(
+                    DifficultyPresets.MEDIUM.copy(powerUpPickupLifetimeSeconds = lifetime), 3, total, 0
+                )
+                repeat(16) { seed ->
+                    val generator = RouteEventGenerator(config, seed.toLong())
+                    for (completed in 1..total) {
+                        val offer = generator.offer(completed, 0)
+                        assertTrue(offer.isEmpty() || offer.size in 2..3)
+                        if (completed == total) assertTrue(offer.isEmpty())
+                        if (offer.isNotEmpty()) {
+                            assertTrue(offer.any { it.category != RouteEventCategory.RISKY })
+                        }
+                    }
+                }
             }
         }
     }

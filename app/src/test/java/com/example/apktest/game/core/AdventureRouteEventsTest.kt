@@ -347,7 +347,7 @@ class AdventureRouteEventsTest {
 
         internal fun restore(c: AdventureRunController, seed: Long, routesEnabled: Boolean = true): AdventureRunController {
             val snapshot = AdventureRunStateSnapshot.fromState(c.state, seed)
-            val restored = AdventureRunStateSnapshot.fromJson(snapshot.toJson())
+            val restored = AdventureRunStateSnapshot.fromJson(snapshot.toJson(), c.config)
             assertNotNull(snapshot.toJson(), restored)
             assertEquals(snapshot, restored)
             return AdventureRunController(c.config, restored!!.toState(), seed, routesEnabled)

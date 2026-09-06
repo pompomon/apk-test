@@ -48,7 +48,8 @@ Adventure mode currently advances through a mostly fixed sequence: win a maze, c
 - Adventure snapshot schema 3 intentionally rejects schema-2 runs. Engine
   snapshot schema 6 adds the pickup-lifetime override and rejects schema-5
   engine saves, including Classic saves. No partial route-state migration is
-  attempted.
+  attempted. Future route-balance changes must also bump the Adventure schema
+  if previously resolved effects would no longer validate.
 
 Telemetry hooks use the no-op sink by default. Offered/chosen/applied events
 follow successful saves, not dialog redraws. Outcome events describe each
@@ -74,8 +75,8 @@ Delivery is best-effort, not a durable analytics outbox.
 | Category | Example | Effect | Intended emotion |
 | --- | --- | --- | --- |
 | Safe | Quiet Corridor | Next maze has `npcCount - 1`, minimum 1 on Medium/Hard and 0 only for test/custom configs. Reward options reduced by one if a reward follows. | Relief, recovery |
-| Safe | Scout Map | Reveal upcoming route-event category and next-maze NPC count before choosing reward. | Planning |
-| Risky | Ambush Shortcut | Next maze adds +1 NPC or one elite modifier; completing it grants an extra reward reroll. | Tension, greed |
+| Safe | Scout Map | Reveal the next route offer's categories and next-maze NPC count before choosing reward. | Planning |
+| Risky | Ambush Shortcut | Next maze adds +1 NPC; completing it grants one reward reroll, capped at one saved. Elite substitution is deferred to Phase 2. | Tension, greed |
 | Risky | Cursed Gate | Next maze starts with shorter power-up pickup lifetime; completing it grants +1 life progress toward streak bonus. | High stakes |
 | Utility | Supply Cache | Choose one starting power-up immediately; suppresses the normal non-final-win power-up offer. | Preparation |
 | Utility (deferred) | Training Room | Temporarily unlock one automated player policy for the next maze only. Exclude it from the initial offer pool because current runs already unlock every automated policy after maze 1. | Experimentation |
@@ -133,7 +134,7 @@ not live in pure-Kotlin state or snapshots.
 `ELITE_MODIFIER_HINT` is reserved for risky Ambush-style route choices that request one elite threat on the next maze while still deferring the concrete modifier assignment to the Elite NPC system's seeded selection rules.
 
 `NEXT_ROUTE_PREVIEW` is the persisted Scout Map effect. When the choice commits,
-the controller resolves the already-seeded next route-event category and the
+the controller resolves the already-seeded next route offer's categories and the
 locked next-maze NPC count, stores that preview in run state, and exposes it to
 the reward UI. Its handler consumes the effect after that reward phase; resume
 must display the stored preview rather than regenerate it.

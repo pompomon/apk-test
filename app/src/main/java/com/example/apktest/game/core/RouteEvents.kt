@@ -70,19 +70,8 @@ class RouteEventGenerator(private val config: AdventureConfig, private val runSe
             return emptyList()
         }
         val nextEvent = nextEventMazeIndex(mazeIndexCompleted, ordinal)
-        val pool = catalogue.filter { choice ->
-            when (choice.id) {
-                QUIET_CORRIDOR -> quietNpcDelta(mazeIndexCompleted + 1) < 0
-                AMBUSH_SHORTCUT -> mazeIndexCompleted + 1 < config.totalMazes
-                SUPPLY_CACHE -> true
-                SCOUT_MAP -> nextEvent < config.totalMazes
-                CURSED_GATE -> config.difficulty.name != DifficultyPresets.EASY.name &&
-                    config.difficulty.powerUpPickupLifetimeSeconds.isFinite() &&
-                    config.difficulty.powerUpPickupLifetimeSeconds > MIN_PICKUP_LIFETIME_SECONDS
-                else -> error("Unknown route ${choice.id}")
-            }
-        }
-        check(pool.size >= 2) { "An eligible event needs at least two meaningful routes" }
+        val pool = catalogue.filter { isEligible(it, mazeIndexCompleted, nextEvent) }
+        if (pool.size < 2) return emptyList()
         val rng = Random(runSeed xor OFFER_SALT xor ordinal.toLong() * ORDINAL_STRIDE xor
             mazeIndexCompleted.toLong() * MAZE_STRIDE)
         val shuffled = pool.shuffled(rng)
@@ -92,6 +81,21 @@ class RouteEventGenerator(private val config: AdventureConfig, private val runSe
             selected[selected.lastIndex] = shuffled.first { it.category != RouteEventCategory.RISKY }
         }
         return selected.map { it.detachedCopy() }
+    }
+
+    internal fun isEligible(choice: RouteEventChoice, mazeIndexCompleted: Int, nextEvent: Int): Boolean {
+        if (mazeIndexCompleted < FIRST_EVENT_MAZE_INDEX || mazeIndexCompleted >= config.totalMazes) return false
+        return when (choice.id) {
+            QUIET_CORRIDOR -> quietNpcDelta(mazeIndexCompleted + 1) < 0
+            AMBUSH_SHORTCUT -> mazeIndexCompleted + 1 < config.totalMazes
+            SUPPLY_CACHE -> true
+            SCOUT_MAP -> nextEvent in (mazeIndexCompleted + 2) until config.totalMazes
+            CURSED_GATE -> mazeIndexCompleted + 1 < config.totalMazes &&
+                config.difficulty.name != DifficultyPresets.EASY.name &&
+                config.difficulty.powerUpPickupLifetimeSeconds.isFinite() &&
+                config.difficulty.powerUpPickupLifetimeSeconds > MIN_PICKUP_LIFETIME_SECONDS
+            else -> false
+        }
     }
 
     fun resolve(choice: RouteEventChoice, mazeIndexAppliedTo: Int): PendingRouteEvent {

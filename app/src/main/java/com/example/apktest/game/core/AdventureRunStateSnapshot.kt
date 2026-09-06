@@ -86,6 +86,8 @@ data class AdventureRunStateSnapshot(
     companion object {
         // v3 requires exact pending reward stages/offers, route effects and locked NPC counts.
         // Older saves cannot establish which reward decisions have already committed.
+        // Route mechanics/balance changes need a schema bump: resolved effects are
+        // checked against the supplied configuration, not silently reinterpreted.
         const val SCHEMA_VERSION = 3
 
         private const val KEY_VERSION = "v"
@@ -142,7 +144,12 @@ data class AdventureRunStateSnapshot(
                 rewardRerolls = state.rewardRerolls
             )
 
-        fun fromJson(json: String): AdventureRunStateSnapshot? {
+        fun fromJson(json: String): AdventureRunStateSnapshot? = parseJson(json, null)
+
+        /** Custom-run callers must supply their configuration rather than impersonating a shipped preset. */
+        fun fromJson(json: String, config: AdventureConfig): AdventureRunStateSnapshot? = parseJson(json, config)
+
+        private fun parseJson(json: String, expectedConfig: AdventureConfig?): AdventureRunStateSnapshot? {
             return try {
                 val obj = JSONObject(json)
                 val version = obj.requiredInt(KEY_VERSION)
@@ -238,14 +245,16 @@ data class AdventureRunStateSnapshot(
                 // [DifficultyPresets.byName] in the host and then crash
                 // the controller on construction; failing the load instead
                 // lets the host gracefully start a fresh run.
-                if (DifficultyPresets.all.none { it.name == snapshot.difficultyName }) return null
+                if (expectedConfig != null) {
+                    if (expectedConfig.difficulty.name != snapshot.difficultyName) return null
+                } else if (DifficultyPresets.all.none { it.name == snapshot.difficultyName }) return null
                 if (snapshot.currentMazeIndex < 0) return null
                 if (snapshot.livesRemaining < 0) return null
                 if (snapshot.winStreakSinceLastBonus < 0) return null
                 if (snapshot.totalElapsedSeconds < 0f || !snapshot.totalElapsedSeconds.isFinite()) return null
                 if (snapshot.totalSteps < 0) return null
                 if (snapshot.deathsThisRun < 0) return null
-                val config = AdventureConfig.forDifficultyName(snapshot.difficultyName)
+                val config = expectedConfig ?: AdventureConfig.forDifficultyName(snapshot.difficultyName)
                 if (!AdventureRouteSnapshotCodec.isConsistent(snapshot, config)) return null
                 if (mazeSnapshotJson != null && snapshot.pendingReward == null &&
                     snapshot.status == AdventureStatus.IN_PROGRESS && snapshot.currentMazeSeed == null) return null

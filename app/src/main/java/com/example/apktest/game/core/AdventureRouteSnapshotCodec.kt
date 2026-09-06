@@ -178,40 +178,35 @@ internal object AdventureRouteSnapshotCodec {
             it.mazeIndexCompleted !in 2..index || RouteEventGenerator.choice(it.choiceId) == null
         }) return false
         if (snapshot.routeHistory.zipWithNext().any {
-            it.second.mazeIndexCompleted - it.first.mazeIndexCompleted !in 2..3
+            it.second.mazeIndexCompleted - it.first.mazeIndexCompleted < 2
         }) return false
-        if (snapshot.routeHistory.firstOrNull()?.mazeIndexCompleted?.let { it != 2 } == true) return false
-        if (snapshot.routeHistory.size + (if (reward?.routeChoices?.isNotEmpty() == true &&
-                reward.selectedRouteId == null) 1 else 0) != snapshot.routeEventOrdinal) return false
-        if (snapshot.routeHistory.lastOrNull()?.mazeIndexCompleted == index && route == null) return false
         val uncommittedOffer = reward?.routeChoices?.isNotEmpty() == true && reward.selectedRouteId == null
-        val previousOffer = snapshot.routeHistory.lastOrNull()?.mazeIndexCompleted
-        if (uncommittedOffer && (if (previousOffer == null) index != 2 else index - previousOffer !in 2..3)) {
-            return false
+        if (snapshot.routeHistory.size + (if (uncommittedOffer) 1 else 0) > snapshot.routeEventOrdinal) return false
+        if (snapshot.routeHistory.lastOrNull()?.mazeIndexCompleted == index && route == null) return false
+        // Ordinals count scheduled opportunities, including a suppressed undersized
+        // pool. History records only choices, so gaps may contain skipped events.
+        val scheduledPoints = (listOf(2) + snapshot.routeHistory.map { it.mazeIndexCompleted } +
+            (if (uncommittedOffer) listOf(index) else emptyList()) +
+            snapshot.nextRouteEventMazeIndex).distinct()
+        var minimumIntervals = 0
+        var maximumIntervals = 0
+        for ((previous, next) in scheduledPoints.zipWithNext()) {
+            val distance = next - previous
+            if (distance < 2) return false
+            minimumIntervals += (distance + 2) / 3
+            maximumIntervals += distance / 2
         }
-        val lastOffer = if (uncommittedOffer) index else previousOffer
-        if (lastOffer != null && snapshot.nextRouteEventMazeIndex - lastOffer !in 2..3) return false
+        if (snapshot.routeEventOrdinal !in minimumIntervals..maximumIntervals) return false
+        if (snapshot.routeEventOrdinal > 0 && snapshot.nextRouteEventMazeIndex - 3 > index) return false
+        val generator = RouteEventGenerator(config, snapshot.runSeed)
 
         if (route != null) {
             val known = RouteEventGenerator.choice(route.choiceId) ?: return false
-            if (route.effects != known.effects || route.mazeIndexAppliedTo != index + 1 || count == null) return false
+            if (!generator.isEligible(known, index, snapshot.nextRouteEventMazeIndex)) return false
+            if (route != generator.resolve(known, index + 1) || count == null) return false
             if (route.npcCount != count || route.npcCount < 0) return false
             if (reward == null && snapshot.pendingStartingPowerUp == null) return false
             if (snapshot.routeHistory.lastOrNull() != RouteEventHistoryEntry(index, route.choiceId)) return false
-            if (route.npcCountDelta != when (route.choiceId) {
-                    RouteEventGenerator.QUIET_CORRIDOR -> -1
-                    RouteEventGenerator.AMBUSH_SHORTCUT -> 1
-                    else -> 0
-                }) return false
-            if (route.rewardOptionDelta != if (route.choiceId == RouteEventGenerator.QUIET_CORRIDOR) -1 else 0) {
-                return false
-            }
-            if (route.choiceId == RouteEventGenerator.CURSED_GATE) {
-                val lifetime = route.pickupLifetimeSeconds ?: return false
-                if (!lifetime.isFinite() || lifetime < RouteEventGenerator.MIN_PICKUP_LIFETIME_SECONDS ||
-                    config.difficulty.name == DifficultyPresets.EASY.name) return false
-            } else if (route.pickupLifetimeSeconds != null) return false
-            if (route.choiceId == RouteEventGenerator.AMBUSH_SHORTCUT && index + 1 == config.totalMazes) return false
         }
         if (reward == null) return true
         if (reward.mazeIndexCompleted != index || index !in 1 until config.totalMazes ||
@@ -227,11 +222,7 @@ internal object AdventureRouteSnapshotCodec {
                 choices.any { !RouteEventGenerator.isKnownChoice(it) } ||
                 choices.all { it.category == RouteEventCategory.RISKY }) return false
             if (index < 2 || snapshot.nextRouteEventMazeIndex - index !in 2..3) return false
-            if (choices.any {
-                (it.id == RouteEventGenerator.SCOUT_MAP && snapshot.nextRouteEventMazeIndex >= config.totalMazes) ||
-                    (it.id == RouteEventGenerator.AMBUSH_SHORTCUT && index + 1 == config.totalMazes) ||
-                    (it.id == RouteEventGenerator.CURSED_GATE && config.difficulty.name == DifficultyPresets.EASY.name)
-            }) return false
+            if (choices.any { !generator.isEligible(it, index, snapshot.nextRouteEventMazeIndex) }) return false
         }
         if (reward.selectedRouteId != null) {
             if (reward.stage != RewardStage.POWER_UP_CHOICE || route?.choiceId != reward.selectedRouteId ||

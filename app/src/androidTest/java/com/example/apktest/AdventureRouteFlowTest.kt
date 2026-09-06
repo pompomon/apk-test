@@ -122,6 +122,41 @@ class AdventureRouteFlowTest {
     }
 
     @Test
+    fun queuedDuplicateContinueCannotAdvancePastRouteChoice() {
+        val fixture = pendingOffer("supply_cache")
+        assertTrue(store.saveBlocking(fixture))
+        launchResume().use { scenario ->
+            awaitStage(scenario, RewardStage.WIN_ACKNOWLEDGEMENT)
+            scenario.onActivity {
+                val button = it.rewardDialogForTesting()!!.getButton(AlertDialog.BUTTON_POSITIVE)
+                button.performClick()
+                button.performClick()
+            }
+            awaitStage(scenario, RewardStage.ROUTE_CHOICE)
+            scenario.onActivity {
+                assertEquals(fixture.currentMazeIndex, it.controllerForTesting().state.currentMazeIndex)
+                assertEquals(fixture.totalSteps, it.controllerForTesting().state.totalSteps)
+                assertNull(it.controllerForTesting().state.pendingReward!!.selectedRouteId)
+            }
+            assertNoMaze(scenario)
+        }
+    }
+
+    @Test
+    fun backCannotDismissRequiredRouteChoice() {
+        assertTrue(store.saveBlocking(pendingOffer("supply_cache")))
+        launchResume().use { scenario ->
+            awaitStage(scenario, RewardStage.WIN_ACKNOWLEDGEMENT)
+            continueDialog(scenario)
+            awaitStage(scenario, RewardStage.ROUTE_CHOICE)
+            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            awaitStage(scenario, RewardStage.ROUTE_CHOICE)
+            assertNoMaze(scenario)
+            assertNull(store.load()!!.pendingReward!!.selectedRouteId)
+        }
+    }
+
+    @Test
     fun explicitRelaunchResumesExactRouteWithoutReplayingWin() {
         val fixture = pendingOffer("scout_map")
         assertTrue(store.saveBlocking(fixture))
