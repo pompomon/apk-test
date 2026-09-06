@@ -290,6 +290,52 @@ class AdventurePerkFlowTest {
         }
     }
 
+    @Test
+    fun systemBackPersistsSecondWindBarrierWithoutAcknowledgingOrPresenting() {
+        val fixture = playableFixture(RunPerkId.SECOND_WIND)
+        val barrier = barrier(fixture.currentMazeSnapshot!!)
+        assertTrue(store.saveBlocking(fixture))
+        launch().use { scenario ->
+            awaitMaze(scenario)
+            scenario.onActivity {
+                it.onBackPressedDispatcher.onBackPressed()
+                assertTrue(it.isFinishing)
+                it.handleCapturedSnapshotForTesting(barrier)
+                assertNull(it.rewardDialogForTesting())
+                assertTrue(it.perkFeedbackForTesting().isEmpty())
+            }
+            val committed = store.load()!!
+            assertTrue(committed.runPerks.first { it.id == RunPerkId.SECOND_WIND }.consumed)
+            assertEquals(barrier, committed.currentMazeSnapshot)
+        }
+    }
+
+    @Test
+    fun systemBackPersistsTerminalCheckpointsWithoutPresenting() {
+        val fixture = playableFixture(RunPerkId.QUICK_FEET)
+        for (status in listOf(GameStatus.WIN, GameStatus.LOSE)) {
+            val saved = if (status == GameStatus.LOSE) fixture.copy(livesRemaining = 1) else fixture
+            assertTrue(store.saveBlocking(saved))
+            launch().use { scenario ->
+                awaitMaze(scenario)
+                scenario.onActivity {
+                    it.onBackPressedDispatcher.onBackPressed()
+                    assertTrue(it.isFinishing)
+                    it.handleCapturedSnapshotForTesting(saved.currentMazeSnapshot!!.copy(status = status))
+                    assertNull(it.rewardDialogForTesting())
+                    assertTrue(it.perkFeedbackForTesting().isEmpty())
+                }
+                if (status == GameStatus.WIN) {
+                    val committed = store.load()!!
+                    assertEquals(saved.currentMazeIndex + 1, committed.currentMazeIndex)
+                    assertNotNull(committed.pendingReward)
+                } else {
+                    assertNull(store.load())
+                }
+            }
+        }
+    }
+
     private fun barrier(snapshot: GameEngineSnapshot): GameEngineSnapshot = snapshot.copy(
         status = GameStatus.RUNNING,
         runPerkEffects = snapshot.runPerkEffects.copy(secondWindAvailable = false),

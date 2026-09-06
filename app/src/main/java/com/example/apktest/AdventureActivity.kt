@@ -624,6 +624,11 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         menuDialog?.dismiss()
         menuDialog = null
         refreshAutoToggle()
+        if (snapshotLifecycle().requiresBlockingPersist) {
+            pendingCommit = null
+            persistAdventureStateBlocking()
+            return
+        }
         savePendingTransition()
     }
 
@@ -682,7 +687,15 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     private fun persistAdventureStateBlocking() {
         val snapshot = AdventureRunStateSnapshot.fromState(controller.state, runSeed)
         try {
-            autosaveExecutor.submit { saveSession.write { adventureStore.saveBlocking(snapshot) } }
+            autosaveExecutor.submit {
+                saveSession.write {
+                    if (snapshot.status == AdventureStatus.IN_PROGRESS) {
+                        adventureStore.saveBlocking(snapshot)
+                    } else {
+                        adventureStore.clearBlocking()
+                    }
+                }
+            }
                 .get(SAVE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
         } catch (_: RejectedExecutionException) {
             // Executor shut down — accept the loss rather than calling
