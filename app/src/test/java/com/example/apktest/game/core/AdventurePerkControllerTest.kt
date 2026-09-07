@@ -98,8 +98,8 @@ class AdventurePerkControllerTest {
     @Test
     fun scoutChoiceLocksActualRosterWithoutRouteOrEliteFeature() {
         val config = medium().copy(
-            difficulty = DifficultyPresets.MEDIUM.copy(mazeWidth = 2, mazeHeight = 2),
-            baseNpcsPerMaze = 10
+            difficulty = DifficultyPresets.MEDIUM.copy(mazeWidth = 4, mazeHeight = 4),
+            baseNpcsPerMaze = 20
         )
         val c = AdventureRunController(config, runSeed = 7L, routesEnabled = false, elitesEnabled = false,
             perksEnabled = true, perkTiers = setOf(RunPerkTier.UNCOMMON))

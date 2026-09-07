@@ -172,7 +172,7 @@ class AdventurePerkFlowTest {
                 assertTrue(events.isEmpty())
             }
             assertFalse(store.load()!!.runPerks.first { it.id == RunPerkId.SECOND_WIND }.consumed)
-            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+            scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             continueDialog(scenario)
             await(scenario) {
                 it.rewardDecisionReadyForTesting() &&
@@ -264,7 +264,7 @@ class AdventurePerkFlowTest {
     }
 
     @Test
-    fun systemBackAcceptsFinalGlCheckpointAfterFinishBegins() {
+    fun finishingActivityAcceptsFinalGlCheckpoint() {
         val fixture = playableFixture(RunPerkId.QUICK_FEET)
         assertTrue(store.saveBlocking(fixture))
         launch().use { scenario ->
@@ -278,9 +278,9 @@ class AdventurePerkFlowTest {
             scenario.onActivity {
                 val latest = fragment(it)!!.captureSnapshot()!!
                 latestElapsed = latest.elapsedSeconds
-                it.onBackPressedDispatcher.onBackPressed()
+                it.finish()
                 assertTrue(it.isFinishing)
-                // Deterministically deliver the GL callback after Back marked the host
+                // Deterministically deliver the GL callback after finish marked the host
                 // finishing, but before destruction invalidates this save session.
                 it.handleCapturedSnapshotForTesting(latest)
                 assertNull(it.rewardDialogForTesting())
@@ -291,14 +291,14 @@ class AdventurePerkFlowTest {
     }
 
     @Test
-    fun systemBackPersistsSecondWindBarrierWithoutAcknowledgingOrPresenting() {
+    fun finishingActivityPersistsSecondWindBarrierWithoutAcknowledgingOrPresenting() {
         val fixture = playableFixture(RunPerkId.SECOND_WIND)
         val barrier = barrier(fixture.currentMazeSnapshot!!)
         assertTrue(store.saveBlocking(fixture))
         launch().use { scenario ->
             awaitMaze(scenario)
             scenario.onActivity {
-                it.onBackPressedDispatcher.onBackPressed()
+                it.finish()
                 assertTrue(it.isFinishing)
                 it.handleCapturedSnapshotForTesting(barrier)
                 assertNull(it.rewardDialogForTesting())
@@ -311,7 +311,7 @@ class AdventurePerkFlowTest {
     }
 
     @Test
-    fun systemBackPersistsTerminalCheckpointsWithoutPresenting() {
+    fun finishingActivityPersistsTerminalCheckpointsWithoutPresenting() {
         val fixture = playableFixture(RunPerkId.QUICK_FEET)
         for (status in listOf(GameStatus.WIN, GameStatus.LOSE)) {
             val saved = if (status == GameStatus.LOSE) fixture.copy(livesRemaining = 1) else fixture
@@ -319,7 +319,7 @@ class AdventurePerkFlowTest {
             launch().use { scenario ->
                 awaitMaze(scenario)
                 scenario.onActivity {
-                    it.onBackPressedDispatcher.onBackPressed()
+                    it.finish()
                     assertTrue(it.isFinishing)
                     it.handleCapturedSnapshotForTesting(saved.currentMazeSnapshot!!.copy(status = status))
                     assertNull(it.rewardDialogForTesting())
