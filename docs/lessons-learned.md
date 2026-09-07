@@ -145,6 +145,16 @@ The presets aim for **~2–3 minute** Classic single-maze sessions and **~10–2
 4. **Prefer bounded assertions over exact-equality** for design-intent tests. Exact-equality tests are appropriate for *one* canonical value per preset (e.g. "Medium's lifetime is 45 s"), but range/ladder assertions should bracket the design target so cosmetic tuning PRs don't churn every test.
 5. **Shrinking maze dimensions invalidates saved snapshots** whose persisted coordinates fall outside the new bounds. `GameStateStore.load()` (Hard rule #9) silently rejects and clears them — graceful, but mention the user-visible "saved game gone after update" effect in the PR description.
 
+## 16. Agent workflow & acceptance evidence
+
+> Cited PRs: #50. Canonical procedure: [`agent-quickstart.md`](agent-quickstart.md); evidence fields: [PR template](../.github/PULL_REQUEST_TEMPLATE.md).
+
+1. **Check validation readiness before substantial implementation.** Dependency resolution can prevent any tests from executing; a working Gradle launcher is not a green baseline. Record environment, revision, command, and result, and report access blockers without changing unrelated build configuration — see [preflight](agent-quickstart.md#2-check-validation-readiness-and-record-the-baseline). (PR #50)
+2. **Check all review findings against the current revision before editing.** Stale or previously addressed feedback can cause duplicate fixes and replies. Group actionable findings by PR, verify previous fixes, and cite their commits — see [review follow-ups](agent-quickstart.md#4-batch-and-deduplicate-review-follow-ups). (PR #50)
+3. **Track implementation, automated validation, and manual acceptance separately.** An unchecked milestone may already be implemented but await device evidence. Define the exact scope and required evidence up front; leave required acceptance pending until verified — see [acceptance](agent-quickstart.md#3-define-scope-and-acceptance-before-editing). (PR #50)
+4. **Specify state-transition invariants before writing the fix.** Happy-path checks miss lifecycle races, invalid saves, retries, and stale UI resets. Define runtime, persisted, and UI expectations and assign JVM versus device coverage — see [transition criteria](agent-quickstart.md#5-identify-the-rules-and-state-transitions-your-change-touches). (PR #50)
+5. **Leave an evidence-based handoff.** A later session cannot infer whether a change was merely implemented or actually accepted. Report the final revision, completed scope, checks actually run, remaining acceptance, blockers, and next action — see [handoff](agent-quickstart.md#8-leave-a-precise-handoff). (PR #50)
+
 ---
 
 ## How to update this document
