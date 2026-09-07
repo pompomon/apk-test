@@ -156,12 +156,35 @@
 
 ### Tasks
 
-- [ ] Define perk IDs, tiers, definitions, stack state, and offer-history model.
-- [ ] Add deterministic three-choice offer generation with rarity weights and anti-duplication.
-- [ ] Persist perk stacks and pending offers in `AdventureRunStateSnapshot`.
-- [ ] Apply derived effects through `MazeStartupSpec`, `GameEngine.configureAdventureMaze(...)`, and power-up activation hooks.
-- [ ] Add active-perk summaries to HUD/menu/completion surfaces.
-- [ ] Add tests for offer generation, stack caps, effect application, persistence, and process-death behavior.
+- [x] Define perk IDs, tiers, definitions, stack state, and offer-history model.
+- [x] Add deterministic three-choice offer generation with rarity weights and anti-duplication.
+- [x] Persist perk stacks and pending offers in `AdventureRunStateSnapshot`.
+- [x] Apply derived effects through `MazeStartupSpec`, `GameEngine.configureAdventureMaze(...)`, and power-up activation hooks.
+- [x] Add active-perk summaries to HUD/menu/completion surfaces.
+- [x] Add tests for offer generation, stack caps, effect application, persistence, and process-death behavior.
+- [ ] Complete successful JVM/build/instrumented execution and device/balance approval before rollout.
+
+### Implementation notes
+
+- Offers follow non-final wins at mazes 1, 3, 5, and 7. The existing durable
+  reward flow adds a perk stage after route selection and before the ordinary
+  starting-power-up chooser; power-up cadence and policy unlocks are unchanged.
+- Six perks are implemented; First Shield is excluded pending approval of a
+  useful activation condition and duration. Longer Charge is player-pickup-only,
+  not a bonus to selected starting rewards or NPC/Adventurer activations.
+- Risk Dividend expands starting-power-up options only, merging with Quiet
+  Corridor and retaining the count on rerolls. Scout Sense previews actual
+  capacity-limited NPC/elite counts without truncating the restart roster.
+- Second Wind pauses simulation at a persisted consumption barrier. The engine
+  resumes only after the host durably saves consumed run state and the matching
+  pending engine snapshot together and acknowledges it on the GL thread.
+- Adventure schema 5 and engine schema 8 intentionally invalidate older saves,
+  including Classic engine saves. Compatible perk decisions and effects survive
+  generation-flag rollback.
+- Generation stays default-off; first exposure is common-only Medium. Copy,
+  device/accessibility validation, successful test/build execution, and balance
+  approval are rollout requirements, not implied by implementation.
+  See the [Phase 3 contract](03-run-build-perks.md#phase-3-implementation-contract).
 
 ### Dependencies
 

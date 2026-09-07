@@ -141,7 +141,16 @@
 
     <!-- Adventure run-build perks (provisional; unused while the feature is disabled) -->
     <string name="adventure_perk_chooser_title">Choose a run perk</string>
-    <string name="adventure_perk_summary_title">Active run perks</string>
+    <string name="adventure_perk_summary_title">Run perks</string>
+    <string name="adventure_perk_summary_empty">No run perks yet.</string>
+    <string name="adventure_perk_compact_stack">%1$s ×%2$d</string>
+    <string name="adventure_perk_charge_summary">%1$s · %2$s</string>
+    <string name="adventure_perk_ready">Ready</string>
+    <string name="adventure_perk_used">Used</string>
+    <string name="adventure_perk_consumed_feedback">Second Wind used — capture prevented. NPCs frozen for 1 second.</string>
+    <string name="adventure_perk_scout_preview">Scout Sense: next maze has %1$d NPCs, including %2$d elites.</string>
+    <string name="adventure_perk_win_prompt">Choose your run perk, then your starting power-up.</string>
+    <string name="adventure_perk_route_win_prompt">Choose your route, then your run perk and starting power-up.</string>
     <string name="adventure_perk_tier_common">Common</string>
     <string name="adventure_perk_tier_uncommon">Uncommon</string>
     <string name="adventure_perk_tier_rare">Rare</string>
@@ -152,16 +161,16 @@
     <string name="adventure_perk_quick_feet_name">Quick Feet</string>
     <string name="adventure_perk_quick_feet_description">Move 5 percent faster per stack, up to 3 stacks.</string>
     <string name="adventure_perk_longer_charge_name">Longer Charge</string>
-    <string name="adventure_perk_longer_charge_description">Beneficial timed power-ups last +1 second per stack, up to 3 stacks.</string>
+    <string name="adventure_perk_longer_charge_description">Player-collected Speed Up, Freeze, Shield, Slow Time, Magnet, Invisibility, and Ghost Mode last +1 second per stack, up to +3 seconds. No bonus to starting rewards, NPC effects, instant effects, or Second Wind.</string>
     <string name="adventure_perk_pocket_magnet_name">Pocket Magnet</string>
-    <string name="adventure_perk_pocket_magnet_description">Magnet reaches +1 cell farther per stack, up to 2 stacks.</string>
+    <string name="adventure_perk_pocket_magnet_description">While Magnet is active, its pickup radius reaches +1 cell per stack, up to +2 cells. No effect without Magnet.</string>
     <string name="adventure_perk_first_shield_name">First Shield</string>
     <string name="adventure_perk_first_shield_description">Start each maze with a short Shield when no starting power-up is pending.</string>
     <string name="adventure_perk_scout_sense_name">Scout Sense</string>
     <string name="adventure_perk_scout_sense_description">Reveal the next maze NPC and elite counts before choosing a reward.</string>
     <string name="adventure_perk_second_wind_name">Second Wind</string>
-    <string name="adventure_perk_second_wind_description">Once per run, survive 1 capture and trigger a 1-second Freeze pulse.</string>
+    <string name="adventure_perk_second_wind_description">Once per run, prevent 1 otherwise lethal capture without losing a life and freeze NPCs for 1 second. Remains used after retries.</string>
     <string name="adventure_perk_risk_dividend_name">Risk Dividend</string>
-    <string name="adventure_perk_risk_dividend_description">Completing a risky route adds 1 choice to the next reward.</string>
+    <string name="adventure_perk_risk_dividend_description">Own this before winning a risky-route maze to add 1 starting-power-up option (normally 3 → 4; Quiet Corridor 2 → 3). Does not add perk choices or pay for an earlier win.</string>
     <string name="adventure_perk_accessibility">%1$s, %2$s perk, stack %3$d of %4$d. %5$s</string>
 </resources>

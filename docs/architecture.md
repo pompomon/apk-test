@@ -52,7 +52,7 @@ SetupActivity  ── Intent extras ──▶  MainActivity  ── Fragment arg
 - `GameStateStore` persists a JSON-serialized `GameEngineSnapshot` in `SharedPreferences`. Validated load only — never read raw JSON to drive UI.
 - `MainActivity.onPause` writes a snapshot via a **shared single-thread `ExecutorService`**. "Pause & Exit" *clears* the saved state when status is `WIN` or `LOSE` instead of saving.
 - `GameEngineSnapshot.fromJson` returns `null` on:
-  - schema-version mismatch (`SCHEMA_VERSION` is currently `7`),
+  - schema-version mismatch (`SCHEMA_VERSION` is currently `8`),
   - unknown `difficultyName` (does **not** silently fall back to MEDIUM the way `DifficultyPresets.byName` does),
   - any persisted coordinate (player, NPCs, Adventurers, spawned power-ups, or `removedWalls` cell) falling outside the maze bounds implied by the preset (rounded up to even, like the generator),
   - JSON / enum-value parse errors.
@@ -100,8 +100,8 @@ reloading preserves the full locked list verbatim rather than rerunning assignme
 - `AdventureRunController.completeMaze()` is the Android win entry point. It
   records a win once and creates a persisted `PendingAdventureReward`; the
   legacy `onMazeWon()` remains available for controller-only reward consumers.
-- Reward stages are win acknowledgement, optional route selection, and
-  starting-power-up selection. `prepareCurrentMaze()` cannot start a maze
+- Reward stages are win acknowledgement, optional route selection, optional
+  run-perk selection, and starting-power-up selection. `prepareCurrentMaze()` cannot start a maze
   while a reward is pending. `AdventureActivity` resumes the stage before
   creating its `GameFragment`.
 - `RouteEventGenerator` uses independent deterministic cadence/offer streams.
@@ -111,7 +111,7 @@ reloading preserves the full locked list verbatim rather than rerunning assignme
 - The controller locks effective NPC count with the seed and policy list.
   Selected route effects and starting power-ups survive deaths; completion
   settles their reward once before clearing the per-maze effect.
-- Adventure schema 4 retains pending offers, route history, previews, rerolls,
+- Adventure schema 5 retains pending offers, route history, previews, rerolls,
   cadence, active effects, and the locked count. Unknown active effects or
   inconsistent combinations fail validation instead of silently losing a
   decision.
@@ -136,6 +136,39 @@ reloading preserves the full locked list verbatim rather than rerunning assignme
   An invalid engine snapshot is discarded rather than partially restoring modifiers.
 - Renderer/legend share a precomputed shape-and-color accent; Classic's default
   legend remains unchanged, and saved elites remain explainable with generation off.
+
+### Run build perks
+
+- `RunPerks.kt` defines stable catalogue IDs, bounded stacks, tiers, and derived
+  engine effects. First Shield remains deferred; all other perks are implemented
+  behind the default-off generation gate. Initial exposure is common-only Medium.
+- Perk offers follow mazes 1, 3, 5, and 7, excluding final wins. The independent
+  seeded generator filters capped/unavailable perks and uses weighted draws,
+  category diversity, and persisted consecutive-offer history.
+- A perk offer belongs to the existing pending reward, after any route choice
+  and before the starting-power-up choice. Required transitions are durably saved
+  before proceeding. Generation flags do not invalidate compatible saved offers
+  or suppress earned effects.
+- `MazeStartupSpec` carries derived perk effects through `GameFragment` and
+  `MazeGame` to `GameEngine`. Quick Feet affects only player cadence; Longer
+  Charge affects beneficial player pickup activations only; Pocket Magnet changes
+  only the player's active MAGNET radius. Starting rewards, hostile freeze, and
+  Adventurer activations do not receive the duration bonus.
+- Scout Sense saves a preview of actual next-maze NPC/elite counts, respecting
+  spawn capacity while keeping the complete restart roster. Risk Dividend adds
+  one starting-reward option after a risky maze won while already owning the perk.
+- Second Wind uses a persisted consumption barrier, separate from pause status.
+  The GL thread prevents capture, installs a one-second freeze, and stops gameplay
+  while still rendering and servicing commands. The main thread commits consumed
+  run state and the matching pending engine snapshot together; only a successful
+  save permits the GL acknowledgement. Restoring that snapshot acknowledges
+  already-committed consumption without granting it again.
+- Adventure schema 5 and engine schema 8 persist perk state. Invalid embedded
+  engine snapshots may fall back to a fresh locked maze, but consumed run perks
+  remain consumed. Engine schema changes also invalidate older Classic saves.
+- The Adventure status bar, dialog menu, and terminal dialogs summarize active
+  stacks and ready/used one-shots. Perk telemetry uses the existing allowlists
+  and default no-op sink, not a production analytics service.
 
 ## Player policy hierarchy
 

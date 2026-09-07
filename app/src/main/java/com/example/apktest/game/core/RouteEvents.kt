@@ -22,7 +22,7 @@ data class RouteEventChoice(
     val effects: List<RouteEventEffect>
 )
 
-enum class RewardStage { WIN_ACKNOWLEDGEMENT, ROUTE_CHOICE, POWER_UP_CHOICE }
+enum class RewardStage { WIN_ACKNOWLEDGEMENT, ROUTE_CHOICE, PERK_CHOICE, POWER_UP_CHOICE }
 
 data class RoutePreview(
     /** Completed-maze index at which the previewed offer will appear (1-based). */
@@ -40,7 +40,12 @@ data class PendingAdventureReward(
     val selectedRouteId: String? = null,
     val preview: RoutePreview? = null,
     val bonusLifeAwarded: Boolean = false,
-    val rerollIndex: Int = 0
+    val rerollIndex: Int = 0,
+    val perkOffer: PendingPerkOffer? = null,
+    val selectedPerkId: RunPerkId? = null,
+    val scoutPreview: PerkScoutPreview? = null,
+    val rewardOptionBonus: Int = 0,
+    val riskDividendRouteId: String? = null
 )
 
 /** Resolved, per-maze effects; independent of the current rollout flag. */
@@ -178,7 +183,8 @@ internal fun RouteEventChoice.detachedCopy(): RouteEventChoice = copy(effects = 
 internal fun PendingAdventureReward.detachedCopy(): PendingAdventureReward = copy(
     routeChoices = routeChoices.map { it.detachedCopy() },
     powerUpCandidates = powerUpCandidates.toList(),
-    preview = preview?.copy(categories = preview.categories.toList())
+    preview = preview?.copy(categories = preview.categories.toList()),
+    perkOffer = perkOffer?.detachedCopy()
 )
 
 internal fun PendingRouteEvent.detachedCopy(): PendingRouteEvent = copy(effects = effects.toList())

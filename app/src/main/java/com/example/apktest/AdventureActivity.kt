@@ -7,8 +7,12 @@ import android.os.Looper
 import android.view.MotionEvent
 import android.view.View
 import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.ToggleButton
+import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -34,12 +38,16 @@ import com.example.apktest.game.core.PendingAdventureReward
 import com.example.apktest.game.core.RewardStage
 import com.example.apktest.game.core.RouteEventCategory
 import com.example.apktest.game.core.RouteEventGenerator
+import com.example.apktest.game.core.RunPerkEffectEvent
+import com.example.apktest.game.core.RunPerkId
 import com.example.apktest.game.core.automatedPlayerPolicies
 import com.example.apktest.ui.GameInputController
 import com.example.apktest.ui.LegendDialog
 import com.example.apktest.ui.AdventureTimeFormatter
+import com.example.apktest.ui.AdventurePerkText
 import com.example.apktest.telemetry.AdventureRouteTelemetry
 import com.example.apktest.telemetry.AdventureEliteTelemetry
+import com.example.apktest.telemetry.AdventurePerkTelemetry
 import com.example.apktest.telemetry.AdventureTelemetrySink
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -69,6 +77,12 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     private lateinit var autoToggle: ToggleButton
     private lateinit var inertiaToggle: ToggleButton
     private lateinit var statusBar: TextView
+    private lateinit var perkStatusBar: TextView
+    private val perkText by lazy { AdventurePerkText { res, args -> getString(res, *args) } }
+    private var perkSummary = ""
+    private var menuDialog: AlertDialog? = null
+    private var menuPerkText: TextView? = null
+    private var perkFeedback = ""
     private val inputController = GameInputController(
         activity = this,
         moveUntilBlocked = { direction: Direction -> moveUntilBlocked(direction) }
@@ -86,6 +100,9 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     private var rewardDialog: AlertDialog? = null
     private var foreground = false
     private var stateGeneration = 0L
+    // Unlike save generations, this survives a consumption commit within the same attempt.
+    private var mazeCallbackGeneration = 0L
+    private var acknowledgedConsumptionGeneration: Long? = null
     private var saveInFlight = false
     private var saveFailed = false
     private var failNextRewardSave = false
@@ -93,6 +110,36 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     private var afterResume: (() -> Unit)? = null
     private val routeTelemetry = AdventureRouteTelemetry()
     private var eliteTelemetry = AdventureEliteTelemetry()
+    private var perkTelemetry = AdventurePerkTelemetry()
+    private val rewardBackBlocker = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() = Unit
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun setPerkTelemetrySinkForTesting(sink: AdventureTelemetrySink) {
+        perkTelemetry = AdventurePerkTelemetry(sink)
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun perkSummaryForTesting(): String = perkSummary
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun perkStatusTextForTesting(): CharSequence = perkStatusBar.text
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun perkFeedbackForTesting(): String = perkFeedback
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun menuTextForTesting(): CharSequence? =
+        menuPerkText?.text?.takeIf { menuDialog?.isShowing == true }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun rewardTextForTesting(): CharSequence? =
+        rewardDialog?.findViewById<TextView>(android.R.id.message)?.text
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun rewardTitleForTesting(): CharSequence? =
+        rewardDialog?.findViewById<TextView>(androidx.appcompat.R.id.alertTitle)?.text
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun setEliteTelemetrySinkForTesting(sink: AdventureTelemetrySink) {
@@ -137,11 +184,17 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun rewardDecisionReadyForTesting(): Boolean =
-        pendingCommit == null && !saveInFlight && !saveFailed
+        pendingCommit == null && afterResume == null && !saveInFlight && !saveFailed
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun handleCapturedSnapshotForTesting(snapshot: GameEngineSnapshot) =
         handleCapturedSnapshot(snapshot)
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun attachPerkBarrierForTesting(snapshot: GameEngineSnapshot) {
+        val spec = controller.prepareCurrentMaze() ?: return
+        attachMaze(spec.copy(midMazeSnapshot = snapshot))
+    }
 
     private val tickHandler = Handler(Looper.getMainLooper())
     private val tickRunnable = object : Runnable {
@@ -168,6 +221,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         }
 
         statusBar = findViewById(R.id.adventureStatusBar)
+        perkStatusBar = findViewById(R.id.adventurePerkStatusBar)
         menuButton = findViewById(R.id.buttonMenu)
         autoToggle = findViewById(R.id.buttonAuto)
         inertiaToggle = findViewById(R.id.buttonInertia)
@@ -179,7 +233,9 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         restoreInputUiState(savedInstanceState)
 
         setupControls()
+        onBackPressedDispatcher.addCallback(this, rewardBackBlocker)
         setupSwipeControls()
+        refreshPerkSummary()
         refreshStatusBar()
         refreshAutoToggle()
         // Never allow a FragmentManager-restored maze to run while its
@@ -233,6 +289,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             }
         }
         fragment.arguments = args
+        registerPerkCallbacks(fragment, spec)
         supportFragmentManager.beginTransaction()
             .replace(R.id.fragmentGameHost, fragment)
             .commitNow()
@@ -242,6 +299,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun configureFreshMaze(fragment: GameFragment, spec: MazeStartupSpec) {
+        registerPerkCallbacks(fragment, spec)
         val generation = stateGeneration
         val mazeIndex = controller.state.currentMazeIndex + 1
         fragment.configureAdventureMaze(
@@ -253,6 +311,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             startingPowerUp = spec.startingPowerUp,
             pickupLifetimeSeconds = spec.pickupLifetimeSeconds,
             npcSpawnSpecs = spec.npcSpawnSpecs,
+            runPerkEffects = spec.runPerkEffects,
             onStarted = if (spec.npcSpawnSpecs.any { it.eliteModifier != null }) {
                 { roster ->
                     // The GL callback carries detached data; controller state stays on the UI thread.
@@ -264,6 +323,76 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 }
             } else null
         )
+    }
+
+    private fun registerPerkCallbacks(fragment: GameFragment, spec: MazeStartupSpec) {
+        val callbackGeneration = ++mazeCallbackGeneration
+        val callbackRunSeed = runSeed
+        val mazeIndex = controller.state.currentMazeIndex
+        fun isCurrent(): Boolean = snapshotLifecycle().canPersist &&
+            callbackGeneration == mazeCallbackGeneration && callbackRunSeed == runSeed &&
+            mazeIndex == controller.state.currentMazeIndex &&
+            spec.seed == controller.state.currentMazeSeed &&
+            controller.state.status == AdventureStatus.IN_PROGRESS &&
+            controller.state.pendingReward == null && gameFragment() === fragment
+        fragment.setRunPerkCallbacks(
+            onConsumed = { snapshot ->
+                tickHandler.post {
+                    if (isCurrent()) handlePerkConsumption(snapshot, fragment)
+                }
+            },
+            onEffectApplied = { event ->
+                tickHandler.post {
+                    if (isCurrent() && pendingCommit == null && afterResume == null) {
+                        recordEnginePerkEffect(mazeIndex + 1, event)
+                    }
+                }
+            }
+        )
+    }
+
+    private fun recordEnginePerkEffect(mazeIndex: Int, event: RunPerkEffectEvent) {
+        // Consumption effects are dispatched only after their combined save succeeds.
+        if (event.perkId == RunPerkId.SECOND_WIND) return
+        perkTelemetry.effectApplied(
+            controller.config.difficulty.name, mazeIndex, event.perkId,
+            event.affectedSystem, event.amount
+        )
+    }
+
+    private fun handlePerkConsumption(snapshot: GameEngineSnapshot, fragment: GameFragment) {
+        if (gameFragment() !== fragment || pendingCommit != null || afterResume != null ||
+            acknowledgedConsumptionGeneration == mazeCallbackGeneration ||
+            controller.state.pendingReward != null || transitionPending ||
+            controller.state.status != AdventureStatus.IN_PROGRESS ||
+            !AdventurePerkSnapshotGuard.canCommitConsumption(snapshot, controller.state)) return
+        val perkId = snapshot.pendingConsumedRunPerk ?: return
+        val alreadyConsumed = controller.state.runPerks.firstOrNull { it.id == perkId }?.consumed == true
+        if (!controller.consumePerk(perkId)) return
+        controller.recordMidMazeSnapshot(snapshot)
+        val mazeIndex = controller.state.currentMazeIndex
+        val callbackGeneration = mazeCallbackGeneration
+        // The barrier snapshot and controller charge are one durable transition. Never
+        // acknowledge a failed commit, even if SharedPreferences changed its memory cache.
+        commitTransition {
+            if (gameFragment() !== fragment || callbackGeneration != mazeCallbackGeneration ||
+                mazeIndex != controller.state.currentMazeIndex ||
+                snapshot.seed != controller.state.currentMazeSeed) return@commitTransition
+            if (!alreadyConsumed) {
+                perkTelemetry.consumed(
+                    controller.config.difficulty.name, mazeIndex + 1, perkId, controller.state.runPerks
+                )
+                perkTelemetry.effectApplied(
+                    controller.config.difficulty.name, mazeIndex + 1, perkId, "freeze_pulse_seconds", 1
+                )
+            }
+            refreshPerkSummary()
+            perkFeedback = getString(R.string.adventure_perk_consumed_feedback)
+            Toast.makeText(this, perkFeedback, Toast.LENGTH_LONG).show()
+            acknowledgedConsumptionGeneration = callbackGeneration
+            fragment.acknowledgeRunPerkConsumption(snapshot.seed, perkId)
+            refreshAutoToggle()
+        }
     }
 
     private fun activeEliteModifiers(): Set<EliteNpcModifier> =
@@ -343,6 +472,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     override fun onResume() {
         super.onResume()
         foreground = true
+        if (!snapshotLifecycle().canPresent) return
         val action = afterResume
         afterResume = null
         when {
@@ -361,7 +491,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         inputController.stop()
         // Every reward transition is saved explicitly before its next screen.
         // Never let an old GL snapshot overwrite a pending decision.
-        if (pendingCommit != null || controller.state.pendingReward != null) {
+        if (decisionPending()) {
             super.onPause()
             return
         }
@@ -407,7 +537,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                         mazeIndex != controller.state.currentMazeIndex ||
                         mazeSeed != controller.state.currentMazeSeed ||
                         engineSnapshot.seed != mazeSeed ||
-                        controller.state.pendingReward != null || pendingCommit != null ||
+                        decisionPending() ||
                         controller.state.status != AdventureStatus.IN_PROGRESS
                     ) return@post
                     try {
@@ -422,15 +552,28 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun handleCapturedSnapshot(engineSnapshot: GameEngineSnapshot) {
+        val lifecycle = snapshotLifecycle()
+        if (!lifecycle.canPersist || decisionPending() ||
+            !AdventurePerkSnapshotGuard.accepts(
+                engineSnapshot, controller.state.currentMazeSeed, controller.state.runPerks
+            )) return
+        if (engineSnapshot.pendingConsumedRunPerk != null) {
+            gameFragment()?.let { handlePerkConsumption(engineSnapshot, it) }
+            return
+        }
         when (engineSnapshot.status) {
             GameStatus.WIN, GameStatus.LOSE -> handleTerminalStatus(
                 engineSnapshot.status,
                 engineSnapshot.elapsedSeconds,
                 engineSnapshot.steps
             )
-            else -> {
+            GameStatus.RUNNING, GameStatus.PAUSED -> {
                 controller.recordMidMazeSnapshot(engineSnapshot)
-                persistAdventureStateAsync()
+                if (lifecycle.requiresBlockingPersist) {
+                    persistAdventureStateBlocking()
+                } else {
+                    persistAdventureStateAsync()
+                }
             }
         }
     }
@@ -441,8 +584,12 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         automatedPolicyDialog = null
         rewardDialog?.dismiss()
         rewardDialog = null
+        menuDialog?.dismiss()
+        menuDialog = null
+        gameFragment()?.setRunPerkCallbacks(null, null)
         afterResume = null
         stateGeneration++
+        mazeCallbackGeneration++
         saveSession.close()
         autosaveExecutor.shutdown()
         super.onDestroy()
@@ -457,7 +604,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun persistAdventureStateAsync() {
-        if (pendingCommit != null || controller.state.pendingReward != null ||
+        if (decisionPending() ||
             controller.state.status != AdventureStatus.IN_PROGRESS) return
         val snapshot = AdventureRunStateSnapshot.fromState(controller.state, runSeed)
         try {
@@ -474,7 +621,14 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         automatedPolicyDialog = null
         rewardDialog?.dismiss()
         rewardDialog = null
+        menuDialog?.dismiss()
+        menuDialog = null
         refreshAutoToggle()
+        if (snapshotLifecycle().requiresBlockingPersist) {
+            pendingCommit = null
+            persistAdventureStateBlocking()
+            return
+        }
         savePendingTransition()
     }
 
@@ -505,21 +659,22 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                     if (saved) {
                         val action = pendingCommit
                         pendingCommit = null
-                        if (foreground) action?.invoke() else afterResume = action
+                        if (snapshotLifecycle().canPresent) action?.invoke() else afterResume = action
                     } else {
                         saveFailed = true
-                        if (foreground) showSaveFailure()
+                        if (snapshotLifecycle().canPresent) showSaveFailure()
                     }
                 }
             }
         } catch (_: RejectedExecutionException) {
             saveInFlight = false
             saveFailed = true
-            if (foreground && !isDestroyed) showSaveFailure()
+            if (snapshotLifecycle().canPresent) showSaveFailure()
         }
     }
 
     private fun showSaveFailure() {
+        if (!snapshotLifecycle().canPresent) return
         rewardDialog?.dismiss()
         rewardDialog = AlertDialog.Builder(this)
             .setTitle(R.string.adventure_save_failed_title)
@@ -532,7 +687,15 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     private fun persistAdventureStateBlocking() {
         val snapshot = AdventureRunStateSnapshot.fromState(controller.state, runSeed)
         try {
-            autosaveExecutor.submit { saveSession.write { adventureStore.saveBlocking(snapshot) } }
+            autosaveExecutor.submit {
+                saveSession.write {
+                    if (snapshot.status == AdventureStatus.IN_PROGRESS) {
+                        adventureStore.saveBlocking(snapshot)
+                    } else {
+                        adventureStore.clearBlocking()
+                    }
+                }
+            }
                 .get(SAVE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
         } catch (_: RejectedExecutionException) {
             // Executor shut down — accept the loss rather than calling
@@ -575,7 +738,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun disableAutomatedMovement() {
-        if (controller.state.pendingReward != null || pendingCommit != null) return
+        if (decisionPending()) return
         autoMovementEnabled = false
         controller.setCurrentPlayerPolicy(PlayerPolicyType.MANUAL)
         gameFragment()?.setPlayerPolicy(PlayerPolicyType.MANUAL)
@@ -585,7 +748,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun applyAutomatedPlayerPolicy(policy: PlayerPolicyType) {
-        if (controller.state.pendingReward != null || pendingCommit != null) return
+        if (decisionPending()) return
         if (!controller.setCurrentPlayerPolicy(policy)) {
             autoMovementEnabled = false
             refreshAutoToggle()
@@ -600,7 +763,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun showAutomatedPolicySelector(revertToManualOnCancel: Boolean) {
-        if (controller.state.pendingReward != null || pendingCommit != null) return
+        if (decisionPending()) return
         val policies = availableAutomatedPlayerPolicies()
         if (policies.isEmpty()) {
             autoMovementEnabled = false
@@ -626,7 +789,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun promptForAutomatedPolicyIfNeeded() {
-        if (controller.state.pendingReward != null || pendingCommit != null) return
+        if (decisionPending()) return
         val policies = availableAutomatedPlayerPolicies()
         if (automatedPolicyPromptShown || autoMovementEnabled || policies.isEmpty()) return
         if (gameFragment() == null) return
@@ -641,7 +804,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         if (autoMovementEnabled && validateAndUpdateSelectedAutomatedPolicy() == null) {
             autoMovementEnabled = false
         }
-        val deciding = controller.state.pendingReward != null || pendingCommit != null
+        val deciding = decisionPending()
+        rewardBackBlocker.isEnabled = deciding
         autoToggle.isEnabled = available.isNotEmpty() && !deciding
         menuButton.isEnabled = !deciding
         autoToggle.isChecked = autoMovementEnabled && autoToggle.isEnabled
@@ -659,7 +823,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         automatedPlayerPolicies(controller.state.unlockedPlayerPolicies)
 
     private fun showMenu() {
-        if (controller.state.pendingReward != null || pendingCommit != null) return
+        if (decisionPending()) return
         // Lightweight menu with: Pause/Resume, Legend, Switch player strategy,
         // Pause & Exit. Restart is intentionally omitted in Adventure mode
         // because restarting the engine without going through the controller
@@ -679,18 +843,38 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             add(MenuEntry(R.string.pause_and_exit) { onPauseAndExit() })
         }
         val items = entries.map { getString(it.labelRes) }.toTypedArray()
-        AlertDialog.Builder(this)
+        menuDialog = AlertDialog.Builder(this)
             .setTitle(R.string.adventure_menu_title)
+            .apply {
+                if (controller.state.runPerks.isNotEmpty()) setView(perkMenuView())
+            }
             .setItems(items) { _, which ->
-                if (controller.state.pendingReward == null && pendingCommit == null) {
+                if (!decisionPending()) {
                     entries[which].action()
                 }
             }
             .show()
     }
 
+    private fun perkMenuView(): View {
+        val padding = resources.getDimensionPixelSize(R.dimen.adventure_perk_summary_padding)
+        menuPerkText = TextView(this).apply {
+            text = perkSummary
+            setPadding(padding, padding, padding, padding)
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(ScrollView(this@AdventureActivity).apply {
+                addView(menuPerkText)
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                resources.getDimensionPixelSize(R.dimen.adventure_perk_menu_summary_height)
+            ))
+        }
+    }
+
     private fun showSwitchPlayerStrategy() {
-        if (controller.state.pendingReward != null || pendingCommit != null) return
+        if (decisionPending()) return
         val unlocked = controller.state.unlockedPlayerPolicies.toList()
         if (unlocked.size < 2) return
         val items = unlocked.map { it.label }.toTypedArray()
@@ -698,7 +882,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         AlertDialog.Builder(this)
             .setTitle(R.string.adventure_pick_player_strategy)
             .setSingleChoiceItems(items, current) { dialog, which ->
-                if (controller.state.pendingReward != null || pendingCommit != null) {
+                if (decisionPending()) {
                     dialog.dismiss()
                     return@setSingleChoiceItems
                 }
@@ -721,7 +905,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun onPauseAndExit() {
-        if (controller.state.pendingReward != null || pendingCommit != null) return
+        if (decisionPending()) return
         val frag = gameFragment()
         val hud = frag?.hudState()
         if (hud?.status == GameStatus.RUNNING) {
@@ -734,6 +918,13 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         val engineSnapshot = if (hud?.countdownRemainingSeconds == null) {
             frag?.captureSnapshot()
         } else null
+        if (engineSnapshot?.pendingConsumedRunPerk != null) {
+            frag?.let { handlePerkConsumption(engineSnapshot, it) }
+            return
+        }
+        if (engineSnapshot != null && !AdventurePerkSnapshotGuard.accepts(
+                engineSnapshot, controller.state.currentMazeSeed, controller.state.runPerks
+            )) return
         if (engineSnapshot != null && engineSnapshot.status != GameStatus.WIN
             && engineSnapshot.status != GameStatus.LOSE) {
             controller.recordMidMazeSnapshot(engineSnapshot)
@@ -749,7 +940,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun moveUntilBlocked(direction: Direction) {
-        if (controller.state.pendingReward != null || pendingCommit != null) return
+        if (decisionPending()) return
         val fragment = gameFragment()
         if (inertiaMovementEnabled) {
             fragment?.queueManualMoveUntilBlocked(direction)
@@ -760,7 +951,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     /** Polls the engine status to detect WIN/LOSE transitions exactly once. */
     private fun pollEngineStatus() {
-        if (controller.state.pendingReward != null || pendingCommit != null) return
+        if (decisionPending()) return
         val hud = gameFragment()?.hudState() ?: return
         val status = hud.status
         refreshStatusBar()
@@ -782,6 +973,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun handleTerminalStatus(status: GameStatus, elapsedSeconds: Float, steps: Int) {
+        mazeCallbackGeneration++
         transitionPending = true
         lastObservedStatus = status
         when (status) {
@@ -812,6 +1004,12 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                         controller.config.difficulty.name, pending.mazeIndexCompleted,
                         pending.routeChoices.map { it.id },
                         pending.routeChoices.map { it.category.name.lowercase(java.util.Locale.ROOT) }
+                    )
+                }
+                if (pending?.rewardOptionBonus == 1) {
+                    perkTelemetry.effectApplied(
+                        controller.config.difficulty.name, outcome.mazeIndexCompleted,
+                        RunPerkId.RISK_DIVIDEND, "reward_options", 1
                     )
                 }
                 showPendingReward()
@@ -857,7 +1055,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 outcome.totalSteps,
                 outcome.deathsThisRun,
                 bestMsg
-            ) + bonusMsg
+            ) + bonusMsg + terminalPerkSummary()
         } else getString(R.string.adventure_powerup_prompt) + bonusMsg
 
         val builder = AlertDialog.Builder(this).setTitle(title).setMessage(body).setCancelable(false)
@@ -880,6 +1078,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 completedRoute?.let {
                     routeTelemetry.outcome(it.choiceId, true, elapsedSeconds, steps, 0)
                 }
+                recordPerkRunOutcome(completed = true)
                 rewardDialog = builder.show()
             }
             return
@@ -887,7 +1086,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun showPendingReward() {
-        if (!foreground || pendingCommit != null || isFinishing || isDestroyed) return
+        if (!foreground || pendingCommit != null || afterResume != null || isFinishing || isDestroyed) return
         val pending = controller.state.pendingReward ?: return
         val generation = stateGeneration
         rewardDialog?.dismiss()
@@ -898,13 +1097,21 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 val bonus = if (pending.bonusLifeAwarded) {
                     "\n" + getString(R.string.adventure_bonus_life, controller.state.livesRemaining)
                 } else ""
+                val prompt = when {
+                    pending.perkOffer == null -> R.string.adventure_powerup_prompt
+                    pending.routeChoices.isEmpty() -> R.string.adventure_perk_win_prompt
+                    else -> R.string.adventure_perk_route_win_prompt
+                }
                 builder.setTitle(getString(
                     R.string.adventure_maze_won_title, mazeIndex, controller.config.totalMazes
-                )).setMessage(getString(R.string.adventure_powerup_prompt) + bonus)
+                )).setMessage(getString(prompt) + bonus)
                     .setPositiveButton(R.string.adventure_continue) { _, _ ->
                         if (!acceptRewardCallback(generation, pending)) return@setPositiveButton
                         if (controller.acknowledgeMazeWin(mazeIndex)) {
-                            commitTransition { showPendingReward() }
+                            commitTransition {
+                                recordRewardPerkEffects(pending)
+                                showPendingReward()
+                            }
                         }
                     }
             }
@@ -936,6 +1143,30 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                                         it.npcCountDelta, it.rewardOptionDelta
                                     )
                                 }
+                                recordRewardPerkEffects(pending)
+                                showPendingReward()
+                            }
+                        }
+                    }
+            }
+            RewardStage.PERK_CHOICE -> {
+                val offer = pending.perkOffer ?: return
+                val choices = offer.choices
+                val labels = choices.map { perkText.choice(it, controller.state.runPerks) }.toTypedArray()
+                builder.setTitle(R.string.adventure_perk_chooser_title)
+                    .setSingleChoiceItems(labels, 0, null)
+                    .setPositiveButton(R.string.adventure_continue) { dialog, _ ->
+                        if (!acceptRewardCallback(generation, pending)) return@setPositiveButton
+                        val index = (dialog as AlertDialog).listView.checkedItemPosition
+                        val chosen = choices.getOrNull(index) ?: return@setPositiveButton
+                        if (controller.choosePerk(mazeIndex, chosen)) {
+                            commitTransition {
+                                perkTelemetry.chosen(
+                                    controller.config.difficulty.name, mazeIndex, chosen, choices,
+                                    controller.state.runPerks, controller.state.livesRemaining
+                                )
+                                refreshPerkSummary()
+                                recordRewardPerkEffects(pending)
                                 showPendingReward()
                             }
                         }
@@ -950,10 +1181,13 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                         it.categories.joinToString(", ") { category -> routeCategory(category) }
                     ) + "\n"
                 } ?: ""
+                val scoutPreview = pending.scoutPreview?.let {
+                    getString(R.string.adventure_perk_scout_preview, it.npcCount, it.eliteCount) + "\n"
+                } ?: ""
                 val title = if (pending.selectedRouteId == RouteEventGenerator.SUPPLY_CACHE) {
                     getString(R.string.adventure_route_supply_cache_name)
                 } else getString(R.string.adventure_powerup_prompt)
-                builder.setTitle(preview + title)
+                builder.setTitle(preview + scoutPreview + title)
                     .setSingleChoiceItems(candidates.map { it.label }.toTypedArray(), 0, null)
                     .setPositiveButton(R.string.adventure_continue) { dialog, _ ->
                         if (!acceptRewardCallback(generation, pending)) return@setPositiveButton
@@ -977,8 +1211,26 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun acceptRewardCallback(generation: Long, reward: PendingAdventureReward): Boolean =
-        !isDestroyed && !isFinishing && pendingCommit == null &&
+        !isDestroyed && !isFinishing && foreground && pendingCommit == null && afterResume == null &&
             generation == stateGeneration && controller.state.pendingReward == reward
+
+    private fun recordRewardPerkEffects(previous: PendingAdventureReward) {
+        val pending = controller.state.pendingReward ?: return
+        if (pending.stage == RewardStage.PERK_CHOICE && previous.stage != RewardStage.PERK_CHOICE) {
+            pending.perkOffer?.let {
+                perkTelemetry.offered(
+                    controller.config.difficulty.name, pending.mazeIndexCompleted,
+                    it.choices, controller.state.runPerks
+                )
+            }
+        }
+        if (previous.scoutPreview == null && pending.scoutPreview != null) {
+            perkTelemetry.effectApplied(
+                controller.config.difficulty.name, pending.mazeIndexCompleted + 1,
+                RunPerkId.SCOUT_SENSE, "reward_preview", 1
+            )
+        }
+    }
 
     private fun routeCategory(category: RouteEventCategory): String = getString(when (category) {
         RouteEventCategory.SAFE -> R.string.adventure_route_category_safe
@@ -1005,7 +1257,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     })
 
     private fun advanceToNextMaze() {
-        if (pendingCommit != null) return
+        if (pendingCommit != null || afterResume != null) return
         val spec = controller.prepareCurrentMaze()
         if (spec == null) {
             // Defensive: controller already terminal, return to setup.
@@ -1047,7 +1299,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 AdventureTimeFormatter.format(controller.state.totalElapsedSeconds),
                 controller.state.totalSteps,
                 controller.state.deathsThisRun
-            )
+            ) + terminalPerkSummary()
         else
             ""
         val builder = AlertDialog.Builder(this)
@@ -1081,6 +1333,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                     it.choiceId, false, elapsedSeconds, steps, 1
                 )
             }
+            if (outcome.runOver) recordPerkRunOutcome(completed = false)
             rewardDialog = builder.show()
         }
     }
@@ -1108,6 +1361,30 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         )
         refreshAutoToggle()
     }
+
+    private fun refreshPerkSummary() {
+        val perks = controller.state.runPerks
+        perkSummary = getString(R.string.adventure_perk_summary_title) + "\n" + perkText.expanded(perks)
+        perkStatusBar.text = perkText.compact(perks)
+        perkStatusBar.contentDescription = perkSummary
+        perkStatusBar.visibility = if (perks.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    private fun terminalPerkSummary(): String =
+        if (controller.state.runPerks.isEmpty()) "" else "\n\n$perkSummary"
+
+    private fun recordPerkRunOutcome(completed: Boolean) {
+        perkTelemetry.outcome(
+            controller.config.difficulty.name, controller.config.totalMazes, controller.state.runPerks,
+            completed, controller.state.totalElapsedSeconds, controller.state.deathsThisRun
+        )
+    }
+
+    private fun decisionPending(): Boolean =
+        pendingCommit != null || afterResume != null || controller.state.pendingReward != null
+
+    private fun snapshotLifecycle(): AdventureSnapshotLifecycle =
+        AdventureSnapshotLifecycle.resolve(foreground, isFinishing, isDestroyed)
 
     private fun gameFragment(): GameFragment? {
         return supportFragmentManager.findFragmentById(R.id.fragmentGameHost) as? GameFragment

@@ -175,6 +175,10 @@ class GameEngineSnapshotSchemaCoverageTest {
             GameEngineSnapshot.ActiveEffectSnapshot(
                 type = PowerUpType.INVISIBILITY,
                 remainingSeconds = 2.5f
+            ),
+            GameEngineSnapshot.ActiveEffectSnapshot(
+                type = PowerUpType.FREEZE,
+                remainingSeconds = 1f
             )
         ),
         npcInducedPlayerFreezeRemainingSeconds = 1.75f,
@@ -191,7 +195,9 @@ class GameEngineSnapshotSchemaCoverageTest {
             NpcSpawnSpec(NpcPolicyType.PREDICTIVE_CHASE),
             NpcSpawnSpec(NpcPolicyType.PATROL_GUARD)
         ),
-        powerUpPickupLifetimeOverrideSeconds = 35f
+        powerUpPickupLifetimeOverrideSeconds = 35f,
+        runPerkEffects = RunPerkEffects(2, 3, 1, false),
+        pendingConsumedRunPerk = RunPerkId.SECOND_WIND
     )
 
     /**
@@ -254,6 +260,8 @@ class GameEngineSnapshotSchemaCoverageTest {
         npcCountOverride = null,
         npcPolicies = listOf(NpcPolicyType.PREDICTIVE_CHASE),
         npcSpawnSpecs = null,
-        powerUpPickupLifetimeOverrideSeconds = null
+        powerUpPickupLifetimeOverrideSeconds = null,
+        runPerkEffects = RunPerkEffects(1, 1, 2, true),
+        pendingConsumedRunPerk = null
     )
 }

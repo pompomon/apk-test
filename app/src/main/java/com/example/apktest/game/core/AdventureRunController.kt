@@ -77,7 +77,11 @@ data class AdventureRunState(
     var routeHistory: List<RouteEventHistoryEntry> = emptyList(),
     var nextRouteEventMazeIndex: Int = RouteEventGenerator.FIRST_EVENT_MAZE_INDEX,
     var routeEventOrdinal: Int = 0,
-    var rewardRerolls: Int = 0
+    var rewardRerolls: Int = 0,
+    var runPerks: List<RunPerkStack> = emptyList(),
+    var previousPerkOffer: List<RunPerkId> = emptyList(),
+    var perkOfferOrdinal: Int = 0,
+    var perkHistory: List<RunPerkHistoryEntry> = emptyList()
 ) {
     val currentMazeNpcPolicies: List<NpcPolicyType>
         get() = currentMazeNpcSpawnSpecs.map { it.policyType }
@@ -103,7 +107,8 @@ data class MazeStartupSpec(
      * after engine restart; `null` for mazes with no starting bonus.
      */
     val startingPowerUp: PowerUpType? = null,
-    val pickupLifetimeSeconds: Float? = null
+    val pickupLifetimeSeconds: Float? = null,
+    val runPerkEffects: RunPerkEffects = RunPerkEffects()
 ) {
     val npcPolicies: List<NpcPolicyType>
         get() = npcSpawnSpecs.map { it.policyType }
@@ -161,9 +166,13 @@ class AdventureRunController(
         config.difficulty.name == DifficultyPresets.MEDIUM.name,
     private val elitesEnabled: Boolean = AdventureFeatureFlags.ELITE_NPC_MODIFIERS_ENABLED &&
         (config.difficulty.name == DifficultyPresets.MEDIUM.name ||
-            config.difficulty.name == DifficultyPresets.HARD.name)
+            config.difficulty.name == DifficultyPresets.HARD.name),
+    private val perksEnabled: Boolean = AdventureFeatureFlags.RUN_BUILD_PERKS_ENABLED &&
+        config.difficulty.name == DifficultyPresets.MEDIUM.name,
+    private val perkTiers: Set<RunPerkTier> = setOf(RunPerkTier.COMMON)
 ) {
     private val routeGenerator = RouteEventGenerator(config, runSeed)
+    private val perkGenerator = RunPerkGenerator(runSeed)
     val state: AdventureRunState = initialState ?: AdventureRunState(
         difficultyName = config.difficulty.name,
         livesRemaining = config.initialLives
@@ -202,7 +211,8 @@ class AdventureRunController(
             playerPolicy = state.currentPlayerPolicy,
             midMazeSnapshot = state.currentMazeSnapshot,
             startingPowerUp = state.pendingStartingPowerUp,
-            pickupLifetimeSeconds = state.activeRoute?.pickupLifetimeSeconds
+            pickupLifetimeSeconds = state.activeRoute?.pickupLifetimeSeconds,
+            runPerkEffects = RunPerkEffects.fromStacks(state.runPerks)
         )
     }
 
@@ -231,6 +241,7 @@ class AdventureRunController(
      */
     fun completeMaze(elapsedSeconds: Float = 0f, steps: Int = 0): WinOutcome {
         state.pendingReward?.let { return pendingWinOutcome(it) }
+        val riskDividendRoute = earnedRiskDividendRoute()
         val outcome = onMazeWon(elapsedSeconds, steps)
         if (outcome.runComplete) return outcome
         var choices = emptyList<RouteEventChoice>()
@@ -244,21 +255,32 @@ class AdventureRunController(
             )
             state.routeEventOrdinal += 1
         }
+        val perkOffer = if (perksEnabled && outcome.mazeIndexCompleted in RunPerkGenerator.OFFER_MAZES) {
+            perkGenerator.offer(outcome.mazeIndexCompleted, state.perkOfferOrdinal,
+                state.runPerks, state.previousPerkOffer, perkTiers, routesEnabled)
+        } else null
+        if (perkOffer != null) {
+            state.previousPerkOffer = perkOffer.choices.toList()
+            state.perkOfferOrdinal += 1
+        }
         state.pendingReward = PendingAdventureReward(
             mazeIndexCompleted = outcome.mazeIndexCompleted,
             stage = RewardStage.WIN_ACKNOWLEDGEMENT,
             routeChoices = choices,
             powerUpCandidates = outcome.startingPowerUpCandidates.toList(),
-            bonusLifeAwarded = outcome.bonusLifeAwarded
+            bonusLifeAwarded = outcome.bonusLifeAwarded,
+            perkOffer = perkOffer,
+            rewardOptionBonus = if (riskDividendRoute != null) 1 else 0,
+            riskDividendRouteId = riskDividendRoute
         )
         return outcome
     }
 
     fun acknowledgeMazeWin(mazeIndexCompleted: Int): Boolean {
         val reward = rewardAt(mazeIndexCompleted, RewardStage.WIN_ACKNOWLEDGEMENT) ?: return false
-        state.pendingReward = reward.copy(stage = if (reward.routeChoices.isEmpty()) {
-            RewardStage.POWER_UP_CHOICE
-        } else RewardStage.ROUTE_CHOICE)
+        state.pendingReward = if (reward.routeChoices.isEmpty()) {
+            withScoutPreview(reward.copy(stage = nextRewardStage(reward)))
+        } else reward.copy(stage = RewardStage.ROUTE_CHOICE)
         return true
     }
 
@@ -277,12 +299,58 @@ class AdventureRunController(
                 state.currentMazeNpcCount!!
             )
         } else null
-        state.pendingReward = reward.copy(
-            stage = RewardStage.POWER_UP_CHOICE,
+        state.pendingReward = withScoutPreview(reward.copy(
+            stage = nextRewardStage(reward),
             selectedRouteId = choiceId,
-            powerUpCandidates = reward.powerUpCandidates.take(REWARD_SAMPLE_SIZE + route.rewardOptionDelta),
+            powerUpCandidates = reward.powerUpCandidates.take(
+                REWARD_SAMPLE_SIZE + route.rewardOptionDelta + reward.rewardOptionBonus),
             preview = preview
-        )
+        ))
+        return true
+    }
+
+    private fun nextRewardStage(reward: PendingAdventureReward): RewardStage =
+        if (reward.perkOffer != null && reward.selectedPerkId == null) RewardStage.PERK_CHOICE
+        else RewardStage.POWER_UP_CHOICE
+
+    private fun withScoutPreview(reward: PendingAdventureReward): PendingAdventureReward {
+        if (state.runPerks.none { it.id == RunPerkId.SCOUT_SENSE }) return reward
+        lockCurrentMaze()
+        val seed = state.currentMazeSeed!!
+        val maze = MazeGenerator.generate(config.difficulty.mazeWidth, config.difficulty.mazeHeight, seed)
+        val plan = NpcSpawnPlanner.plan(maze, MazeNavigator(maze), config.difficulty, Random(seed))
+        val actualSpecs = state.currentMazeNpcSpawnSpecs.take(plan.candidates.size)
+        return reward.copy(scoutPreview = PerkScoutPreview(
+            npcCount = actualSpecs.size,
+            eliteCount = actualSpecs.count { it.eliteModifier != null }
+        ))
+    }
+
+    fun choosePerk(mazeIndexCompleted: Int, id: RunPerkId): Boolean {
+        val reward = rewardAt(mazeIndexCompleted, RewardStage.PERK_CHOICE) ?: return false
+        val offer = reward.perkOffer ?: return false
+        if (id !in offer.choices || reward.selectedPerkId != null) return false
+        val definition = RunPerkCatalogue.definition(id)
+        val owned = state.runPerks.firstOrNull { it.id == id }
+        if (!definition.available || (owned?.stacks ?: 0) >= definition.maxStacks) return false
+        state.runPerks = if (owned == null) state.runPerks + RunPerkStack(id, 1)
+        else state.runPerks.map { if (it.id == id) it.copy(stacks = it.stacks + 1) else it }
+        state.perkHistory = state.perkHistory + RunPerkHistoryEntry(offer.detachedCopy(), id)
+        state.pendingReward = withScoutPreview(reward.copy(
+            selectedPerkId = id, stage = RewardStage.POWER_UP_CHOICE
+        ))
+        return true
+    }
+
+    /** The host persists this transition and the paused engine barrier together before resuming. */
+    fun consumePerk(id: RunPerkId): Boolean {
+        if (id != RunPerkId.SECOND_WIND) return false
+        val perk = state.runPerks.firstOrNull { it.id == id } ?: return false
+        if (perk.consumed) return true
+        if (state.status != AdventureStatus.IN_PROGRESS || state.pendingReward != null ||
+            state.currentMazeSeed == null) return false
+        state.runPerks = state.runPerks.map { if (it.id == id) it.copy(consumed = true) else it }
+        state.currentMazeSnapshot = null
         return true
     }
 
@@ -338,6 +406,7 @@ class AdventureRunController(
         val sanitizedElapsed = if (elapsedSeconds.isFinite()) elapsedSeconds.coerceAtLeast(0f) else 0f
         state.totalElapsedSeconds += sanitizedElapsed
         state.totalSteps += steps.coerceAtLeast(0)
+        val riskDividendRoute = earnedRiskDividendRoute()
         val newIndex = state.currentMazeIndex + 1
         state.currentMazeIndex = newIndex
         if (newIndex == 1) {
@@ -372,7 +441,7 @@ class AdventureRunController(
         }
 
         val powerUpCandidates = if (runComplete) emptyList()
-        else sampleStartingPowerUps(REWARD_SAMPLE_SIZE, newIndex)
+        else sampleStartingPowerUps(REWARD_SAMPLE_SIZE + if (riskDividendRoute != null) 1 else 0, newIndex)
 
         return WinOutcome(
             livesRemaining = state.livesRemaining,
@@ -386,6 +455,13 @@ class AdventureRunController(
             deathsThisRun = state.deathsThisRun
         )
     }
+
+    private fun earnedRiskDividendRoute(): String? =
+        state.activeRoute?.takeIf {
+            it.mazeIndexAppliedTo == state.currentMazeIndex + 1 &&
+                RouteEventGenerator.choice(it.choiceId)?.category == RouteEventCategory.RISKY &&
+                state.runPerks.any { perk -> perk.id == RunPerkId.RISK_DIVIDEND }
+        }?.choiceId
 
     /**
      * Deterministically samples up to [count] [PowerUpType]s (excluding
@@ -481,7 +557,9 @@ class AdventureRunController(
     fun recordMidMazeSnapshot(engineSnapshot: GameEngineSnapshot) {
         if (state.status != AdventureStatus.IN_PROGRESS || state.pendingReward != null) return
         if (!engineSnapshot.matchesAdventureMaze(state.difficultyName, state.currentMazeSeed,
-                state.currentMazeNpcCount, state.currentMazeNpcSpawnSpecs, state.activeRoute?.pickupLifetimeSeconds)) return
+                state.currentMazeNpcCount, state.currentMazeNpcSpawnSpecs, state.activeRoute?.pickupLifetimeSeconds,
+                RunPerkEffects.fromStacks(state.runPerks),
+                state.runPerks.any { it.id == RunPerkId.SECOND_WIND && it.consumed })) return
         state.currentMazeSnapshot = engineSnapshot
     }
 

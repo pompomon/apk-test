@@ -41,7 +41,11 @@ data class AdventureRunStateSnapshot(
     val routeHistory: List<RouteEventHistoryEntry> = emptyList(),
     val nextRouteEventMazeIndex: Int = RouteEventGenerator.FIRST_EVENT_MAZE_INDEX,
     val routeEventOrdinal: Int = 0,
-    val rewardRerolls: Int = 0
+    val rewardRerolls: Int = 0,
+    val runPerks: List<RunPerkStack> = emptyList(),
+    val previousPerkOffer: List<RunPerkId> = emptyList(),
+    val perkOfferOrdinal: Int = 0,
+    val perkHistory: List<RunPerkHistoryEntry> = emptyList()
 ) {
     val currentMazeNpcPolicies: List<NpcPolicyType>
         get() = currentMazeNpcSpawnSpecs.map { it.policyType }
@@ -82,14 +86,17 @@ data class AdventureRunStateSnapshot(
         put(KEY_NEXT_ROUTE_INDEX, nextRouteEventMazeIndex)
         put(KEY_ROUTE_ORDINAL, routeEventOrdinal)
         put(KEY_REWARD_REROLLS, rewardRerolls)
+        put(KEY_RUN_PERKS, AdventurePerkSnapshotCodec.stacksToJson(runPerks))
+        put(KEY_PREVIOUS_PERK_OFFER, AdventurePerkSnapshotCodec.idsToJson(previousPerkOffer))
+        put(KEY_PERK_ORDINAL, perkOfferOrdinal)
+        put(KEY_PERK_HISTORY, AdventurePerkSnapshotCodec.historyToJson(perkHistory))
     }.toString()
 
     companion object {
-        // v4 requires locked per-NPC policies and explicit nullable elite modifier IDs.
-        // Older saves cannot establish a complete modifier assignment.
+        // v5 adds run builds, exact perk offers, acquisition provenance, and one-shot consumption.
         // Route mechanics/balance changes need a schema bump: resolved effects are
         // checked against the supplied configuration, not silently reinterpreted.
-        const val SCHEMA_VERSION = 4
+        const val SCHEMA_VERSION = 5
 
         private const val KEY_VERSION = "v"
         private const val KEY_RUN_SEED = "runSeed"
@@ -116,6 +123,10 @@ data class AdventureRunStateSnapshot(
         private const val KEY_NEXT_ROUTE_INDEX = "nextRouteEventMazeIndex"
         private const val KEY_ROUTE_ORDINAL = "routeEventOrdinal"
         private const val KEY_REWARD_REROLLS = "rewardRerolls"
+        private const val KEY_RUN_PERKS = "runPerks"
+        private const val KEY_PREVIOUS_PERK_OFFER = "previousPerkOffer"
+        private const val KEY_PERK_ORDINAL = "perkOfferOrdinal"
+        private const val KEY_PERK_HISTORY = "perkHistory"
 
         fun fromState(state: AdventureRunState, runSeed: Long): AdventureRunStateSnapshot =
             AdventureRunStateSnapshot(
@@ -142,7 +153,11 @@ data class AdventureRunStateSnapshot(
                 routeHistory = state.routeHistory.toList(),
                 nextRouteEventMazeIndex = state.nextRouteEventMazeIndex,
                 routeEventOrdinal = state.routeEventOrdinal,
-                rewardRerolls = state.rewardRerolls
+                rewardRerolls = state.rewardRerolls,
+                runPerks = state.runPerks.toList(),
+                previousPerkOffer = state.previousPerkOffer.toList(),
+                perkOfferOrdinal = state.perkOfferOrdinal,
+                perkHistory = state.perkHistory.map { it.detachedCopy() }
             )
 
         fun fromJson(json: String): AdventureRunStateSnapshot? = parseJson(json, null)
@@ -233,7 +248,11 @@ data class AdventureRunStateSnapshot(
                     routeHistory = AdventureRouteSnapshotCodec.historyFromJson(obj.getJSONArray(KEY_ROUTE_HISTORY)),
                     nextRouteEventMazeIndex = obj.requiredInt(KEY_NEXT_ROUTE_INDEX),
                     routeEventOrdinal = obj.requiredInt(KEY_ROUTE_ORDINAL),
-                    rewardRerolls = obj.requiredInt(KEY_REWARD_REROLLS)
+                    rewardRerolls = obj.requiredInt(KEY_REWARD_REROLLS),
+                    runPerks = AdventurePerkSnapshotCodec.stacksFromJson(obj.getJSONArray(KEY_RUN_PERKS)),
+                    previousPerkOffer = AdventurePerkSnapshotCodec.idsFromJson(obj.getJSONArray(KEY_PREVIOUS_PERK_OFFER)),
+                    perkOfferOrdinal = obj.requiredInt(KEY_PERK_ORDINAL),
+                    perkHistory = AdventurePerkSnapshotCodec.historyFromJson(obj.getJSONArray(KEY_PERK_HISTORY))
                 )
 
                 // Reject unknown difficulty names outright. The Adventure
@@ -255,8 +274,18 @@ data class AdventureRunStateSnapshot(
                 if (snapshot.deathsThisRun < 0) return null
                 val config = expectedConfig ?: AdventureConfig.forDifficultyName(snapshot.difficultyName)
                 if (!AdventureRouteSnapshotCodec.isConsistent(snapshot, config)) return null
+                if (!AdventurePerkSnapshotCodec.isConsistent(snapshot, config)) return null
                 if (mazeSnapshotJson != null && snapshot.pendingReward == null &&
                     snapshot.status == AdventureStatus.IN_PROGRESS && snapshot.currentMazeSeed == null) return null
+                // A valid engine barrier proves the one-shot fired. Recover the atomic
+                // consumption before exposing the run, never by re-enabling the engine perk.
+                if (mazeSnapshot?.pendingConsumedRunPerk == RunPerkId.SECOND_WIND &&
+                    snapshot.runPerks.any { it.id == RunPerkId.SECOND_WIND && !it.consumed }) {
+                    val reconciled = snapshot.copy(runPerks = snapshot.runPerks.map {
+                        if (it.id == RunPerkId.SECOND_WIND) it.copy(consumed = true) else it
+                    })
+                    if (reconciled.matchesLockedMaze(mazeSnapshot)) return reconciled
+                }
                 // MANUAL invariant was enforced above by re-adding it if absent.
                 if (mazeSnapshot != null && !snapshot.matchesLockedMaze(mazeSnapshot)) {
                     snapshot.copy(currentMazeSnapshot = null)
@@ -296,13 +325,19 @@ data class AdventureRunStateSnapshot(
         routeHistory = routeHistory.toList(),
         nextRouteEventMazeIndex = nextRouteEventMazeIndex,
         routeEventOrdinal = routeEventOrdinal,
-        rewardRerolls = rewardRerolls
+        rewardRerolls = rewardRerolls,
+        runPerks = runPerks.toList(),
+        previousPerkOffer = previousPerkOffer.toList(),
+        perkOfferOrdinal = perkOfferOrdinal,
+        perkHistory = perkHistory.map { it.detachedCopy() }
     )
 
     private fun matchesLockedMaze(engine: GameEngineSnapshot): Boolean =
         status == AdventureStatus.IN_PROGRESS && pendingReward == null &&
             engine.matchesAdventureMaze(difficultyName, currentMazeSeed, currentMazeNpcCount,
-                currentMazeNpcSpawnSpecs, activeRoute?.pickupLifetimeSeconds)
+                currentMazeNpcSpawnSpecs, activeRoute?.pickupLifetimeSeconds,
+                RunPerkEffects.fromStacks(runPerks),
+                runPerks.any { it.id == RunPerkId.SECOND_WIND && it.consumed })
 }
 
 internal fun GameEngineSnapshot.matchesAdventureMaze(
@@ -310,11 +345,17 @@ internal fun GameEngineSnapshot.matchesAdventureMaze(
     mazeSeed: Long?,
     npcCount: Int?,
     spawnSpecs: List<NpcSpawnSpec>,
-    lifetime: Float?
+    lifetime: Float?,
+    expectedRunPerkEffects: RunPerkEffects = RunPerkEffects(),
+    secondWindConsumed: Boolean = false
 ): Boolean =
     mazeSeed != null && npcCount != null && (status == GameStatus.RUNNING || status == GameStatus.PAUSED) &&
         difficultyName == difficulty && seed == mazeSeed && npcCountOverride == npcCount &&
         npcCount == spawnSpecs.size && powerUpPickupLifetimeOverrideSeconds == lifetime &&
+        runPerkEffects == expectedRunPerkEffects && hasValidRunPerkConfiguration() &&
+        (pendingConsumedRunPerk == null ||
+            (pendingConsumedRunPerk == RunPerkId.SECOND_WIND && secondWindConsumed &&
+                !runPerkEffects.secondWindAvailable)) &&
         npcSpawnSpecs == spawnSpecs && npcPolicies.size == npcs.size &&
         npcs.map { it.id }.distinct().size == npcs.size &&
         npcs.indices.all { index ->

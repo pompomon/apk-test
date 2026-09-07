@@ -12,6 +12,10 @@ enum class PowerUpStackPolicy {
     STACK
 }
 
+internal enum class PowerUpCollector { PLAYER, ADVENTURER, NPC }
+
+internal enum class PowerUpActivationSource { PICKUP, STARTING_REWARD, RUN_PERK }
+
 data class PowerUpMetadata(
     val kind: PowerUpEffectKind,
     val defaultDurationSeconds: Float,
