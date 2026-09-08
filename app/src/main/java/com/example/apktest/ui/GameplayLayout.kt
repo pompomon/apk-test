@@ -112,7 +112,9 @@ object GameplayLayout {
                 val metrics = button.paint.fontMetricsInt
                 val lineHeight = maxOf(ceil(button.paint.fontSpacing).toInt(),
                     metrics.descent - metrics.ascent + metrics.leading)
-                lineHeight * button.maxLines + textPadding
+                // Fallback glyphs can make TextView's actual lines taller than its primary font.
+                maxOf(lineHeight * button.maxLines, button.layout?.height ?: 0) +
+                    button.compoundPaddingTop + button.compoundPaddingBottom
             }
             val primary = root.findViewById<TextView>(R.id.adventureStatusBar)
                 ?: root.findViewById<TextView>(R.id.gameplayTitle)
