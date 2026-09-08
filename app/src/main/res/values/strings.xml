@@ -15,6 +15,17 @@
     <string name="auto_move_description">Toggle automated movement</string>
     <string name="inertia_move">Glide</string>
     <string name="inertia_move_description">Toggle inertia movement</string>
+    <string name="gameplay_classic_title">Classic</string>
+    <string name="glide_on">Glide ✓</string>
+    <string name="glide_off">Glide</string>
+    <string name="auto_on">Auto ✓</string>
+    <string name="auto_off">Auto</string>
+    <string name="auto_locked">Locked</string>
+    <string name="auto_waiting">Wait</string>
+    <string name="auto_locked_hint">Auto unlocks after maze 1</string>
+    <string name="auto_waiting_hint">Finish the current choice to use Auto</string>
+    <string name="control_state_on">On</string>
+    <string name="control_state_off">Off</string>
     <string name="pick_automated_player_strategy">Choose automated player strategy</string>
     <string name="status_running">Running</string>
     <string name="status_paused">Paused</string>
@@ -78,6 +89,10 @@
     </plurals>
     <string name="adventure_status_format">Maze %1$d/%2$d · Time %3$s · Steps %4$d · Lives %5$d · Streak %6$d/%7$d</string>
     <string name="adventure_status_default">Adventure: —</string>
+    <string name="adventure_hud_primary">Maze %1$d/%2$d · Lives %3$d</string>
+    <string name="adventure_hud_completed">Completed mazes: %1$s · %2$d steps</string>
+    <string name="adventure_hud_streak">Bonus life: %1$d/%2$d</string>
+    <string name="adventure_hud_streak_description">%1$d of %2$d progress toward a bonus life. Consecutive wins build progress; being caught resets it.</string>
     <string name="adventure_maze_won_title">Maze %1$d of %2$d cleared!</string>
     <string name="adventure_bonus_life">Bonus life awarded! Lives: %1$d</string>
     <string name="adventure_powerup_prompt">Choose a power-up to start the next maze with:</string>

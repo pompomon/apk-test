@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/bottomControls"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layoutDirection="ltr"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="@dimen/maze_dpad_container_padding">
+
+    <LinearLayout
+        android:id="@+id/controlTopRow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <ToggleButton
+            android:id="@+id/buttonInertia"
+            style="@style/GameplayControl.Toggle"
+            android:checked="true"
+            android:contentDescription="@string/inertia_move_description"
+            android:textOff="@string/glide_off"
+            android:textOn="@string/glide_on" />
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/buttonUp"
+            style="@style/GameplayControl.Direction"
+            android:layout_marginStart="@dimen/maze_dpad_button_gap"
+            android:contentDescription="@string/move_up_description"
+            app:srcCompat="@drawable/ic_move_up" />
+
+        <ToggleButton
+            android:id="@+id/buttonAuto"
+            style="@style/GameplayControl.Toggle"
+            android:layout_marginStart="@dimen/maze_dpad_button_gap"
+            android:contentDescription="@string/auto_move_description"
+            android:textOff="@string/auto_off"
+            android:textOn="@string/auto_on" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/controlBottomRow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/game_control_row_gap"
+        android:orientation="horizontal">
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/buttonLeft"
+            style="@style/GameplayControl.Direction"
+            android:contentDescription="@string/move_left_description"
+            app:srcCompat="@drawable/ic_move_left" />
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/buttonDown"
+            style="@style/GameplayControl.Direction"
+            android:layout_marginStart="@dimen/maze_dpad_button_gap"
+            android:contentDescription="@string/move_down_description"
+            app:srcCompat="@drawable/ic_move_down" />
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/buttonRight"
+            style="@style/GameplayControl.Direction"
+            android:layout_marginStart="@dimen/maze_dpad_button_gap"
+            android:contentDescription="@string/move_right_description"
+            app:srcCompat="@drawable/ic_move_right" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/controlHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/game_control_row_gap"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="3"
+        android:textColor="@color/game_text_secondary"
+        android:textSize="@dimen/game_control_hint_text_size"
+        android:accessibilityLiveRegion="polite"
+        android:visibility="gone" />
+</LinearLayout>

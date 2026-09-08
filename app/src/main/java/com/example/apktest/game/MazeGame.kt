@@ -17,7 +17,7 @@ import com.example.apktest.game.render.MazeRenderer
 import com.example.apktest.game.ui.HudState
 import java.util.concurrent.atomic.AtomicReference
 
-class MazeGame : ApplicationAdapter() {
+class MazeGame(private val showEndOverlay: Boolean = true) : ApplicationAdapter() {
     private val renderer = MazeRenderer()
     private val engine = GameEngine(difficultyPreset = DifficultyPresets.MEDIUM)
     private val runPerkCallbacks = RunPerkCallbackBridge(engine)
@@ -60,7 +60,7 @@ class MazeGame : ApplicationAdapter() {
         }
         runPerkCallbacks.dispatch()
 
-        renderer.render(engine)
+        renderer.render(engine, showEndOverlay = showEndOverlay)
         if (stepped || ranCommand) {
             lastHudState = engine.hudState()
         }

@@ -11,9 +11,6 @@ import android.widget.ToggleButton
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
 import com.badlogic.gdx.backends.android.AndroidFragmentApplication
 import com.example.apktest.game.GameFragment
 import com.example.apktest.game.core.DifficultyPresets
@@ -24,6 +21,8 @@ import com.example.apktest.game.core.NpcPolicyType
 import com.example.apktest.game.core.PlayerPolicyType
 import com.example.apktest.game.core.automatedPlayerPolicies
 import com.example.apktest.ui.GameInputController
+import com.example.apktest.ui.GameControlsPresentation
+import com.example.apktest.ui.GameplayLayout
 import com.example.apktest.ui.GameMenuPopover
 import com.example.apktest.ui.LegendDialog
 import java.util.concurrent.ExecutorService
@@ -35,6 +34,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private lateinit var menuButton: ImageButton
     private lateinit var autoToggle: ToggleButton
     private lateinit var inertiaToggle: ToggleButton
+    private val controlsPresentation by lazy { GameControlsPresentation(this) }
     private lateinit var stateStore: GameStateStore
     private val autosaveExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val inputController = GameInputController(
@@ -93,17 +93,12 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
 
         stateStore = GameStateStore(this)
 
         val root = findViewById<View>(R.id.root)
-        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
-            insets
-        }
+        GameplayLayout.bind(this, root)
 
         menuButton = findViewById(R.id.buttonMenu)
         autoToggle = findViewById(R.id.buttonAuto)
@@ -335,6 +330,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
         inertiaToggle.isChecked = inertiaMovementEnabled
         inertiaToggle.setOnClickListener {
             inertiaMovementEnabled = inertiaToggle.isChecked
+            controlsPresentation.update(automatedPlayerPolicies().isNotEmpty())
         }
         autoToggle.setOnClickListener {
             if (autoToggle.isChecked) {
@@ -406,6 +402,7 @@ class MainActivity : AppCompatActivity(), AndroidFragmentApplication.Callbacks {
     private fun refreshAutoToggle() {
         autoToggle.isEnabled = automatedPlayerPolicies().isNotEmpty()
         autoToggle.isChecked = autoMovementEnabled && autoToggle.isEnabled
+        controlsPresentation.update(autoToggle.isEnabled)
     }
 
     private fun showMenuPopover() {

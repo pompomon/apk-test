@@ -2,6 +2,10 @@ package com.example.apktest.ui
 
 import android.content.Context
 import android.graphics.Typeface
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -11,6 +15,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import com.example.apktest.R
 import com.example.apktest.game.core.EliteNpcModifier
 import com.example.apktest.game.core.NpcPolicyType
@@ -126,6 +131,7 @@ object LegendDialog {
         return TextView(context).apply {
             setText(stringRes)
             setTypeface(typeface, Typeface.BOLD)
+            setTextColor(ContextCompat.getColor(context, R.color.maze_status_text))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -175,7 +181,14 @@ object LegendDialog {
 
     private fun rowText(context: Context, label: String, description: String): TextView {
         return TextView(context).apply {
-            text = label + "\n" + description
+            text = SpannableString(label + "\n" + description).apply {
+                setSpan(StyleSpan(Typeface.BOLD), 0, label.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                setSpan(
+                    ForegroundColorSpan(ContextCompat.getColor(context, R.color.maze_status_text)),
+                    0, label.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+            setTextColor(ContextCompat.getColor(context, R.color.maze_speed_text))
             setPadding(dp(context, 12f), 0, 0, 0)
             layoutParams = LinearLayout.LayoutParams(
                 0,

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="@dimen/game_control_icon_size"
+    android:height="@dimen/game_control_icon_size"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path android:fillColor="@android:color/white"
+        android:pathData="M21,10v4h-3v3h-3v3h-3v-6H3v-4h9V4h3v3h3v3z" />
+</vector>

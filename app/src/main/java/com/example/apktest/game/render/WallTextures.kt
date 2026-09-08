@@ -19,12 +19,12 @@ import com.badlogic.gdx.graphics.Color
  * `MazeRenderer.WALL_THICKNESS`, currently 0.18 of a cell).
  */
 object WallTextures {
-    // Stone brick palette — brown/green dungeon look.
-    val stoneDark = Color(0.18f, 0.12f, 0.08f, 1f)   // grout / shadow
-    val stoneMid = Color(0.36f, 0.24f, 0.16f, 1f)    // brick body
-    val stoneLight = Color(0.50f, 0.35f, 0.22f, 1f)  // highlight
-    val mossDark = Color(0.15f, 0.32f, 0.12f, 1f)    // moss shadow
-    val mossLight = Color(0.32f, 0.55f, 0.22f, 1f)   // moss / bush highlight
+    // Warm faces stay readable above the quiet floor; moss remains secondary.
+    val stoneDark = Color(0.30f, 0.235f, 0.17f, 1f) // grout / shadow
+    val stoneMid = Color(0.52f, 0.385f, 0.265f, 1f) // brick body
+    val stoneLight = Color(0.73f, 0.57f, 0.39f, 1f) // highlight
+    val mossDark = Color(0.31f, 0.36f, 0.24f, 1f)   // moss shadow
+    val mossLight = Color(0.46f, 0.51f, 0.32f, 1f)  // moss / bush highlight
 
     private val basePalette: Map<Char, Color> = mapOf(
         '.' to stoneDark,

@@ -152,21 +152,22 @@ internal object PowerUpTinting {
 
 /**
  * Pixel-art sprite definitions for in-game entities (player hero, NPC monster,
- * wooden-door exit). Kept as a small data-only object so the renderer reads
+ * cyan doorway exit). Kept as a small data-only object so the renderer reads
  * them by name without per-frame allocation.
  */
 object Sprites {
-    // Hero: friendly explorer with a hat, face and limbs (7x7).
+    // Hero: broad blue brim and pale scarf, distinct even under effect tints.
     private val heroPalette = mapOf(
         'H' to Color(0.22f, 0.34f, 0.78f, 1f), // hat / tunic (deep blue)
         'S' to Color(0.97f, 0.83f, 0.68f, 1f), // skin
+        'C' to Color(0.91f, 0.96f, 1f, 1f),   // scarf
         'B' to Color(0.40f, 0.27f, 0.16f, 1f), // belt / boots
         'E' to Color(0.05f, 0.05f, 0.08f, 1f)  // eyes / outline
     )
     private val adventurerPalette = mapOf(
-        'H' to Color(0.16f, 0.64f, 0.34f, 1f), // hat / tunic (green)
+        'H' to Color(0.16f, 0.64f, 0.34f, 1f), // hood / tunic (green)
         'S' to Color(0.97f, 0.83f, 0.68f, 1f), // skin
-        'B' to Color(0.55f, 0.34f, 0.12f, 1f), // belt / boots
+        'B' to Color(0.55f, 0.34f, 0.12f, 1f), // backpack / belt / boots
         'E' to Color(0.05f, 0.05f, 0.08f, 1f)  // eyes / outline
     )
     // Idle: legs together / boots planted.
@@ -174,7 +175,7 @@ object Sprites {
         "0HHHHH0",
         "HHHHHHH",
         "0SESES0",
-        "0SSSSS0",
+        "0SCCCS0",
         "0HHHHH0",
         "0HHBHH0",
         "0B000B0"
@@ -184,7 +185,7 @@ object Sprites {
         "0HHHHH0",
         "HHHHHHH",
         "0SESES0",
-        "0SSSSS0",
+        "0SCCCS0",
         "0HHHHH0",
         "0HHBHH0",
         "B0000B0"
@@ -194,7 +195,7 @@ object Sprites {
         "0HHHHH0",
         "HHHHHHH",
         "0SESES0",
-        "0SSSSS0",
+        "0SCCCS0",
         "0HHHHH0",
         "0HHBHH0",
         "0B0000B"
@@ -202,8 +203,37 @@ object Sprites {
     /** Backwards-compatible alias for the legacy single-frame hero pattern. */
     val hero: Array<String> = heroIdle
     val heroFrames: Array<Array<String>> = arrayOf(heroIdle, heroStep1, heroStep2)
-    val adventurerIdle: Array<String> = heroIdle
-    val adventurerFrames: Array<Array<String>> = heroFrames
+    // Adventurer: pointed hood, narrow shoulders and a side backpack. These
+    // same idle pixels/palette feed AdventurerIcons for the Android legend.
+    val adventurerIdle: Array<String> = arrayOf(
+        "000H000",
+        "00HHH00",
+        "0HESEH0",
+        "00SSSB0",
+        "00HHHBB",
+        "00HBHB0",
+        "00B0B00"
+    )
+    val adventurerStep1: Array<String> = arrayOf(
+        "000H000",
+        "00HHH00",
+        "0HESEH0",
+        "00SSSB0",
+        "00HHHBB",
+        "00HBHB0",
+        "0B00B00"
+    )
+    val adventurerStep2: Array<String> = arrayOf(
+        "000H000",
+        "00HHH00",
+        "0HESEH0",
+        "00SSSB0",
+        "00HHHBB",
+        "00HBHB0",
+        "00B00B0"
+    )
+    val adventurerFrames: Array<Array<String>> =
+        arrayOf(adventurerIdle, adventurerStep1, adventurerStep2)
 
     // Monster: red goblin/ghost with white eyes and jagged bottom (7x7).
     // The default palette below preserves the legacy DIRECT_CHASE colors and is
@@ -278,21 +308,20 @@ object Sprites {
     val monster: Array<String> = monsterIdle
     val monsterFrames: Array<Array<String>> = arrayOf(monsterIdle, monsterStep1, monsterStep2)
 
-    // Exit: neon portal door with bright frame, energy panels, and core (7x7).
+    // A single cyan arch and pale handle read as an exit, not another pickup.
     private val doorPalette = mapOf(
-        'F' to Color(0.00f, 1.00f, 0.95f, 1f), // cyan neon frame
-        'P' to Color(0.30f, 0.05f, 0.75f, 1f), // violet portal body
-        'L' to Color(0.95f, 1.00f, 0.25f, 1f), // electric highlight
-        'K' to Color(1.00f, 0.15f, 0.95f, 1f), // magenta core
-        'E' to Color(0.02f, 0.02f, 0.08f, 1f)  // dark contrast outline
+        'F' to ScenePalette.exitCyan,
+        'P' to Color(0.07f, 0.24f, 0.27f, 1f), // recessed doorway
+        'L' to Color(0.79f, 0.99f, 1f, 1f),    // handle
+        'E' to Color(0.03f, 0.08f, 0.105f, 1f) // threshold shadow
     )
     val exitDoor: Array<String> = arrayOf(
-        "FFFFFFF",
-        "FPLPLPF",
+        "0FFFFF0",
+        "FFPPPFF",
         "FPPPPPF",
-        "FPLPLPF",
-        "FPPKPPF",
-        "FPLPLPF",
+        "FPPPPLF",
+        "FPPPPPF",
+        "FPPPPPF",
         "EFFFFFE"
     )
 
@@ -313,6 +342,9 @@ object Sprites {
         PixelSpriteRenderer.validatePattern(heroIdle, name = "heroIdle")
         PixelSpriteRenderer.validatePattern(heroStep1, name = "heroStep1")
         PixelSpriteRenderer.validatePattern(heroStep2, name = "heroStep2")
+        PixelSpriteRenderer.validatePattern(adventurerIdle, name = "adventurerIdle")
+        PixelSpriteRenderer.validatePattern(adventurerStep1, name = "adventurerStep1")
+        PixelSpriteRenderer.validatePattern(adventurerStep2, name = "adventurerStep2")
         PixelSpriteRenderer.validatePattern(monsterIdle, name = "monsterIdle")
         PixelSpriteRenderer.validatePattern(monsterStep1, name = "monsterStep1")
         PixelSpriteRenderer.validatePattern(monsterStep2, name = "monsterStep2")
