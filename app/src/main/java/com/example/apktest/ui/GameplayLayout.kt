@@ -2,6 +2,10 @@ package com.example.apktest.ui
 
 import android.app.Activity
 import android.content.res.Configuration
+import android.os.Build
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextDirectionHeuristics
 import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
@@ -73,7 +77,7 @@ object GameplayLayout {
         fun reflow() {
             refreshConfiguration()
             if (root.width == 0 || root.height == 0) return
-            val dimensions = readDimensions()
+            val baseDimensions = readDimensions()
             val area = GameplayLayoutPolicy.safeArea(
                 root.width, root.height,
                 root.paddingLeft, root.paddingTop, root.paddingRight, root.paddingBottom
@@ -81,9 +85,21 @@ object GameplayLayout {
             val hintHeight = if (hint.visibility == View.GONE) {
                 0
             } else {
-                hint.measuredHeight + dimensions.rowGap
+                hint.measuredHeight + baseDimensions.rowGap
             }
-            val plan = GameplayLayoutPolicy.calculate(area, header.height, hintHeight, dimensions)
+            val initialPlan = GameplayLayoutPolicy.calculate(
+                area, header.height, hintHeight, baseDimensions
+            )
+            val requiredLabelHeight = requiredLabelHeight(initialPlan.buttonWidth)
+            val dimensions = baseDimensions.copy(
+                buttonHeight = maxOf(baseDimensions.buttonHeight, requiredLabelHeight),
+                minimumButtonHeight = maxOf(baseDimensions.minimumButtonHeight, requiredLabelHeight)
+            )
+            val plan = if (dimensions == baseDimensions) {
+                initialPlan
+            } else {
+                GameplayLayoutPolicy.calculate(area, header.height, hintHeight, dimensions)
+            }
             if (plan == lastPlan && dimensions == lastDimensions) return
             lastPlan = plan
             lastDimensions = dimensions
@@ -112,8 +128,7 @@ object GameplayLayout {
                 val metrics = button.paint.fontMetricsInt
                 val lineHeight = maxOf(ceil(button.paint.fontSpacing).toInt(),
                     metrics.descent - metrics.ascent + metrics.leading)
-                // Fallback glyphs can make TextView's actual lines taller than its primary font.
-                maxOf(lineHeight * button.maxLines, button.layout?.height ?: 0) +
+                lineHeight * button.maxLines +
                     button.compoundPaddingTop + button.compoundPaddingBottom
             }
             val primary = root.findViewById<TextView>(R.id.adventureStatusBar)
@@ -133,6 +148,42 @@ object GameplayLayout {
                 headerMinHeight = maxOf(size(R.dimen.maze_menu_button_size), primary.height) +
                     size(R.dimen.game_header_padding) * 2
             )
+        }
+
+        private fun requiredLabelHeight(buttonWidth: Int): Int = toggles.maxOf { button ->
+            val width = (buttonWidth - button.compoundPaddingLeft -
+                button.compoundPaddingRight).coerceAtLeast(1)
+            maxOf(
+                measureLabelHeight(button, button.textOn, width),
+                measureLabelHeight(button, button.textOff, width),
+                measureLabelHeight(button, button.text, width)
+            ) + button.compoundPaddingTop + button.compoundPaddingBottom
+        }
+
+        private fun measureLabelHeight(
+            button: ToggleButton,
+            text: CharSequence,
+            width: Int
+        ): Int {
+            val transformed = button.transformationMethod?.getTransformation(text, button) ?: text
+            val builder = StaticLayout.Builder.obtain(
+                transformed, 0, transformed.length, button.paint, width
+            )
+                .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                .setTextDirection(TextDirectionHeuristics.FIRSTSTRONG_LTR)
+                .setLineSpacing(button.lineSpacingExtra, button.lineSpacingMultiplier)
+                .setIncludePad(button.includeFontPadding)
+                .setBreakStrategy(button.breakStrategy)
+                .setHyphenationFrequency(button.hyphenationFrequency)
+                .setJustificationMode(button.justificationMode)
+                .setMaxLines(button.maxLines)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                builder.setUseLineSpacingFromFallbacks(button.isFallbackLineSpacing)
+            }
+            button.ellipsize?.let {
+                builder.setEllipsize(it).setEllipsizedWidth(width)
+            }
+            return builder.build().height
         }
 
         private fun refreshConfiguration() {
