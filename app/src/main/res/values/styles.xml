@@ -11,4 +11,54 @@
         <item name="android:textAllCaps">false</item>
         <item name="android:textColor">@color/start_menu_pixel_button_text</item>
     </style>
+    <style name="GameplayControl">
+        <item name="android:layout_width">@dimen/maze_dpad_button_width</item>
+        <item name="android:layout_height">@dimen/maze_dpad_button_height</item>
+        <item name="android:minWidth">@dimen/game_touch_target_min</item>
+        <item name="android:minHeight">@dimen/game_touch_target_min</item>
+        <item name="android:background">@drawable/bg_game_control</item>
+        <item name="android:backgroundTint">@null</item>
+        <item name="backgroundTint">@null</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:focusable">true</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">@color/maze_toggle_button_text</item>
+        <item name="android:textSize">@dimen/maze_dpad_button_text_size</item>
+        <item name="android:gravity">center</item>
+        <item name="android:padding">@dimen/game_control_text_padding</item>
+        <item name="android:singleLine">false</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+    <style name="GameplayControl.Direction" parent="GameplayControl">
+        <item name="android:padding">@dimen/game_control_icon_padding</item>
+        <item name="android:scaleType">fitCenter</item>
+        <item name="tint">@color/maze_toggle_button_text</item>
+    </style>
+    <style name="GameplayControl.Toggle" parent="GameplayControl">
+        <item name="android:fontFamily">sans-serif-condensed</item>
+    </style>
+    <style name="MazeMenuActionButton" parent="GameplayControl">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingStart">@dimen/maze_menu_content_padding</item>
+        <item name="android:paddingEnd">@dimen/maze_menu_content_padding</item>
+        <item name="android:paddingTop">@dimen/maze_menu_content_gap</item>
+        <item name="android:paddingBottom">@dimen/maze_menu_content_gap</item>
+        <item name="android:gravity">start|center_vertical</item>
+        <item name="android:textSize">@dimen/maze_menu_status_text_size</item>
+    </style>
+    <style name="GameplayHeaderTitle">
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textColor">@color/maze_status_text</item>
+        <item name="android:textSize">@dimen/game_header_title_text_size</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+    <style name="GameplayHeaderSecondary">
+        <item name="android:textColor">@color/game_text_secondary</item>
+        <item name="android:textSize">@dimen/game_header_secondary_text_size</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
 </resources>

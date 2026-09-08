@@ -188,13 +188,29 @@ Tie-breaker order across all ranking sites: **risk → path distance → `PowerU
 
 ## Rendering
 
-- libGDX `ExtendViewport`. `MazeRenderer` centers the maze both horizontally (`mazeOriginX`) and vertically (`mazeOriginY`) inside the viewport.
+- libGDX `ExtendViewport`. `MazeRenderer` centers the maze both horizontally (`mazeOriginX`) and vertically (`mazeOriginY`) inside the viewport. `MazeViewportSizing` reserves a small world-space margin so outer half-walls remain visible on the limiting axis without changing maze dimensions.
 - Wall textures are addressed by named constants `WallTextures.DIR_NORTH / WEST / SOUTH / EAST` — never by `0/1/2/3`.
 - Power-up patterns/colors are pre-computed once per `PowerUpType` via an exhaustive `when` builder in `PowerUpIcons`, then cached. Renderers index by ordinal — no map lookup, no allocation per frame.
 - NPC step animation has `ANIMATION_FRAMES = 2` (idle + step) so the modulo arithmetic does not wrap mid-stride.
+- Terminal text is enabled by default in Classic. Adventure passes
+  `GameFragment.ARG_SHOW_END_OVERLAY = false` on both fresh and resumed mazes;
+  its Android dialogs own the terminal presentation. This is presentation state,
+  not a change to engine status or the save schema.
 
 ## Android host & input
 
-- D-pad sizing uses `maze_dpad_*` dimens with `values-sw400dp` overrides for narrow vs. wider phones.
+- Both gameplay activities use a no-ActionBar theme and a reserved header.
+  `GameplayLayout.bind` applies system-bar/cutout insets and reconnects the
+  existing host and shared controls when available dimensions change. Short,
+  wide screens can place controls beside the maze without replacing its fragment.
+  Essential HUD text wraps; oversized headers scroll inside a bounded viewport
+  so enlarged text cannot cover the maze. D-pad sizing uses `maze_dpad_*` dimens
+  and measured toggle labels.
 - Swipe gestures are detected in `MainActivity.dispatchTouchEvent` (parent dispatch) — the libGDX `SurfaceView` would otherwise consume them. The dispatcher hit-tests then **never consumes** the event (returns `super.dispatchTouchEvent(ev)`).
 - The hamburger menu is `GameMenuPopover`, exposing `textSnapshotForTesting()` (`@VisibleForTesting`) — wrapped by `MainActivity.menuPopoverTextSnapshotForTesting()` and `MainActivity.isMenuPopoverShowingForTesting()` — so instrumented tests can inspect contents without depending on Espresso platform-popup focus.
+- Adventure's HUD separates progress/lives, completed-maze time/steps, and
+  streak progress. `AdventureHudText` reads settled controller totals only;
+  the current attempt is not added to them. Formatting does not mutate scoring.
+- `GameControlsPresentation` supplies checked labels, accessibility state
+  descriptions, and distinct locked/pending Auto explanations. Activities retain
+  ownership of enablement, input, policy selection, and persistence.

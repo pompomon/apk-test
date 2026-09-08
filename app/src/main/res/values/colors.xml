@@ -10,18 +10,18 @@
 
     <!-- Maze game palette -->
     <color name="maze_root_background">#101218</color>
-    <color name="maze_dpad_button_background">#66331A66</color>
+    <color name="maze_dpad_button_background">#2A3142</color>
     <color name="maze_dpad_button_text">#F2FFFFFF</color>
-    <color name="maze_toggle_button_background_on">#FF0D6EFD</color>
-    <color name="maze_toggle_button_background_off">#66331A66</color>
-    <color name="maze_toggle_button_background_disabled">#40331A66</color>
+    <color name="maze_toggle_button_background_on">#394353</color>
+    <color name="maze_toggle_button_background_off">#2A3142</color>
+    <color name="maze_toggle_button_background_disabled">#20242E</color>
     <color name="maze_toggle_button_text_enabled">#FFFFFFFF</color>
-    <color name="maze_toggle_button_text_disabled">#80FFFFFF</color>
+    <color name="maze_toggle_button_text_disabled">#929AAA</color>
     <color name="maze_status_text">#FFFFFF</color>
     <color name="maze_speed_text">#D0D7E2</color>
-    <color name="maze_menu_button_background">#99000000</color>
+    <color name="maze_menu_button_background">#2A3142</color>
     <color name="maze_menu_button_icon">#F2FFFFFF</color>
-    <color name="maze_menu_popover_background">#F01A1B22</color>
+    <color name="maze_menu_popover_background">#1A1F2A</color>
     <color name="maze_menu_popover_divider">#33FFFFFF</color>
     <color name="start_menu_pixel_button_background">#FF2A3142</color>
     <color name="start_menu_pixel_button_background_pressed">#FF3A435A</color>
@@ -32,4 +32,13 @@
     <color name="start_menu_pixel_button_shadow_disabled">#9907080C</color>
     <color name="start_menu_pixel_button_text_enabled">#FFFFFFFF</color>
     <color name="start_menu_pixel_button_text_disabled">#88FFFFFF</color>
+    <color name="game_control_border">#65728A</color>
+    <color name="game_control_border_checked">#C7BD91</color>
+    <color name="game_control_border_focused">#DCE4F2</color>
+    <color name="game_control_border_disabled">#424B5D</color>
+    <color name="game_control_pressed">#47556B</color>
+    <color name="game_control_checked_pressed">#566079</color>
+    <color name="game_header_background">#1A1F2A</color>
+    <color name="game_text_secondary">#B5BECE</color>
+    <color name="game_dialog_accent">#C7BD91</color>
 </resources>

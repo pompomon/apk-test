@@ -69,6 +69,26 @@ The CI emulator (`api-level: 29`, `arch: x86_64`) is the source of most historic
 ./gradlew :app:testDebugUnitTest --tests 'com.example.apktest.game.core.GameEngineSnapshotTest.roundTrip_yieldsEqualObservableState'
 ```
 
+## Visual presentation acceptance
+
+- JVM presentation tests cover settled Adventure HUD totals, Auto availability
+  states, sprite/palette completeness, and viewport geometry. They do not prove
+  rendered appearance or touch ergonomics.
+- Android presentation/layout tests complement the existing swipe, toggle,
+  menu, legend, and Adventure reward-flow tests. Keep assertions about text and
+  state on the existing snapshot hooks instead of relying on popup focus.
+- For before/after comparisons, use the same seed or validated saved snapshot
+  and record device resolution, density, Android version, font scale, navigation
+  mode, difficulty, and game state. Capture Classic and Adventure during play,
+  countdown, menus, and win/loss; include a resumed Adventure.
+- Check narrow/wide screens, portrait/landscape rotation **without recreating
+  the game fragment**, enlarged text, and system-bar/cutout insets. Verify no
+  menu/control overlaps the maze, all controls remain reachable, and completed
+  totals are not confused with live-attempt statistics.
+- Inspect low-contrast/grayscale scenes, multiple active tints, elite badges,
+  and BLAST-modified walls. Compare frame pacing and allocations during play;
+  palette/unit tests and a successful APK build are not visual acceptance.
+
 ## CI
 
 `.github/workflows/build.yml` runs three jobs on PRs to `main` and pushes to `main`:

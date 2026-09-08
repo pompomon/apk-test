@@ -16,9 +16,6 @@ import androidx.activity.OnBackPressedCallback
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
 import com.badlogic.gdx.backends.android.AndroidFragmentApplication
 import com.example.apktest.game.GameFragment
 import com.example.apktest.game.core.AdventureConfig
@@ -42,6 +39,9 @@ import com.example.apktest.game.core.RunPerkEffectEvent
 import com.example.apktest.game.core.RunPerkId
 import com.example.apktest.game.core.automatedPlayerPolicies
 import com.example.apktest.ui.GameInputController
+import com.example.apktest.ui.GameControlsPresentation
+import com.example.apktest.ui.GameplayLayout
+import com.example.apktest.ui.AdventureHudText
 import com.example.apktest.ui.LegendDialog
 import com.example.apktest.ui.AdventureTimeFormatter
 import com.example.apktest.ui.AdventurePerkText
@@ -77,7 +77,12 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     private lateinit var autoToggle: ToggleButton
     private lateinit var inertiaToggle: ToggleButton
     private lateinit var statusBar: TextView
+    private lateinit var statsBar: TextView
+    private lateinit var streakBar: TextView
     private lateinit var perkStatusBar: TextView
+    private val hudText by lazy { AdventureHudText { res, args -> getString(res, *args) } }
+    private var lastHudText: AdventureHudText.Text? = null
+    private val controlsPresentation by lazy { GameControlsPresentation(this) }
     private val perkText by lazy { AdventurePerkText { res, args -> getString(res, *args) } }
     private var perkSummary = ""
     private var menuDialog: AlertDialog? = null
@@ -147,7 +152,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
-    internal fun adventureStatusBarTextForTesting(): CharSequence = statusBar.text
+    internal fun adventureStatusBarTextForTesting(): CharSequence =
+        "${statusBar.text}\n${statsBar.text}\n${streakBar.text}"
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun controllerForTesting(): AdventureRunController = controller
@@ -206,7 +212,6 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_adventure)
 
         adventureStore = AdventureStateStore(this)
@@ -214,13 +219,11 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         bestStore = AdventureBestStore(this)
 
         val root = findViewById<View>(R.id.adventureRoot)
-        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
-            insets
-        }
+        GameplayLayout.bind(this, root)
 
         statusBar = findViewById(R.id.adventureStatusBar)
+        statsBar = findViewById(R.id.adventureStats)
+        streakBar = findViewById(R.id.adventureStreak)
         perkStatusBar = findViewById(R.id.adventurePerkStatusBar)
         menuButton = findViewById(R.id.buttonMenu)
         autoToggle = findViewById(R.id.buttonAuto)
@@ -272,6 +275,8 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         transitionPending = false
         val fragment = GameFragment()
         val args = Bundle().apply {
+            // The host presents terminal dialogs for both fresh and resumed mazes.
+            putBoolean(GameFragment.ARG_SHOW_END_OVERLAY, false)
             putString(GameFragment.ARG_PLAYER_POLICY, spec.playerPolicy.name)
             // Per-NPC list is applied via configureAdventureMaze after attach;
             // this is just the engine's default before the override lands.
@@ -715,6 +720,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         inertiaToggle.isChecked = inertiaMovementEnabled
         inertiaToggle.setOnClickListener {
             inertiaMovementEnabled = inertiaToggle.isChecked
+            controlsPresentation.update(availableAutomatedPlayerPolicies().isNotEmpty(), decisionPending())
         }
         autoToggle.setOnClickListener {
             if (autoToggle.isChecked) {
@@ -809,6 +815,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         autoToggle.isEnabled = available.isNotEmpty() && !deciding
         menuButton.isEnabled = !deciding
         autoToggle.isChecked = autoMovementEnabled && autoToggle.isEnabled
+        controlsPresentation.update(available.isNotEmpty(), deciding)
     }
 
     private fun validateAndUpdateSelectedAutomatedPolicy(): PlayerPolicyType? {
@@ -1347,18 +1354,14 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     }
 
     private fun refreshStatusBar() {
-        val state = controller.state
-        val displayIndex = (state.currentMazeIndex + 1).coerceAtMost(controller.config.totalMazes)
-        statusBar.text = getString(
-            R.string.adventure_status_format,
-            displayIndex,
-            controller.config.totalMazes,
-            AdventureTimeFormatter.format(state.totalElapsedSeconds),
-            state.totalSteps,
-            state.livesRemaining,
-            state.winStreakSinceLastBonus,
-            AdventureConfig.STREAK_BONUS_THRESHOLD
-        )
+        val text = hudText.format(controller.state, controller.config.totalMazes)
+        if (text != lastHudText) {
+            statusBar.text = text.primary
+            statsBar.text = text.completedStats
+            streakBar.text = text.streak
+            streakBar.contentDescription = text.streakDescription
+            lastHudText = text
+        }
         refreshAutoToggle()
     }
 

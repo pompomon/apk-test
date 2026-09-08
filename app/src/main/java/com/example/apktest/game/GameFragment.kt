@@ -70,7 +70,9 @@ class GameFragment : AndroidFragmentApplication() {
             useImmersiveMode = true
         }
 
-        val gameInstance = MazeGame()
+        val gameInstance = MazeGame(
+            showEndOverlay = arguments?.getBoolean(ARG_SHOW_END_OVERLAY, true) ?: true
+        )
         game = gameInstance
         gameInstance.setRunPerkCallbacks(onRunPerkConsumed, onRunPerkEffectApplied)
         val snapshot = pendingSnapshot
@@ -210,6 +212,7 @@ class GameFragment : AndroidFragmentApplication() {
     fun hudState(): HudState? = game?.hudState()
 
     companion object {
+        const val ARG_SHOW_END_OVERLAY = "showEndOverlay"
         const val ARG_PLAYER_POLICY = "arg_player_policy"
         const val ARG_NPC_POLICY = "arg_npc_policy"
         const val ARG_DIFFICULTY = "arg_difficulty"

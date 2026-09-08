@@ -1,12 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.ApkTest" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
-        <item name="colorPrimary">@color/purple_500</item>
-        <item name="colorPrimaryVariant">@color/purple_700</item>
+    <style name="Theme.ApkTest" parent="Theme.MaterialComponents">
+        <item name="windowActionBar">true</item>
+        <item name="windowNoTitle">false</item>
+        <item name="colorPrimary">@color/game_header_background</item>
+        <item name="colorPrimaryVariant">@color/maze_root_background</item>
         <item name="colorOnPrimary">@color/white</item>
-        <item name="colorSecondary">@color/teal_200</item>
-        <item name="colorSecondaryVariant">@color/teal_700</item>
+        <item name="colorSecondary">@color/game_dialog_accent</item>
+        <item name="colorSecondaryVariant">@color/game_control_border_checked</item>
         <item name="colorOnSecondary">@color/black</item>
         <item name="android:statusBarColor">?attr/colorPrimaryVariant</item>
+        <item name="android:navigationBarColor">@color/maze_root_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowBackground">@color/maze_root_background</item>
+        <item name="colorSurface">@color/maze_menu_popover_background</item>
+        <item name="colorOnSurface">@color/maze_status_text</item>
+        <item name="android:textColorPrimary">@color/maze_status_text</item>
+        <item name="android:textColorSecondary">@color/game_text_secondary</item>
+        <item name="alertDialogTheme">@style/ThemeOverlay.ApkTest.Dialog</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.ApkTest.Dialog</item>
+        <item name="mazeMenuActionButtonStyle">@style/MazeMenuActionButton</item>
+    </style>
+
+    <style name="Theme.ApkTest.Gameplay" parent="Theme.ApkTest">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+
+    <style name="ThemeOverlay.ApkTest.Dialog" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
+        <item name="android:windowBackground">@color/maze_menu_popover_background</item>
+        <item name="android:colorBackground">@color/maze_menu_popover_background</item>
+        <item name="colorSurface">@color/maze_menu_popover_background</item>
+        <item name="colorOnSurface">@color/maze_status_text</item>
+        <item name="colorPrimary">@color/game_dialog_accent</item>
+        <item name="colorSecondary">@color/game_dialog_accent</item>
+        <item name="colorAccent">@color/game_dialog_accent</item>
+        <item name="android:textColorPrimary">@color/maze_status_text</item>
+        <item name="android:textColorSecondary">@color/game_text_secondary</item>
+        <item name="android:fontFamily">sans</item>
     </style>
 </resources>

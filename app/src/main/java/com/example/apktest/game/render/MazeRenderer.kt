@@ -70,14 +70,15 @@ class MazeRenderer {
         viewport.update(width, height, true)
     }
 
-    fun render(engine: GameEngine) {
+    fun render(engine: GameEngine, showEndOverlay: Boolean = true) {
         updateViewportForMaze(engine.maze)
         mazeOriginX = (viewport.worldWidth - engine.maze.width.toFloat()) / 2f
         mazeOriginY = (viewport.worldHeight - engine.maze.height.toFloat()) / 2f
 
         // Letterbox colour: pick something close to the floor base so any
         // viewport bars look intentional rather than like a black void.
-        ScreenUtils.clear(0.06f, 0.07f, 0.10f, 1f)
+        val surround = ScenePalette.surround
+        ScreenUtils.clear(surround.r, surround.g, surround.b, surround.a)
         viewport.apply(true)
         shapes.projectionMatrix = camera.combined
 
@@ -85,7 +86,9 @@ class MazeRenderer {
         drawPowerUps(engine)
         drawEntities(engine)
         drawCountdownOverlay(engine)
-        drawEndOverlay(engine)
+        if (showEndOverlay) {
+            drawEndOverlay(engine)
+        }
     }
 
     fun dispose() {
@@ -98,7 +101,11 @@ class MazeRenderer {
         if (maze.width == cachedWidth && maze.height == cachedHeight) return
         cachedWidth = maze.width
         cachedHeight = maze.height
-        viewport = ExtendViewport(maze.width.toFloat(), maze.height.toFloat(), camera)
+        viewport = ExtendViewport(
+            MazeViewportSizing.minimumExtent(maze.width),
+            MazeViewportSizing.minimumExtent(maze.height),
+            camera
+        )
         viewport.update(Gdx.graphics.width, Gdx.graphics.height, true)
     }
 
@@ -164,7 +171,7 @@ class MazeRenderer {
             exitCenterY = exitCenterY
         )
 
-        // Render the exit as a neon portal sprite centered on the exit cell.
+        // Render the cyan doorway centered on the exit cell.
         PixelSpriteRenderer.draw(
             shapes = shapes,
             pattern = Sprites.exitDoor,
@@ -507,20 +514,9 @@ class MazeRenderer {
                 shapes.setColor(tint.r, tint.g, tint.b, PowerUpTinting.MAZE_TINT_ALPHA)
                 shapes.rect(x, y, width, height)
             }
-            shapes.setColor(
-                EXIT_GLOW_OUTER_COLOR.r,
-                EXIT_GLOW_OUTER_COLOR.g,
-                EXIT_GLOW_OUTER_COLOR.b,
-                EXIT_GLOW_OUTER_ALPHA
-            )
-            shapes.circle(exitCenterX, exitCenterY, EXIT_GLOW_OUTER_RADIUS, EXIT_GLOW_SEGMENTS)
-            shapes.setColor(
-                EXIT_GLOW_INNER_COLOR.r,
-                EXIT_GLOW_INNER_COLOR.g,
-                EXIT_GLOW_INNER_COLOR.b,
-                EXIT_GLOW_INNER_ALPHA
-            )
-            shapes.circle(exitCenterX, exitCenterY, EXIT_GLOW_INNER_RADIUS, EXIT_GLOW_SEGMENTS)
+            val glow = ScenePalette.exitCyan
+            shapes.setColor(glow.r, glow.g, glow.b, ScenePalette.EXIT_GLOW_ALPHA)
+            shapes.circle(exitCenterX, exitCenterY, ScenePalette.EXIT_GLOW_RADIUS, EXIT_GLOW_SEGMENTS)
             // Flush the translucent verts while blending is still enabled.
             shapes.flush()
         } finally {
@@ -572,14 +568,16 @@ class MazeRenderer {
         val goFlash = engine.goFlashRemainingSeconds
         if (remaining <= 0f && goFlash <= 0f) return
         val text = if (remaining > 0f) countdownLabel(remaining) else "GO!"
-        val glyphSize = (viewport.worldWidth.coerceAtMost(viewport.worldHeight)) * 0.18f
-        val glyphGap = glyphSize * 0.18f
+        val glyphSize = OverlayPresentation.glyphSize(
+            text, viewport.worldWidth, viewport.worldHeight, OverlayPresentation.COUNTDOWN_GLYPH_FACTOR
+        )
+        val glyphGap = glyphSize * OverlayPresentation.GLYPH_GAP_FACTOR
         val cx = viewport.worldWidth / 2f
         val cy = viewport.worldHeight / 2f
-        drawBackdrop(cx, cy, glyphSize, glyphGap, text)
+        drawBackdrop(cx, cy, glyphSize, text)
 
         shapes.begin(ShapeRenderer.ShapeType.Filled)
-        drawCountdownExitArrow(engine, cx, cy, glyphSize, remaining, goFlash)
+        drawCountdownExitArrow(engine, cx, cy, glyphSize, text, remaining, goFlash)
         PixelTextRenderer.drawCentered(
             shapes = shapes,
             text = text,
@@ -587,7 +585,7 @@ class MazeRenderer {
             centerY = cy,
             glyphSize = glyphSize,
             glyphGap = glyphGap,
-            fallbackColor = COUNTDOWN_COLOR
+            fallbackColor = ScenePalette.countdownText
         )
         shapes.end()
     }
@@ -597,6 +595,7 @@ class MazeRenderer {
         centerX: Float,
         centerY: Float,
         glyphSize: Float,
+        text: String,
         remaining: Float,
         goFlash: Float
     ) {
@@ -623,7 +622,8 @@ class MazeRenderer {
         }
         val bobbingPhase = animationTimeSeconds * COUNTDOWN_ARROW_BOB_RADIANS_PER_SECOND
         val bobbingOffset = sin(bobbingPhase) * glyphSize * COUNTDOWN_ARROW_BOB_DISTANCE_FACTOR
-        val baseDistance = glyphSize * COUNTDOWN_ARROW_DISTANCE_FACTOR + bobbingOffset
+        val baseDistance = OverlayPresentation.arrowCenterDistance(text, glyphSize, dirX, dirY) +
+            bobbingOffset
         val arrowCenterX = (centerX + dirX * baseDistance).coerceIn(
             COUNTDOWN_ARROW_VIEWPORT_PADDING,
             viewport.worldWidth - COUNTDOWN_ARROW_VIEWPORT_PADDING
@@ -632,7 +632,7 @@ class MazeRenderer {
             COUNTDOWN_ARROW_VIEWPORT_PADDING,
             viewport.worldHeight - COUNTDOWN_ARROW_VIEWPORT_PADDING
         )
-        val arrowLength = glyphSize * COUNTDOWN_ARROW_LENGTH_FACTOR
+        val arrowLength = glyphSize * OverlayPresentation.ARROW_LENGTH_FACTOR
         val headLength = arrowLength * COUNTDOWN_ARROW_HEAD_LENGTH_FACTOR
         val shaftLength = arrowLength - headLength
         val shaftWidth = glyphSize * COUNTDOWN_ARROW_SHAFT_WIDTH_FACTOR
@@ -648,7 +648,7 @@ class MazeRenderer {
         val halfShaft = shaftWidth * 0.5f
         val halfHead = headWidth * 0.5f
 
-        shapes.color = COUNTDOWN_ARROW_SHADOW_COLOR
+        shapes.color = ScenePalette.overlayBackdrop
         drawArrow(
             tipX + COUNTDOWN_ARROW_SHADOW_OFFSET,
             tipY - COUNTDOWN_ARROW_SHADOW_OFFSET,
@@ -661,7 +661,7 @@ class MazeRenderer {
             halfShaft,
             halfHead
         )
-        shapes.color = COUNTDOWN_ARROW_COLOR
+        shapes.color = ScenePalette.exitCyan
         drawArrow(tipX, tipY, headBaseX, headBaseY, tailX, tailY, perpX, perpY, halfShaft, halfHead)
     }
 
@@ -722,20 +722,19 @@ class MazeRenderer {
     }
 
     /**
-     * Draws the end-of-game overlay ("YOU WIN!" with bright colours / "GAME
-     * OVER" with dark colours) centered on the viewport.
+     * Draws high-contrast terminal messages without allocating status pairs or
+     * per-character colour callbacks on every frame.
      */
     private fun drawEndOverlay(engine: GameEngine) {
-        val (text, palette) = when (engine.status) {
-            com.example.apktest.game.core.GameStatus.WIN -> "YOU WIN!" to WIN_PALETTE
-            com.example.apktest.game.core.GameStatus.LOSE -> "GAME OVER" to LOSE_PALETTE
-            else -> return
-        }
-        val glyphSize = (viewport.worldWidth.coerceAtMost(viewport.worldHeight)) * 0.10f
-        val glyphGap = glyphSize * 0.20f
+        val message = OverlayPresentation.endMessage(engine.status) ?: return
+        val text = message.text
+        val glyphSize = OverlayPresentation.glyphSize(
+            text, viewport.worldWidth, viewport.worldHeight, OverlayPresentation.END_GLYPH_FACTOR
+        )
+        val glyphGap = glyphSize * OverlayPresentation.GLYPH_GAP_FACTOR
         val cx = viewport.worldWidth / 2f
         val cy = viewport.worldHeight / 2f
-        drawBackdrop(cx, cy, glyphSize, glyphGap, text)
+        drawBackdrop(cx, cy, glyphSize, text)
 
         shapes.begin(ShapeRenderer.ShapeType.Filled)
         PixelTextRenderer.drawCentered(
@@ -745,8 +744,7 @@ class MazeRenderer {
             centerY = cy,
             glyphSize = glyphSize,
             glyphGap = glyphGap,
-            fallbackColor = palette[0],
-            colorForIndex = { i -> palette[i % palette.size] }
+            fallbackColor = message.color
         )
         shapes.end()
     }
@@ -759,17 +757,21 @@ class MazeRenderer {
         centerX: Float,
         centerY: Float,
         glyphSize: Float,
-        glyphGap: Float,
         text: String
     ) {
-        val textWidth = PixelTextRenderer.textWidth(text, glyphSize, glyphGap)
-        val padX = glyphSize * 0.5f
-        val padY = glyphSize * 0.4f
-        val rectW = textWidth + 2f * padX
-        val rectH = glyphSize + 2f * padY
+        val rectW = OverlayPresentation.backdropWidth(text, glyphSize)
+        val rectH = OverlayPresentation.backdropHeight(glyphSize)
+        val border = OverlayPresentation.BORDER_THICKNESS
         shapes.begin(ShapeRenderer.ShapeType.Filled)
-        shapes.color = OVERLAY_BACKDROP_COLOR
+        shapes.color = ScenePalette.overlayBorder
         shapes.rect(centerX - rectW / 2f, centerY - rectH / 2f, rectW, rectH)
+        shapes.color = ScenePalette.overlayBackdrop
+        shapes.rect(
+            centerX - rectW / 2f + border,
+            centerY - rectH / 2f + border,
+            (rectW - 2f * border).coerceAtLeast(0f),
+            (rectH - 2f * border).coerceAtLeast(0f)
+        )
         shapes.end()
     }
 
@@ -798,28 +800,16 @@ class MazeRenderer {
     private companion object {
         private const val NPC_SPRITE_SIZE = 0.72f
         // Wall thickness as fraction of a cell (world units).
-        private const val WALL_THICKNESS = 0.18f
+        private const val WALL_THICKNESS = MazeViewportSizing.WALL_THICKNESS
 
         // Upper-bound pixel count per wall segment (4 rows * 8 cols brick tile).
         private const val WALL_PATTERN_PIXELS_PER_SEGMENT = 32
 
-        private val COUNTDOWN_COLOR = Color(1f, 0.95f, 0.5f, 1f)
-        private val COUNTDOWN_ARROW_COLOR = Color(0.00f, 1.00f, 0.95f, 1f)
-        private val COUNTDOWN_ARROW_SHADOW_COLOR = Color(0.02f, 0.02f, 0.08f, 1f)
-        private val OVERLAY_BACKDROP_COLOR = Color(0.02f, 0.02f, 0.04f, 1f)
-        private val EXIT_GLOW_OUTER_COLOR = Color(0.00f, 0.95f, 1.00f, 1f)
-        private val EXIT_GLOW_INNER_COLOR = Color(1.00f, 0.15f, 0.95f, 1f)
-        private const val EXIT_GLOW_OUTER_ALPHA = 0.30f
-        private const val EXIT_GLOW_INNER_ALPHA = 0.48f
-        private const val EXIT_GLOW_OUTER_RADIUS = 0.82f
-        private const val EXIT_GLOW_INNER_RADIUS = 0.58f
         private const val EXIT_GLOW_SEGMENTS = 24
-        private const val COUNTDOWN_ARROW_DISTANCE_FACTOR = 1.18f
-        private const val COUNTDOWN_ARROW_BOB_DISTANCE_FACTOR = 0.18f
-        private const val COUNTDOWN_ARROW_LENGTH_FACTOR = 0.90f
+        private const val COUNTDOWN_ARROW_BOB_DISTANCE_FACTOR = 0.06f
         private const val COUNTDOWN_ARROW_HEAD_LENGTH_FACTOR = 0.38f
-        private const val COUNTDOWN_ARROW_SHAFT_WIDTH_FACTOR = 0.16f
-        private const val COUNTDOWN_ARROW_HEAD_WIDTH_FACTOR = 0.46f
+        private const val COUNTDOWN_ARROW_SHAFT_WIDTH_FACTOR = 0.10f
+        private const val COUNTDOWN_ARROW_HEAD_WIDTH_FACTOR = 0.32f
         private const val COUNTDOWN_ARROW_VIEWPORT_PADDING = 0.55f
         private const val COUNTDOWN_ARROW_SHADOW_OFFSET = 0.06f
         /** Prevents divide-by-zero when the countdown center overlaps the exit. */
@@ -850,22 +840,6 @@ class MazeRenderer {
                 }
             }
         }
-
-        // Bright cycle for WIN — vivid yellow / lime / cyan / magenta.
-        private val WIN_PALETTE = arrayOf(
-            Color(1f, 0.95f, 0.20f, 1f),
-            Color(0.40f, 1f, 0.40f, 1f),
-            Color(0.30f, 0.90f, 1f, 1f),
-            Color(1f, 0.40f, 0.90f, 1f)
-        )
-
-        // Dark cycle for LOSE — muted blood-red / purple / slate / forest.
-        private val LOSE_PALETTE = arrayOf(
-            Color(0.50f, 0.05f, 0.05f, 1f),
-            Color(0.25f, 0.05f, 0.35f, 1f),
-            Color(0.15f, 0.15f, 0.20f, 1f),
-            Color(0.10f, 0.30f, 0.15f, 1f)
-        )
     }
 
     private object PixelPowerUpIconRenderer {
