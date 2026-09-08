@@ -81,7 +81,9 @@ data class AdventureRunState(
     var runPerks: List<RunPerkStack> = emptyList(),
     var previousPerkOffer: List<RunPerkId> = emptyList(),
     var perkOfferOrdinal: Int = 0,
-    var perkHistory: List<RunPerkHistoryEntry> = emptyList()
+    var perkHistory: List<RunPerkHistoryEntry> = emptyList(),
+    /** Controls future scheduled offers only; pending decisions and active effects remain locked. */
+    var routeEventsEnabled: Boolean = false
 ) {
     val currentMazeNpcPolicies: List<NpcPolicyType>
         get() = currentMazeNpcSpawnSpecs.map { it.policyType }
@@ -162,8 +164,7 @@ class AdventureRunController(
     val config: AdventureConfig,
     initialState: AdventureRunState? = null,
     private val runSeed: Long = System.currentTimeMillis(),
-    private val routesEnabled: Boolean = AdventureFeatureFlags.ROUTE_EVENTS_ENABLED &&
-        config.difficulty.name == DifficultyPresets.MEDIUM.name,
+    routesEnabled: Boolean = initialState?.routeEventsEnabled ?: AdventureFeatureFlags.ROUTE_EVENTS_ENABLED,
     private val elitesEnabled: Boolean = AdventureFeatureFlags.ELITE_NPC_MODIFIERS_ENABLED &&
         (config.difficulty.name == DifficultyPresets.MEDIUM.name ||
             config.difficulty.name == DifficultyPresets.HARD.name),
@@ -182,9 +183,17 @@ class AdventureRunController(
         require(state.difficultyName == config.difficulty.name) {
             "State difficulty (${state.difficultyName}) does not match config (${config.difficulty.name})"
         }
+        state.routeEventsEnabled = routesEnabled
         if (state.currentMazeIndex > 0) {
             unlockAllAutomatedPlayerPolicies()
         }
+    }
+
+    /** Opting in never replays skipped event slots or regenerates a pending offer. */
+    fun setRouteEventsEnabled(enabled: Boolean): Boolean {
+        if (state.status != AdventureStatus.IN_PROGRESS) return false
+        state.routeEventsEnabled = enabled
+        return true
     }
 
     /**
@@ -247,7 +256,7 @@ class AdventureRunController(
         var choices = emptyList<RouteEventChoice>()
         while (outcome.mazeIndexCompleted >= state.nextRouteEventMazeIndex) {
             val scheduledIndex = state.nextRouteEventMazeIndex
-            if (routesEnabled && outcome.mazeIndexCompleted == scheduledIndex) {
+            if (state.routeEventsEnabled && outcome.mazeIndexCompleted == scheduledIndex) {
                 choices = routeGenerator.offer(scheduledIndex, state.routeEventOrdinal)
             }
             state.nextRouteEventMazeIndex = routeGenerator.nextEventMazeIndex(
@@ -257,7 +266,7 @@ class AdventureRunController(
         }
         val perkOffer = if (perksEnabled && outcome.mazeIndexCompleted in RunPerkGenerator.OFFER_MAZES) {
             perkGenerator.offer(outcome.mazeIndexCompleted, state.perkOfferOrdinal,
-                state.runPerks, state.previousPerkOffer, perkTiers, routesEnabled)
+                state.runPerks, state.previousPerkOffer, perkTiers, state.routeEventsEnabled)
         } else null
         if (perkOffer != null) {
             state.previousPerkOffer = perkOffer.choices.toList()

@@ -45,7 +45,8 @@ data class AdventureRunStateSnapshot(
     val runPerks: List<RunPerkStack> = emptyList(),
     val previousPerkOffer: List<RunPerkId> = emptyList(),
     val perkOfferOrdinal: Int = 0,
-    val perkHistory: List<RunPerkHistoryEntry> = emptyList()
+    val perkHistory: List<RunPerkHistoryEntry> = emptyList(),
+    val routeEventsEnabled: Boolean = false
 ) {
     val currentMazeNpcPolicies: List<NpcPolicyType>
         get() = currentMazeNpcSpawnSpecs.map { it.policyType }
@@ -90,13 +91,15 @@ data class AdventureRunStateSnapshot(
         put(KEY_PREVIOUS_PERK_OFFER, AdventurePerkSnapshotCodec.idsToJson(previousPerkOffer))
         put(KEY_PERK_ORDINAL, perkOfferOrdinal)
         put(KEY_PERK_HISTORY, AdventurePerkSnapshotCodec.historyToJson(perkHistory))
+        put(KEY_ROUTE_EVENTS_ENABLED, routeEventsEnabled)
     }.toString()
 
     companion object {
-        // v5 adds run builds, exact perk offers, acquisition provenance, and one-shot consumption.
+        // v6 adds per-run route opt-in. v5 mechanics are compatible and migrate with opt-in off.
         // Route mechanics/balance changes need a schema bump: resolved effects are
         // checked against the supplied configuration, not silently reinterpreted.
-        const val SCHEMA_VERSION = 5
+        const val SCHEMA_VERSION = 6
+        private const val PRE_ROUTE_SETTING_VERSION = 5
 
         private const val KEY_VERSION = "v"
         private const val KEY_RUN_SEED = "runSeed"
@@ -127,6 +130,7 @@ data class AdventureRunStateSnapshot(
         private const val KEY_PREVIOUS_PERK_OFFER = "previousPerkOffer"
         private const val KEY_PERK_ORDINAL = "perkOfferOrdinal"
         private const val KEY_PERK_HISTORY = "perkHistory"
+        private const val KEY_ROUTE_EVENTS_ENABLED = "routeEventsEnabled"
 
         fun fromState(state: AdventureRunState, runSeed: Long): AdventureRunStateSnapshot =
             AdventureRunStateSnapshot(
@@ -157,7 +161,8 @@ data class AdventureRunStateSnapshot(
                 runPerks = state.runPerks.toList(),
                 previousPerkOffer = state.previousPerkOffer.toList(),
                 perkOfferOrdinal = state.perkOfferOrdinal,
-                perkHistory = state.perkHistory.map { it.detachedCopy() }
+                perkHistory = state.perkHistory.map { it.detachedCopy() },
+                routeEventsEnabled = state.routeEventsEnabled
             )
 
         fun fromJson(json: String): AdventureRunStateSnapshot? = parseJson(json, null)
@@ -169,7 +174,7 @@ data class AdventureRunStateSnapshot(
             return try {
                 val obj = JSONObject(json)
                 val version = obj.requiredInt(KEY_VERSION)
-                if (version != SCHEMA_VERSION) return null
+                if (version != SCHEMA_VERSION && version != PRE_ROUTE_SETTING_VERSION) return null
                 // Silently drop unknown enum names from the unlocked-policies
                 // list so legacy payloads that referenced now-removed entries
                 // (e.g. RANDOM_MEMORY, WALL_RIGHT) still load instead of
@@ -215,7 +220,7 @@ data class AdventureRunStateSnapshot(
                 } else null
 
                 val snapshot = AdventureRunStateSnapshot(
-                    schemaVersion = version,
+                    schemaVersion = SCHEMA_VERSION,
                     runSeed = obj.requiredLong(KEY_RUN_SEED),
                     difficultyName = obj.getString(KEY_DIFFICULTY),
                     currentMazeIndex = obj.requiredInt(KEY_MAZE_INDEX),
@@ -252,7 +257,9 @@ data class AdventureRunStateSnapshot(
                     runPerks = AdventurePerkSnapshotCodec.stacksFromJson(obj.getJSONArray(KEY_RUN_PERKS)),
                     previousPerkOffer = AdventurePerkSnapshotCodec.idsFromJson(obj.getJSONArray(KEY_PREVIOUS_PERK_OFFER)),
                     perkOfferOrdinal = obj.requiredInt(KEY_PERK_ORDINAL),
-                    perkHistory = AdventurePerkSnapshotCodec.historyFromJson(obj.getJSONArray(KEY_PERK_HISTORY))
+                    perkHistory = AdventurePerkSnapshotCodec.historyFromJson(obj.getJSONArray(KEY_PERK_HISTORY)),
+                    routeEventsEnabled = if (version == PRE_ROUTE_SETTING_VERSION) false
+                        else obj.requiredBoolean(KEY_ROUTE_EVENTS_ENABLED)
                 )
 
                 // Reject unknown difficulty names outright. The Adventure
@@ -329,7 +336,8 @@ data class AdventureRunStateSnapshot(
         runPerks = runPerks.toList(),
         previousPerkOffer = previousPerkOffer.toList(),
         perkOfferOrdinal = perkOfferOrdinal,
-        perkHistory = perkHistory.map { it.detachedCopy() }
+        perkHistory = perkHistory.map { it.detachedCopy() },
+        routeEventsEnabled = routeEventsEnabled
     )
 
     private fun matchesLockedMaze(engine: GameEngineSnapshot): Boolean =
