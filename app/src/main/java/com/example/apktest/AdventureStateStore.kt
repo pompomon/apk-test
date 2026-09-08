@@ -8,9 +8,8 @@ import com.example.apktest.game.core.AdventureRunStateSnapshot
  * separate SharedPreferences file so a saved Adventure run never appears
  * as a single-maze "Resume" on the existing start menu, and vice versa.
  *
- * Bumping [AdventureRunStateSnapshot.SCHEMA_VERSION] in code transparently
- * invalidates any stale payload via the version check in
- * [AdventureRunStateSnapshot.fromJson].
+ * [AdventureRunStateSnapshot.fromJson] validates supported schemas, migrates
+ * explicitly compatible versions, and rejects stale or corrupt payloads.
  */
 class AdventureStateStore(context: Context) {
     private val prefs = context.applicationContext
