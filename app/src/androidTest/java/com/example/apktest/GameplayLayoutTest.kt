@@ -17,11 +17,13 @@ import android.widget.ToggleButton
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.graphics.Insets
+import androidx.core.view.DisplayCutoutCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.apktest.ui.GameplayLayout
 import org.junit.After
@@ -77,6 +79,7 @@ class GameplayLayoutTest {
     }
 
     @Test
+    @SdkSuppress(minSdkVersion = 29)
     fun barsAndCutoutApplyOnceAndAllToggleStatesKeepTheirTouchTargets() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
@@ -89,7 +92,11 @@ class GameplayLayoutTest {
                     val bottom = pixels(root, 24)
                     val insets = WindowInsetsCompat.Builder()
                         .setInsets(WindowInsetsCompat.Type.systemBars(), Insets.of(0, top, right, bottom))
-                        .setInsets(WindowInsetsCompat.Type.displayCutout(), Insets.of(left, 0, 0, 0))
+                        // API 29 reads a platform cutout rather than type-only synthetic insets.
+                        .setDisplayCutout(DisplayCutoutCompat(
+                            Rect(left, 0, 0, 0),
+                            listOf(Rect(0, top, left, top + pixels(root, 48)))
+                        ))
                         .build()
                     repeat(2) { ViewCompat.dispatchApplyWindowInsets(root, insets) }
                     assertEquals(left, root.paddingLeft)
