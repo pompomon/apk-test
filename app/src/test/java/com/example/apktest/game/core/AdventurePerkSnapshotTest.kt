@@ -7,10 +7,10 @@ import org.junit.Test
 
 class AdventurePerkSnapshotTest {
     @Test
-    fun schemaFiveRequiresEveryPerkFieldIncludingExplicitEmptyState() {
+    fun currentSchemaRetainsEveryRequiredPerkFieldIncludingExplicitEmptyState() {
         val c = AdventureRunController(AdventurePerkControllerTest.medium(), runSeed = 0L)
         val empty = snapshot(c)
-        assertEquals(5, AdventureRunStateSnapshot.SCHEMA_VERSION)
+        assertEquals(6, AdventureRunStateSnapshot.SCHEMA_VERSION)
         assertEquals(empty, restore(empty))
         for (key in listOf("runPerks", "previousPerkOffer", "perkOfferOrdinal", "perkHistory")) {
             assertInvalid(empty) { remove(key) }

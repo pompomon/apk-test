@@ -29,9 +29,9 @@
 
 - `telemetry/AdventureTelemetry.kt` owns the canonical event/property allowlists, validated event envelope, sink interface, and no-op sink. No analytics SDK, network permission, or runtime hook is installed.
 - Allowed properties are aggregate gameplay values and stable catalogue IDs. Raw or hashed run seeds, coordinates, snapshot JSON, free-form text, and user/device identifiers are prohibited.
-- `AdventureFeatureFlags.ROUTE_EVENTS_ENABLED`, `ELITE_NPC_MODIFIERS_ENABLED`, and `RUN_BUILD_PERKS_ENABLED` are the three rollout gates; all default to `false`.
+- `AdventureFeatureFlags.ROUTE_EVENTS_ENABLED`, `ELITE_NPC_MODIFIERS_ENABLED`, and `RUN_BUILD_PERKS_ENABLED` all default to `false`. Route events now additionally support explicit, persisted per-run opt-in from the Adventure menu.
 - `AdventureRunGoldenFixtureTest` pins Easy/Medium/Hard maze seeds, NPC assignments, rewards, unlocks, bonus lives, terminal outcomes, retries, and snapshot rehydration.
-- `adventure_route_*`, `adventure_elite_*`, and `adventure_perk_*` resources reserve localization-ready copy. The wording remains provisional until product/design approval and the keys stay unused while flags are off.
+- `adventure_route_*`, `adventure_elite_*`, and `adventure_perk_*` resources provide localization-ready copy. Route copy is shown when players opt in; compatible saved elite/perk content also retains its explanations independently of generation flags.
 - The fixtures lock the current reward contract: all automated policies unlock after maze 1 and every non-final win offers a starting power-up. Any parity-based reward redesign must be proposed and tested separately.
 
 ### Dependencies
@@ -72,9 +72,13 @@
   See [the Phase 1 contract](01-route-events.md#phase-1-implementation-contract)
   for exact values, Scout semantics, and Supply Cache's neutral reward.
 - Adventure schema 3 and engine schema 6 intentionally invalidate older saves.
-- Generation remains default-off. When enabled in the Android host, the first
-  exposure is Medium only; compatible saved decisions still work with the
-  generation flag off.
+- Generation remains default-off. The in-run **Route events: On/Off** menu
+  setting now allows opt-in on all difficulties, replacing the initial
+  Medium-only exposure. Existing cadence, safeguards, and reward sequencing
+  remain unchanged; disabling affects only future scheduled offers.
+- Adventure schema 6 persists the setting and migrates validated schema-5
+  saves with it off, preserving existing decisions and effects. Engine/Classic
+  saves are unchanged by the setting.
 - Code and test coverage do not constitute balance/copy approval. Dogfood,
   device/accessibility checks, and production telemetry review remain rollout
   requirements.

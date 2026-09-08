@@ -19,7 +19,6 @@ import androidx.appcompat.app.AppCompatActivity
 import com.badlogic.gdx.backends.android.AndroidFragmentApplication
 import com.example.apktest.game.GameFragment
 import com.example.apktest.game.core.AdventureConfig
-import com.example.apktest.game.core.AdventureFeatureFlags
 import com.example.apktest.game.core.AdventureRunController
 import com.example.apktest.game.core.AdventureRunStateSnapshot
 import com.example.apktest.game.core.AdventureStatus
@@ -45,6 +44,7 @@ import com.example.apktest.ui.AdventureHudText
 import com.example.apktest.ui.LegendDialog
 import com.example.apktest.ui.AdventureTimeFormatter
 import com.example.apktest.ui.AdventurePerkText
+import com.example.apktest.ui.AdventureRewardText
 import com.example.apktest.telemetry.AdventureRouteTelemetry
 import com.example.apktest.telemetry.AdventureEliteTelemetry
 import com.example.apktest.telemetry.AdventurePerkTelemetry
@@ -137,6 +137,9 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun menuTextForTesting(): CharSequence? =
         menuPerkText?.text?.takeIf { menuDialog?.isShowing == true }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    internal fun menuDialogForTesting(): AlertDialog? = menuDialog
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     internal fun rewardTextForTesting(): CharSequence? =
@@ -452,9 +455,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             val controller = AdventureRunController(
                 config = config,
                 initialState = saved.toState(),
-                runSeed = saved.runSeed,
-                routesEnabled = AdventureFeatureFlags.ROUTE_EVENTS_ENABLED &&
-                    config.difficulty.name == DifficultyPresets.MEDIUM.name
+                runSeed = saved.runSeed
             )
             return Triple(controller, saved.runSeed, false)
         }
@@ -464,9 +465,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
         val seed = System.currentTimeMillis()
         return Triple(AdventureRunController(
             config = config,
-            runSeed = seed,
-            routesEnabled = AdventureFeatureFlags.ROUTE_EVENTS_ENABLED &&
-                config.difficulty.name == DifficultyPresets.MEDIUM.name
+            runSeed = seed
         ), seed, true)
     }
 
@@ -832,7 +831,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
     private fun showMenu() {
         if (decisionPending()) return
         // Lightweight menu with: Pause/Resume, Legend, Switch player strategy,
-        // Pause & Exit. Restart is intentionally omitted in Adventure mode
+        // Route events, Pause & Exit. Restart is intentionally omitted in Adventure mode
         // because restarting the engine without going through the controller
         // would skip the lives/streak bookkeeping. Players who want to bail
         // can use Pause & Exit (autosaves) or finish the run.
@@ -847,6 +846,10 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
             if (controller.state.unlockedPlayerPolicies.size > 1) {
                 add(MenuEntry(R.string.adventure_pick_player_strategy) { showSwitchPlayerStrategy() })
             }
+            add(MenuEntry(
+                if (controller.state.routeEventsEnabled) R.string.adventure_route_events_on
+                else R.string.adventure_route_events_off
+            ) { toggleRouteEvents() })
             add(MenuEntry(R.string.pause_and_exit) { onPauseAndExit() })
         }
         val items = entries.map { getString(it.labelRes) }.toTypedArray()
@@ -861,6 +864,17 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 }
             }
             .show()
+    }
+
+    private fun toggleRouteEvents() {
+        if (decisionPending()) return
+        val enabled = !controller.state.routeEventsEnabled
+        if (!controller.setRouteEventsEnabled(enabled)) return
+        // Like strategy changes, this saves run state without pausing/restarting the
+        // live engine or gating its terminal/Second Wind callbacks behind a reward barrier.
+        persistAdventureStateAsync()
+        Toast.makeText(this, if (enabled) R.string.adventure_route_events_enabled
+            else R.string.adventure_route_events_disabled, Toast.LENGTH_LONG).show()
     }
 
     private fun perkMenuView(): View {
@@ -1104,11 +1118,7 @@ class AdventureActivity : AppCompatActivity(), AndroidFragmentApplication.Callba
                 val bonus = if (pending.bonusLifeAwarded) {
                     "\n" + getString(R.string.adventure_bonus_life, controller.state.livesRemaining)
                 } else ""
-                val prompt = when {
-                    pending.perkOffer == null -> R.string.adventure_powerup_prompt
-                    pending.routeChoices.isEmpty() -> R.string.adventure_perk_win_prompt
-                    else -> R.string.adventure_perk_route_win_prompt
-                }
+                val prompt = AdventureRewardText.winPrompt(pending)
                 builder.setTitle(getString(
                     R.string.adventure_maze_won_title, mazeIndex, controller.config.totalMazes
                 )).setMessage(getString(prompt) + bonus)

@@ -112,7 +112,12 @@
     <string name="adventure_pick_player_strategy">Switch active player strategy</string>
     <string name="adventure_menu_title">Menu</string>
 
-    <!-- Adventure route events (provisional; unused while the feature is disabled) -->
+    <!-- Adventure route events (opt-in per run) -->
+    <string name="adventure_route_events_on">Route events: On</string>
+    <string name="adventure_route_events_off">Route events: Off</string>
+    <string name="adventure_route_events_enabled">Route events enabled for future scheduled checkpoints. Existing choices and effects stay unchanged.</string>
+    <string name="adventure_route_events_disabled">Future route events disabled. Existing choices and effects stay unchanged.</string>
+    <string name="adventure_route_win_prompt">Choose your route, then your starting power-up.</string>
     <string name="adventure_route_chooser_title">Choose your route</string>
     <string name="adventure_route_summary_title">Upcoming route</string>
     <string name="adventure_route_category_safe">Safe</string>

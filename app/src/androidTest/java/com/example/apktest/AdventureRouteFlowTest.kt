@@ -2,6 +2,7 @@ package com.example.apktest
 
 import android.content.Intent
 import android.os.SystemClock
+import android.widget.ImageButton
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
@@ -14,6 +15,7 @@ import com.example.apktest.game.core.AdventureRunStateSnapshot
 import com.example.apktest.game.core.DifficultyPresets
 import com.example.apktest.game.core.GameEngine
 import com.example.apktest.game.core.GameStatus
+import com.example.apktest.game.core.DifficultyPreset
 import com.example.apktest.game.core.RewardStage
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -236,6 +238,167 @@ class AdventureRouteFlowTest {
             val saved = store.load()!!
             assertEquals(initialLives - 1, saved.livesRemaining)
             assertEquals(1, saved.deathsThisRun)
+        }
+    }
+
+    @Test
+    fun menuOptInGeneratesRouteThroughHostWinFlowOnEveryDifficulty() {
+        for (difficulty in DifficultyPresets.all) {
+            launchFresh(difficulty).use { scenario ->
+                awaitMaze(scenario)
+                toggleRoutesInMenu(scenario, wasEnabled = false)
+                await(scenario) { store.load()?.routeEventsEnabled == true }
+                completeCurrentMaze(scenario)
+                awaitStage(scenario, RewardStage.WIN_ACKNOWLEDGEMENT)
+                scenario.onActivity {
+                    assertTrue(it.controllerForTesting().state.pendingReward!!.routeChoices.isEmpty())
+                }
+                continueDialog(scenario)
+                awaitStage(scenario, RewardStage.POWER_UP_CHOICE)
+                continueDialog(scenario)
+                awaitMaze(scenario)
+
+                completeCurrentMaze(scenario)
+                awaitStage(scenario, RewardStage.WIN_ACKNOWLEDGEMENT)
+                scenario.onActivity {
+                    assertTrue(it.controllerForTesting().state.pendingReward!!.routeChoices.isNotEmpty())
+                    assertEquals(it.getString(R.string.adventure_route_win_prompt),
+                        it.rewardTextForTesting().toString())
+                }
+                continueDialog(scenario)
+                awaitStage(scenario, RewardStage.ROUTE_CHOICE)
+                val offered = store.load()!!.pendingReward!!.routeChoices
+                scenario.onActivity {
+                    assertEquals(it.getString(R.string.adventure_route_chooser_title),
+                        it.rewardTitleForTesting().toString())
+                    assertEquals(offered.size, it.rewardOptionsForTesting().size)
+                }
+                continueDialog(scenario)
+                awaitStage(scenario, RewardStage.POWER_UP_CHOICE)
+            }
+        }
+    }
+
+    @Test
+    fun defaultOffSkipsRouteAtFirstCheckpointButStillShowsPowerUps() {
+        launchFresh(DifficultyPresets.EASY).use { scenario ->
+            repeat(2) {
+                awaitMaze(scenario)
+                completeCurrentMaze(scenario)
+                awaitStage(scenario, RewardStage.WIN_ACKNOWLEDGEMENT)
+                scenario.onActivity {
+                    assertFalse(it.controllerForTesting().state.routeEventsEnabled)
+                    assertTrue(it.controllerForTesting().state.pendingReward!!.routeChoices.isEmpty())
+                }
+                continueDialog(scenario)
+                awaitStage(scenario, RewardStage.POWER_UP_CHOICE)
+                continueDialog(scenario)
+            }
+        }
+    }
+
+    @Test
+    fun menuSettingSurvivesBackgroundRecreationAndDiskResumeWithoutResettingPausedMaze() {
+        val fixture = pausedMaze()
+        assertTrue(store.saveBlocking(fixture))
+        launchResume().use { scenario ->
+            awaitMaze(scenario)
+            scenario.onActivity {
+                assertEquals(fixture.currentMazeSnapshot, fragment(it)!!.captureSnapshot())
+            }
+            toggleRoutesInMenu(scenario, wasEnabled = false)
+            await(scenario) { store.load()?.routeEventsEnabled == true }
+            scenario.onActivity {
+                assertEquals(fixture.currentMazeSnapshot, fragment(it)!!.captureSnapshot())
+            }
+            scenario.moveToState(Lifecycle.State.CREATED)
+            scenario.moveToState(Lifecycle.State.RESUMED)
+            scenario.recreate()
+            awaitMaze(scenario)
+            scenario.onActivity {
+                assertTrue(it.controllerForTesting().state.routeEventsEnabled)
+                assertEquals(fixture.currentMazeSnapshot, fragment(it)!!.captureSnapshot())
+            }
+        }
+        launchResume().use { scenario ->
+            awaitMaze(scenario)
+            scenario.onActivity {
+                assertTrue(it.controllerForTesting().state.routeEventsEnabled)
+                assertEquals(fixture.currentMazeSnapshot, fragment(it)!!.captureSnapshot())
+            }
+            toggleRoutesInMenu(scenario, wasEnabled = true)
+            await(scenario) { store.load()?.routeEventsEnabled == false }
+        }
+        launchResume().use { scenario ->
+            awaitMaze(scenario)
+            scenario.onActivity { assertFalse(it.controllerForTesting().state.routeEventsEnabled) }
+        }
+    }
+
+    @Test
+    fun newRunDoesNotInheritOptInFromPreviousRun() {
+        assertTrue(store.saveBlocking(pausedMaze().copy(routeEventsEnabled = true)))
+        launchFresh(DifficultyPresets.EASY).use { scenario ->
+            awaitMaze(scenario)
+            scenario.onActivity { assertFalse(it.controllerForTesting().state.routeEventsEnabled) }
+            assertFalse(store.load()!!.routeEventsEnabled)
+        }
+    }
+
+    private fun pausedMaze(): AdventureRunStateSnapshot {
+        val controller = AdventureRunController(
+            AdventureConfig.forDifficulty(DifficultyPresets.EASY), runSeed = 71L
+        )
+        val spec = controller.prepareCurrentMaze()!!
+        val engine = GameEngine(spec.difficulty, spec.seed).apply {
+            configureAdventureMaze(spec.npcCount, spec.npcPolicies, npcSpawnSpecs = spec.npcSpawnSpecs)
+            restart(spec.seed)
+            togglePause()
+        }
+        controller.recordMidMazeSnapshot(engine.snapshot().copy(elapsedSeconds = 12f, steps = 17))
+        return AdventureRunStateSnapshot.fromState(controller.state, 71L)
+    }
+
+    private fun launchFresh(difficulty: DifficultyPreset): ActivityScenario<AdventureActivity> =
+        ActivityScenario.launch(Intent(context, AdventureActivity::class.java).apply {
+            putExtra(AdventureSetupActivity.EXTRA_DIFFICULTY, difficulty.name)
+        })
+
+    private fun fragment(activity: AdventureActivity): GameFragment? =
+        activity.supportFragmentManager.findFragmentById(R.id.fragmentGameHost) as? GameFragment
+
+    private fun awaitMaze(scenario: ActivityScenario<AdventureActivity>) {
+        await(scenario) {
+            it.controllerForTesting().state.pendingReward == null &&
+                it.rewardDecisionReadyForTesting() &&
+                fragment(it)?.captureSnapshot()?.seed == it.controllerForTesting().state.currentMazeSeed
+        }
+    }
+
+    private fun completeCurrentMaze(scenario: ActivityScenario<AdventureActivity>) {
+        scenario.onActivity {
+            // Exercise the host's production terminal-snapshot path, not pre-generated offers.
+            val snapshot = fragment(it)!!.captureSnapshot()!!
+            it.handleCapturedSnapshotForTesting(snapshot.copy(
+                status = GameStatus.WIN, elapsedSeconds = 12f, steps = 34
+            ))
+        }
+    }
+
+    private fun toggleRoutesInMenu(scenario: ActivityScenario<AdventureActivity>, wasEnabled: Boolean) {
+        scenario.onActivity {
+            val before = fragment(it)
+            it.findViewById<ImageButton>(R.id.buttonMenu).performClick()
+            val dialog = it.menuDialogForTesting()!!
+            val list = dialog.listView
+            val label = it.getString(if (wasEnabled) R.string.adventure_route_events_on
+                else R.string.adventure_route_events_off)
+            val index = (0 until list.adapter.count).single { row ->
+                list.adapter.getItem(row).toString() == label
+            }
+            list.performItemClick(null, index, list.adapter.getItemId(index))
+            assertEquals(!wasEnabled, it.controllerForTesting().state.routeEventsEnabled)
+            assertTrue(before === fragment(it))
         }
     }
 

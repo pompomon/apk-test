@@ -15,10 +15,15 @@ Adventure mode currently advances through a mostly fixed sequence: win a maze, c
 
 ### Phase 1 implementation contract
 
-- All five non-deferred routes are implemented behind the default-off route
-  flag. The Android host limits new offers to Medium when the flag is enabled;
-  tests can explicitly enable other difficulties. Existing saved offers and
-  effects are honored even with generation disabled.
+- All five non-deferred routes are available through the Adventure menu's
+  **Route events: On/Off** setting on Easy, Medium, and Hard. New runs default
+  off. The setting is per run, not a global preference, and can be toggled while
+  playing or paused; required reward decisions must finish before reopening
+  the menu. Existing saved offers and effects are honored even when disabled.
+- Toggling changes future scheduled offers only, without changing cadence,
+  replaying skipped slots, restarting the maze, or discarding pending choices.
+  The setting uses the host's existing asynchronous autosave path, like strategy
+  selection, rather than introducing a new gameplay/reward barrier.
 - Offers contain two or three distinct choices, including a non-risky choice.
   Quiet Corridor is omitted when its NPC reduction would be clamped away.
   Shipped presets retain at least one NPC; zero is permitted for custom
@@ -48,7 +53,11 @@ Adventure mode currently advances through a mostly fixed sequence: win a maze, c
 - Adventure snapshot schema 3 intentionally rejects schema-2 runs. Engine
   snapshot schema 6 adds the pickup-lifetime override and rejects schema-5
   engine saves, including Classic saves. No partial route-state migration is
-  attempted. Future route-balance changes must also bump the Adventure schema
+  attempted in Phase 1. The later per-run setting uses Adventure schema 6,
+  migrating compatible schema-5 runs with the setting off while retaining their
+  decisions, effects, perks, and engine snapshots. Its field is required and
+  strictly boolean in schema 6; engine/Classic schemas do not change.
+  Future route-balance changes must also bump the Adventure schema
   if previously resolved effects would no longer validate.
 
 Telemetry hooks use the no-op sink by default. Offered/chosen/applied events
@@ -212,12 +221,22 @@ A/B test:
 ## Test plan
 
 - Unit
+  - Opt-in works with production controller defaults on every difficulty.
+  - Off/on transitions preserve skipped-slot cadence, pending offers, locked
+    effects, retries, and earned rewards; both settings round-trip.
+  - Schema-5 migration retains validated state and defaults off; schema 6
+    rejects missing or malformed settings.
   - Same run seed and maze index generate identical route offers.
   - The persisted next-event index advances by a deterministic interval of 2 or 3 and survives snapshot round-trip.
   - Death replay preserves the selected pending route effect.
   - Route effects respect NPC-count floors and reward-option caps.
   - Snapshot round-trip preserves pending route effect and history.
 - Integration
+  - Toggle using the actual menu, then exercise the host win path through
+    maze 2 without injecting a pending route offer. Default-off runs keep
+    the ordinary power-up flow.
+  - Background, recreate, and explicitly resume the saved run; the menu
+    setting persists without resetting a paused maze. New runs default off.
   - Win flow shows route event before reward dialog when eligible.
   - Process death during route choice restores or safely replays the prior maze without losing an uncommitted choice.
 - Manual
@@ -226,9 +245,16 @@ A/B test:
 
 ## Rollout strategy and rollback plan
 
-- Ship behind `AdventureFeatureFlags.ROUTE_EVENTS_ENABLED`, which defaults off until tests and copy are stable.
-- Enable only on Medium for first dogfood pass; then Easy/Hard after balance review.
-- Roll back by disabling new offer generation while continuing to apply compatible stored pending effects; if pending effects can no longer be applied, bump `AdventureRunStateSnapshot` schema to clear in-progress runs safely.
+- `AdventureFeatureFlags.ROUTE_EVENTS_ENABLED` supplies the new-run default
+  (off); it is not a kill switch for explicit saved opt-ins.
+- Players can opt in on any difficulty. The existing eligibility and balance
+  rules still apply; no new route, elite, or perk mechanics are enabled.
+- Players can disable future generation from the menu while keeping stored
+  offers/effects. Any future release-wide rollback must suppress generation
+  separately without removing compatible decisions. If effects become
+  incompatible, change the snapshot schema deliberately.
+- Automated checks and device/copy/balance acceptance remain separate; adding
+  the setting and its tests does not itself establish manual acceptance.
 
 ## Open questions
 
