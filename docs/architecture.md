@@ -111,15 +111,24 @@ reloading preserves the full locked list verbatim rather than rerunning assignme
 - The controller locks effective NPC count with the seed and policy list.
   Selected route effects and starting power-ups survive deaths; completion
   settles their reward once before clearing the per-maze effect.
-- Adventure schema 5 retains pending offers, route history, previews, rerolls,
+- Adventure schema 6 retains pending offers, route history, previews, rerolls,
   cadence, active effects, and the locked count. Unknown active effects or
   inconsistent combinations fail validation instead of silently losing a
-  decision.
+  decision. Schema 5 saves migrate through the same validation with the new
+  `routeEventsEnabled` setting off; older incompatible schemas remain rejected.
+  Engine/Classic save schemas are unchanged by this setting.
 - Required transitions use `saveBlocking` on the activity's single executor
   before continuing. `AdventureSaveSession` rejects obsolete activity writes;
   generation/seed checks reject late GL snapshots from a previous maze.
-- Rollout flags gate new offers, not compatible saved decisions. Production
-  remains default-off; enabling the route flag initially exposes Medium only.
+- The Adventure menu offers **Route events: On/Off** on every difficulty.
+  New runs default off; the controller owns and persists the per-run opt-in.
+  Like strategy changes, toggling queues a save on the existing executor
+  without pausing/restarting the engine or blocking its terminal/perk callbacks.
+  Reopening the menu reflects the current setting.
+- Opt-in affects future scheduled offers only. Skipped slots still advance
+  the seeded cadence, and toggling does not regenerate a pending offer or
+  remove a committed effect, preview, or banked reroll. Existing difficulty
+  safeguards remain unchanged; elite/perk generation still defaults off.
 
 ### Elite NPC modifiers
 
